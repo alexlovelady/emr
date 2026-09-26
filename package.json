@@ -1,0 +1,32 @@
+{
+  "name": "ehr",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Ambulatory EHR + practice-management + revenue-cycle platform (Phase 1 skeleton). See EHR_BUILD_SPEC.md.",
+  "engines": {
+    "node": ">=24.0.0 <25.0.0"
+  },
+  "packageManager": "pnpm@11.18.0",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "lint:arch": "depcruise apps packages domains --config .dependency-cruiser.cjs",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:integration": "turbo run test:integration",
+    "test:authz": "turbo run test:authz",
+    "test:tenant-isolation": "turbo run test:tenant-isolation",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0",
+    "dependency-cruiser": "^16.9.0",
+    "eslint": "^9.17.0",
+    "prettier": "^3.4.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2"
+  }
+}

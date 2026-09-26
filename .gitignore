@@ -1,0 +1,42 @@
+# local tooling state (headroom wrap, etc.) — not project source
+.claude/
+
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build outputs
+dist/
+build/
+.next/
+.turbo/
+*.tsbuildinfo
+
+# env / secrets
+.env
+.env.local
+.env.*.local
+.dev/
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# editors / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# test / coverage
+coverage/
+.nyc_output/
+
+# generated (still committed selectively — see docs/api/openapi.json)
+*.generated.ts
+
+# local object storage / db volumes
+.minio/
+.pgdata/
