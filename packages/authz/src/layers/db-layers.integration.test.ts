@@ -66,4 +66,21 @@ describe('user-status / role-permission layers (integration)', () => {
     );
     expect(result).toBe('DENY');
   });
+
+  it('userStatusLayer denies a disabled user even though their role grant is otherwise valid', async () => {
+    const disabled = await db
+      .insertInto('users')
+      .values({
+        tenant_id: seed.tenantA.tenantId,
+        email: `disabled-${Date.now()}@tenant-a.test`,
+        password_hash: 'unused',
+        password_algo: 'argon2id',
+        status: 'disabled',
+      })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+
+    const result = await userStatusLayer.evaluate(ctxFor(seed.tenantA.tenantId, disabled.id, 'x'), db);
+    expect(result).toBe('DENY');
+  });
 });

@@ -7,11 +7,16 @@ export interface RequestContext {
   tenantId: string;
   requestId: string;
   correlationId: string;
-  /** Set by TenantContextMiddleware after JWT verification; absent for unauthenticated routes. */
+  /**
+   * Set by TenantContextMiddleware after JWT verification; absent for unauthenticated routes.
+   * Deliberately carries no role/permission list — the JWT itself only carries `sub`/`tenant_id`
+   * (see packages/auth-adapter), and packages/authz's role-permission layer queries
+   * user_roles/role_permissions fresh on every request rather than trusting a cached/embedded
+   * claim, so a revoked role takes effect immediately rather than only after token expiry.
+   */
   actor?: {
     id: string;
     type: 'user' | 'system' | 'api_client';
-    roles: string[];
   };
   ip?: string;
   userAgent?: string;

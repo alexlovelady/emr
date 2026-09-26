@@ -15,6 +15,14 @@ import type { ColumnType, Generated } from 'kysely';
 type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
 /**
+ * A timestamptz column with a DB-side default (`now()`), so it's optional on insert. Same
+ * "don't nest Generated<> around a ColumnType" trap as GeneratedJsonColumn below — `Generated<S>`
+ * treats `S` opaquely, so `Generated<Timestamp>` would wrongly select as the whole `Timestamp`
+ * branded type instead of `Date`. This flattens both concerns into one ColumnType instead.
+ */
+type GeneratedTimestamp = ColumnType<Date, Date | string | undefined, Date | string>;
+
+/**
  * A jsonb column: Kysely never serializes JS values for you, so Insert/Update must be a
  * pre-`JSON.stringify`'d string while Select comes back already parsed as `T` (pg's driver
  * parses jsonb automatically). NOTE: do NOT wrap this in `Generated<...>` for columns with a DB
@@ -29,11 +37,11 @@ interface CommonColumnsTable {
   tenant_id: string;
   id: Generated<string>;
   version: Generated<string>; // bigint comes back as string from pg by default
-  created_at: Generated<Timestamp>;
+  created_at: GeneratedTimestamp;
   created_by: string | null;
-  updated_at: Generated<Timestamp>;
+  updated_at: GeneratedTimestamp;
   updated_by: string | null;
-  recorded_at: Generated<Timestamp>;
+  recorded_at: GeneratedTimestamp;
   source_type: Generated<string>;
   source_system: string | null;
   source_id: string | null;
@@ -44,11 +52,11 @@ interface CommonColumnsTable {
 export interface TenantsTable {
   id: Generated<string>;
   version: Generated<string>;
-  created_at: Generated<Timestamp>;
+  created_at: GeneratedTimestamp;
   created_by: string | null;
-  updated_at: Generated<Timestamp>;
+  updated_at: GeneratedTimestamp;
   updated_by: string | null;
-  recorded_at: Generated<Timestamp>;
+  recorded_at: GeneratedTimestamp;
   source_type: Generated<string>;
   source_system: string | null;
   source_id: string | null;
@@ -81,8 +89,8 @@ export interface UsersTable extends CommonColumnsTable {
 export interface WorkforceIdentitiesTable extends CommonColumnsTable {
   user_id: string;
   organization_id: string;
-  employment_status: string;
-  effective_start: Timestamp;
+  employment_status: Generated<string>;
+  effective_start: GeneratedTimestamp;
   effective_end: Timestamp | null;
 }
 
@@ -97,7 +105,7 @@ export interface PractitionerRolesTable extends CommonColumnsTable {
   practitioner_id: string;
   location_id: string;
   role_id: string;
-  effective_start: Timestamp;
+  effective_start: GeneratedTimestamp;
   effective_end: Timestamp | null;
 }
 
@@ -114,7 +122,7 @@ export interface RolesTable {
   key: string;
   display_name: string;
   is_system: Generated<boolean>;
-  created_at: Generated<Timestamp>;
+  created_at: GeneratedTimestamp;
 }
 
 export interface RolePermissionsTable {
@@ -126,7 +134,7 @@ export interface UserRolesTable extends CommonColumnsTable {
   user_id: string;
   role_id: string;
   location_id: string | null;
-  granted_at: Generated<Timestamp>;
+  granted_at: GeneratedTimestamp;
   granted_by: string | null;
   revoked_at: Timestamp | null;
 }
@@ -146,7 +154,7 @@ export interface IdempotencyKeysTable {
   request_hash: string;
   response_status: number;
   response_body: JsonColumn<Record<string, unknown>>;
-  created_at: Generated<Timestamp>;
+  created_at: GeneratedTimestamp;
 }
 
 export interface OutboxEventsTable {
@@ -164,7 +172,7 @@ export interface OutboxEventsTable {
   status: Generated<string>;
   attempts: Generated<number>;
   published_at: Timestamp | null;
-  created_at: Generated<Timestamp>;
+  created_at: GeneratedTimestamp;
 }
 
 export interface AuditEventsTable {
@@ -183,7 +191,7 @@ export interface AuditEventsTable {
   user_agent: string | null;
   outcome: string;
   metadata: GeneratedJsonColumn<Record<string, unknown>>;
-  created_at: Generated<Timestamp>;
+  created_at: GeneratedTimestamp;
 }
 
 export interface DB {
