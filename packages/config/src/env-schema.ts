@@ -39,6 +39,11 @@ export const envSchema = z.object({
   WORKER_PORT: z.coerce.number().int().positive().default(3100),
   INTEROP_FHIR_PORT: z.coerce.number().int().positive().default(3200),
   INTEROP_HL7_PORT: z.coerce.number().int().positive().default(3300),
+  WEBHOOK_GATEWAY_PORT: z.coerce.number().int().positive().default(3400),
+
+  // --- Webhook signing (apps/webhook-gateway's inbound clearinghouse callbacks, spec §12
+  // "signed webhooks") ---
+  WEBHOOK_SIGNING_SECRET: z.string().min(1),
 
   // --- Observability ---
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
@@ -62,4 +67,5 @@ export const testEnvDefaults: Partial<Record<keyof z.input<typeof envSchema>, st
   OBJECT_STORAGE_BUCKET: 'ehr-test-documents',
   OBJECT_STORAGE_ACCESS_KEY_ID: 'minioadmin',
   OBJECT_STORAGE_SECRET_ACCESS_KEY: 'minioadmin',
+  WEBHOOK_SIGNING_SECRET: 'test-webhook-signing-secret',
 };

@@ -445,6 +445,78 @@ export interface SmartClientsTable extends CommonColumnsTable {
   allowed_scopes: string[];
 }
 
+export interface ChargesTable extends CommonColumnsTable {
+  patient_id: string;
+  encounter_id: string;
+  billing_practitioner_id: string;
+  code_system: string;
+  code: string;
+  description: string;
+  units: Generated<number>;
+  unit_price: string;
+  diagnosis_codes: Generated<string[]>;
+  claim_id: string | null;
+}
+
+export interface ClaimsTable extends CommonColumnsTable {
+  patient_id: string;
+  encounter_id: string;
+  coverage_id: string | null;
+  billing_practitioner_id: string;
+  total_charge_amount: string;
+  current_version: Generated<number>;
+  clearinghouse_transaction_id: string | null;
+}
+
+export interface ClaimVersionsTable extends CommonColumnsTable {
+  claim_id: string;
+  version_number: number;
+  version_status: string;
+  payload: JsonColumn<Record<string, unknown>>;
+  clearinghouse_transaction_id: string | null;
+  submitted_at: Timestamp | null;
+}
+
+export interface DenialsTable extends CommonColumnsTable {
+  claim_id: string;
+  denial_reason_code: string;
+  denial_reason_text: string;
+  denied_at: GeneratedTimestamp;
+  resolved_at: Timestamp | null;
+  resolution_notes: string | null;
+  task_id: string | null;
+}
+
+export interface RemittancesTable extends CommonColumnsTable {
+  claim_id: string;
+  claim_version_id: string;
+  payer_paid_amount: string;
+  adjustment_amount: Generated<string>;
+  patient_responsibility_amount: Generated<string>;
+  remittance_advice_number: string | null;
+  raw_payload: JsonColumn<Record<string, unknown>>;
+  posted_at: GeneratedTimestamp;
+}
+
+export interface LedgerEntriesTable extends CommonColumnsTable {
+  patient_id: string;
+  claim_id: string | null;
+  entry_type: string;
+  amount: string;
+  description: string;
+  occurred_at: GeneratedTimestamp;
+}
+
+export interface EligibilityChecksTable extends CommonColumnsTable {
+  patient_id: string;
+  coverage_id: string;
+  is_eligible: boolean;
+  copay_amount: string | null;
+  deductible_remaining: string | null;
+  raw_response: JsonColumn<Record<string, unknown>>;
+  checked_at: GeneratedTimestamp;
+}
+
 export interface IdempotencyKeysTable {
   tenant_id: string;
   key: string;
@@ -529,6 +601,13 @@ export interface DB {
   hl7_messages: Hl7MessagesTable;
   external_candidates: ExternalCandidatesTable;
   smart_clients: SmartClientsTable;
+  charges: ChargesTable;
+  claims: ClaimsTable;
+  claim_versions: ClaimVersionsTable;
+  denials: DenialsTable;
+  remittances: RemittancesTable;
+  ledger_entries: LedgerEntriesTable;
+  eligibility_checks: EligibilityChecksTable;
   idempotency_keys: IdempotencyKeysTable;
   outbox_events: OutboxEventsTable;
   audit_events: AuditEventsTable;

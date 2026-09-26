@@ -13,6 +13,9 @@ import { ClinicalModule } from '@ehr/clinical';
 import { MedicationModule } from '@ehr/medication';
 import { OrdersModule } from '@ehr/orders';
 import { ResultsModule } from '@ehr/results';
+import { BillingModule } from '@ehr/billing';
+import { ClaimsModule } from '@ehr/claims';
+import { PaymentsModule } from '@ehr/payments';
 import { CoreModule } from './core/core.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { HealthController } from './health/health.controller.js';
@@ -42,6 +45,9 @@ import { ProblemDetailsFilter } from './common/problem-details.filter.js';
     MedicationModule,
     OrdersModule,
     ResultsModule,
+    BillingModule,
+    ClaimsModule,
+    PaymentsModule,
   ],
   controllers: [HealthController],
   providers: [

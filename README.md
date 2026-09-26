@@ -1,7 +1,7 @@
-# EHR Platform — Phase 1 + 2 + 3 + 4 + 5 (Platform Foundation; Patient/Scheduling/Intake; Clinical Chart; Orders/Results + Interop; eRx)
+# EHR Platform — Phase 1 + 2 + 3 + 4 + 5 + 6 (Platform Foundation; Patient/Scheduling/Intake; Clinical Chart; Orders/Results + Interop; eRx; RCM)
 
 Cloud-native ambulatory EHR + practice-management + revenue-cycle platform. This repository
-currently implements **Phases 1–5** of `EHR_BUILD_SPEC.md`'s build order (§26). Phase 1: the
+currently implements **Phases 1–6** of `EHR_BUILD_SPEC.md`'s build order (§26). Phase 1: the
 monorepo skeleton, tenant/workforce identity, the layered authorization model, audit +
 transactional outbox, a first-party auth adapter, a thin documents flow, and the platform's
 testing/CI/CD/observability scaffolding. Phase 2: the patient registry (with a per-organization
@@ -20,8 +20,15 @@ implementation (see "Phase 4 scope decisions" below). Phase 5: eRx integration �
 search and formulary lookups, and a real, permission-gated controlled-substance data model, with
 EPCS itself (DEA-compliant identity-proofing/certified transmission) explicitly out of scope per
 the spec's own prerequisite ("EPCS only after compliance/vendor prerequisites are satisfied") — see
-"Phase 5 scope decisions" below. Later phases (RCM, query platform, patient portal, AI, etc.) are
-not built yet — see the `README.md` in each reserved-but-empty folder for where it lands.
+"Phase 5 scope decisions" below. Phase 6: RCM — charge capture and a coding queue
+(`domains/billing`), a versioned claim model with a real scrubber, submission, 277CA handling, and
+denial/task workflow (`domains/claims`), and remittance posting, the patient ledger, and
+eligibility checks (`domains/payments`), all against a swappable `ClearinghouseGateway` vendor
+adapter (spec §13.1) — plus a new `apps/webhook-gateway` with real HMAC-signed webhook
+verification for inbound 277CA/835 callbacks (spec §12's "signed webhooks"). No real X12 837/277/
+835 transport is built (an explicit spec "buy" item) — see "Phase 6 scope decisions" below. Later
+phases (query platform, patient portal, AI, etc.) are not built yet — see the `README.md` in each
+reserved-but-empty folder for where it lands.
 
 Read `EHR_BUILD_SPEC.md` and `EHR_REGULATORY_MANUAL.md` first — this README assumes their
 context. Three deliberate deviations from the spec's literal text are documented in
@@ -215,6 +222,68 @@ infra/          terraform/, policies/, dashboards/ — all deferred, see their R
   listeners), eRx here is an outbound gateway call plus ordinary internal CRUD/state-machine
   routes, so everything lives in `apps/api`.
 
+### Phase 6 scope decisions
+
+- **Three new domains matching the spec's own reserved folders**, not one combined package —
+  `domains/billing` (charge capture + coding queue), `domains/claims` (the versioned claim model,
+  scrubbing, submission, 277CA, denials), `domains/payments` (remittance posting, the patient
+  ledger, eligibility). `domains/payments` depends on `domains/claims` (to update claim status),
+  never the reverse — the claim timeline endpoint therefore lives in `domains/payments`, composing
+  `@ehr/claims`' own claim+versions+denials with this package's Remittances, the same
+  "the timeline lives in the downstream-consuming domain" pattern Phase 2's `PatientTimelineService`
+  already established (it pulls from `@ehr/scheduling`/`@ehr/tasks` rather than either of those
+  owning a patient-timeline endpoint).
+- **No real X12 837/277/835 transport** — spec §13.1 explicitly marks payer/clearinghouse
+  connectivity, eligibility routing, and X12 transport as **buy**, not **build**, items. A new
+  `packages/clearinghouse-adapter` (`ClearinghouseGateway` + `NoopClearinghouseGateway`, mirroring
+  the lab/eRx adapters exactly) stands in for a vendor like Stedi; inbound 277CA/835 arrive as
+  pre-structured JSON, the same simplification already used for Phase 4's C-CDA reconciliation.
+- **The claim scrubber is real, not stubbed** — spec §13.1 explicitly lists it as a **build** item.
+  `domains/claims/src/claim/scrub-claim.ts` checks CPT/HCPCS code format, that diagnosis codes are
+  present, that at least one charge exists, and that the total is positive; `submit()` throws a 422
+  with the issue list rather than mutating anything when the scrubber finds a problem — confirmed
+  live, not just documented.
+- **Claim versioning matches spec §13.2's literal example** — "Never mutate a submitted claim in
+  place": ClaimVersion 1 is `draft` at creation, `submit()` creates the next version `submitted`
+  (a rejected claim can be corrected and resubmitted through the same endpoint for ClaimVersion 3+).
+  `claims.status` is a separate state machine continuing where the Encounter's own state machine
+  stops (`coding_review`, spec §11.1): `draft -> submitted -> accepted/rejected -> adjudicated ->
+  paid/denied`.
+- **A charge ledger entry posts on claim *acceptance*, not claim *submission*** — a refinement made
+  mid-build, more financially accurate than the original plan (a submitted claim isn't yet a real
+  receivable; an accepted one is). This orchestration — calling both `@ehr/claims` and
+  `@ehr/payments` — lives in `apps/webhook-gateway`'s 277CA handler, since the two domains can't
+  depend on each other for it. Idempotency is enforced by checking whether the claim had already
+  reached that status before the acknowledgement was recorded, so a redelivered 277CA never
+  double-posts the charge.
+- **`apps/webhook-gateway` uses real HMAC-SHA256 signature verification**
+  (`crypto.createHmac`/`crypto.timingSafeEqual`, `X-Webhook-Signature: sha256=...`), not staff JWT
+  — spec §12 explicitly calls for "signed webhooks," and the caller here is a genuine external
+  clearinghouse with no staff actor to authenticate as. A repo-wide search turned up no prior HMAC
+  verification code anywhere, so this is new, security-sensitive code, unit-tested in isolation
+  (valid/tampered/wrong-secret/missing-header/malformed-hex cases) and confirmed live: an unsigned
+  or badly-signed webhook is rejected with a real 401.
+- **The webhook handler resolves its tenant via the owner-role DB connection** — a clearinghouse
+  callback carries only the clearinghouse's own transaction id, not a tenant-scoped JWT, so
+  `apps/webhook-gateway` looks up the owning `claims` row via `OWNER_DB_CONNECTION` (bypasses RLS
+  on purpose) before switching into a normal tenant-scoped transaction for every subsequent domain
+  write — the identical bootstrapping exception `apps/interop-fhir`'s `TokenService` already uses
+  for its cross-tenant `smart_clients` lookup.
+- **No dedicated raw-webhook-store table**, unlike HL7's `hl7_messages` — idempotency is checked
+  against existing domain state instead (a 277CA no-ops if the claim's status already matches; an
+  835 no-ops on a matching `remittance_advice_number`). HL7 needed raw-message preservation as its
+  own stated requirement; X12 acks here have no equivalent — a documented trim, not scope creep.
+- **No `audit_events` rows for webhook-driven writes** — there's no human/staff actor to attribute
+  the action to (`apps/webhook-gateway` runs neither `AuthzInterceptor` nor `AuditInterceptor`, the
+  same reasoning `apps/interop-fhir` already established for its own non-staff callers).
+  `outbox_events` remain the complete, durable record of what happened — confirmed live: every
+  webhook-driven write lands there even though none lands in `audit_events`.
+- **Diagnosis codes are a denormalized `text[]` column on `charges`**, not a dedicated `Diagnosis`
+  aggregate — Phase 3 never built one and Phase 6's bullet list doesn't call for retrofitting it.
+- **`coverages.payerName` stays free text** (confirmed: no payer master table exists anywhere in
+  this repo) — `claims.coverage_id` is a nullable FK to it, matching the existing shape exactly
+  rather than introducing new normalization this phase doesn't need.
+
 ## Verification status
 
 Docker Desktop's backend would not start in the environment this was built in (its WSL2
@@ -306,3 +375,25 @@ second cancel on an already-cancelled prescription is a real 409 → a cross-ten
 prescription returns 404 — with every one of these actions (including the three read-only `/erx/*`
 lookups) landing in `audit_events`, and every state-changing one landing in `outbox_events`, in the
 same style as every prior phase's walkthrough.
+
+**Phase 6** was verified the same way: migrations `0023`–`0025` apply cleanly on top of Phase 5's,
+the full `test`/`test:integration`/`test:tenant-isolation` suite is green across the new
+`@ehr/clearinghouse-adapter`, `@ehr/billing`, `@ehr/claims`, `@ehr/payments`, and
+`@ehr/webhook-gateway` (158/158 Turborepo tasks), and a full HTTP walkthrough across `apps/api` +
+`apps/webhook-gateway`: capturing a charge lands it in the coding queue, and finalizing its coding
+removes it → creating a claim from a deliberately malformed charge and submitting it produces a
+real 422 from the scrubber (not a stub) → submitting a clean claim produces ClaimVersion 2 and a
+gateway transaction id → an unsigned and a badly-signed webhook are both rejected with a real 401
+→ a correctly HMAC-signed 277CA acceptance transitions the claim to `accepted` and posts the
+charge to the patient ledger → a second claim's correctly-signed 277CA *rejection* opens a Denial
+and a Task, visible in the claim's composed timeline (versions + denials + remittances) →
+resolving the denial marks it resolved → a correctly-signed 835 against the accepted claim posts a
+Remittance, credits the ledger, and marks the claim `paid` — after which the ledger's entries for
+that claim net exactly to zero → an eligibility check persists and returns the gateway's synthetic
+result → cross-tenant fetches of the charge, claim, denial, and ledger all return 404 — with every
+staff-driven action landing in `audit_events` and every domain write (staff- and webhook-driven
+alike) landing in `outbox_events`, confirming the documented scope decision that webhook-driven
+writes intentionally have no `audit_events` counterpart. One real gap this walkthrough caught
+that no automated test had: the ledger never posted a charge debit at all until this pass added
+that step to `apps/webhook-gateway`'s 277CA-acceptance handler — see "Phase 6 scope decisions"
+above.

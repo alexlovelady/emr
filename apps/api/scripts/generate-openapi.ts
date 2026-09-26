@@ -43,6 +43,9 @@ import {
 } from '@ehr/medication';
 import { CreateOrderSchema, CreateSpecimenSchema } from '@ehr/orders';
 import { CreateDiagnosticReportSchema, ReviewDiagnosticReportSchema } from '@ehr/results';
+import { CreateChargeSchema, FinalizeChargeCodingSchema } from '@ehr/billing';
+import { CreateClaimSchema, ResolveDenialSchema } from '@ehr/claims';
+import { CreateEligibilityCheckSchema } from '@ehr/payments';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -311,6 +314,33 @@ const document = {
       ReplaceExternalCandidateSchema,
       'ReplaceExternalCandidate',
     ),
+    '/patients/{patientId}/charges': {
+      ...post('Capture a charge for an encounter', 'Billing', CreateChargeSchema, 'CreateCharge'),
+      ...get('List a patient’s charges', 'Billing', ['patientId']),
+    },
+    '/charges/{id}': get('Get a charge by id', 'Billing', ['id']),
+    '/charges/{id}/finalize-coding': post(
+      'Finalize a charge’s coding (coder review)',
+      'Billing',
+      FinalizeChargeCodingSchema,
+      'FinalizeChargeCoding',
+    ),
+    '/coding-queue': get('List charges awaiting coder review', 'Billing'),
+    '/patients/{patientId}/claims': {
+      ...post('Create a claim from coded charges', 'Claims', CreateClaimSchema, 'CreateClaim'),
+      ...get('List a patient’s claims', 'Claims', ['patientId']),
+    },
+    '/claims/{id}': get('Get a claim by id', 'Claims', ['id']),
+    '/claims/{id}/submit': post('Submit a claim to the clearinghouse (runs the scrubber first)', 'Claims'),
+    '/claims/{id}/timeline': get('Get a claim’s full timeline (versions, denials, remittances)', 'Claims', ['id']),
+    '/claims/{claimId}/remittances': get('List remittances posted against a claim', 'Payments', ['claimId']),
+    '/denials/{id}': get('Get a denial by id', 'Claims', ['id']),
+    '/denials/{id}/resolve': post('Resolve a denial', 'Claims', ResolveDenialSchema, 'ResolveDenial'),
+    '/patients/{patientId}/ledger': get('Get a patient’s ledger (entries + running balance)', 'Payments', ['patientId']),
+    '/patients/{patientId}/eligibility-checks': {
+      ...post('Run an eligibility check against the clearinghouse', 'Payments', CreateEligibilityCheckSchema, 'CreateEligibilityCheck'),
+      ...get('List a patient’s eligibility check history', 'Payments', ['patientId']),
+    },
   },
   components: {
     schemas: { ProblemDetail: problemDetail },

@@ -11,6 +11,8 @@ import { NoopLabOrderGateway } from '@ehr/lab-adapter';
 import { LAB_ORDER_GATEWAY } from '@ehr/orders';
 import { NoopPrescribingGateway } from '@ehr/erx-adapter';
 import { ERX_GATEWAY } from '@ehr/medication';
+import { NoopClearinghouseGateway } from '@ehr/clearinghouse-adapter';
+import { CLEARINGHOUSE_GATEWAY } from '@ehr/claims';
 import { DB_CONNECTION, KEY_MATERIAL, IDENTITY_PROVIDER, ENV_CONFIG } from '../common/tokens.js';
 
 const env = getConfig();
@@ -60,6 +62,7 @@ const db = createDb({ connectionString: env.APP_DATABASE_URL });
     },
     { provide: LAB_ORDER_GATEWAY, useValue: new NoopLabOrderGateway() },
     { provide: ERX_GATEWAY, useValue: new NoopPrescribingGateway() },
+    { provide: CLEARINGHOUSE_GATEWAY, useValue: new NoopClearinghouseGateway() },
     { provide: PolicyEngine, useValue: new PolicyEngine() },
     Reflector,
   ],
@@ -71,6 +74,7 @@ const db = createDb({ connectionString: env.APP_DATABASE_URL });
     OBJECT_STORAGE_GATEWAY,
     LAB_ORDER_GATEWAY,
     ERX_GATEWAY,
+    CLEARINGHOUSE_GATEWAY,
     PolicyEngine,
     Reflector,
   ],

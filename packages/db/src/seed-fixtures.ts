@@ -65,6 +65,13 @@ export const PERMISSION_KEYS = {
   RESULT_REVIEW: 'result.review',
   INTEROP_HL7_INGEST: 'interop.hl7.ingest',
   EXTERNAL_CANDIDATE_MANAGE: 'external_candidate.manage',
+  CHARGE_CAPTURE: 'charge.capture',
+  CODING_REVIEW: 'coding.review',
+  CLAIM_EDIT: 'claim.edit',
+  CLAIM_SUBMIT: 'claim.submit',
+  DENIAL_MANAGE: 'denial.manage',
+  LEDGER_READ: 'ledger.read',
+  ELIGIBILITY_CHECK: 'eligibility.check',
 } as const;
 
 export interface SeededTenant {
