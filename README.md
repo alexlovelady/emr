@@ -1,15 +1,18 @@
-# EHR Platform — Phase 1 + 2 (Platform Foundation; Patient + Scheduling + Intake)
+# EHR Platform — Phase 1 + 2 + 3 (Platform Foundation; Patient/Scheduling/Intake; Clinical Chart)
 
 Cloud-native ambulatory EHR + practice-management + revenue-cycle platform. This repository
-currently implements **Phase 1** and **Phase 2** of `EHR_BUILD_SPEC.md`'s build order (§26).
-Phase 1: the monorepo skeleton, tenant/workforce identity, the layered authorization model,
-audit + transactional outbox, a first-party auth adapter, a thin documents flow, and the
-platform's testing/CI/CD/observability scaffolding. Phase 2: the patient registry (with a
-per-organization identifier table and a reversible duplicate-merge workflow — spec §5.3),
-insurance coverage basics, appointment scheduling through check-in (spec §11.1), a generic task
-queue, lightweight dynamic intake forms, and a read-only patient timeline shell. Later phases
-(clinical chart/encounters, orders/results, RCM, AI, etc.) are not built yet — see the
-`README.md` in each reserved-but-empty folder for where it lands.
+currently implements **Phases 1–3** of `EHR_BUILD_SPEC.md`'s build order (§26). Phase 1: the
+monorepo skeleton, tenant/workforce identity, the layered authorization model, audit +
+transactional outbox, a first-party auth adapter, a thin documents flow, and the platform's
+testing/CI/CD/observability scaffolding. Phase 2: the patient registry (with a per-organization
+identifier table and a reversible duplicate-merge workflow — spec §5.3), insurance coverage
+basics, appointment scheduling through check-in (spec §11.1), a generic task queue, lightweight
+dynamic intake forms, and a read-only patient timeline shell. Phase 3: encounters (continuing the
+golden path from CheckedIn through CodingReview), clinical notes with templates and a real
+sign/amend lifecycle (spec §5.4), problems, allergies, vitals/observations, procedures, the
+patient's medication list with reconciliation events (spec §5.5), and clinically-linked document
+ingestion. Later phases (orders/results + interoperability, eRx, RCM, AI, etc.) are not built yet
+— see the `README.md` in each reserved-but-empty folder for where it lands.
 
 Read `EHR_BUILD_SPEC.md` and `EHR_REGULATORY_MANUAL.md` first — this README assumes their
 context. Three deliberate deviations from the spec's literal text are documented in
@@ -82,9 +85,10 @@ apps/           api (NestJS/Fastify), worker (outbox relay)
 packages/       config, domain-common, db, outbox, audit, authz, auth-adapter,
                 object-storage, observability, testing, api-contracts
 domains/        tenant (organizations/locations), workforce (users/practitioners),
-                documents (thin upload/download flow), patient (registry/identifiers/coverage/
-                merge/timeline), scheduling (appointments), tasks, intake (form templates/
-                responses)
+                documents (thin upload/download flow, now with clinical linkage), patient
+                (registry/identifiers/coverage/merge/timeline), scheduling (appointments), tasks,
+                intake (form templates/responses), clinical (encounters/notes/problems/allergies/
+                observations/procedures), medication (list + reconciliation)
 docs/           adr/, api/openapi.json, deploy/railway.md
 infra/          terraform/, policies/, dashboards/ — all deferred, see their READMEs
 ```
@@ -114,7 +118,19 @@ infra/          terraform/, policies/, dashboards/ — all deferred, see their R
 - **The appointment status column is an explicit state machine**
   (`domains/scheduling/src/appointment/appointment.service.ts`), not a free-text field — only the
   states before an Encounter exists (Scheduled/Confirmed/CheckedIn, plus Cancelled/NoShow) are
-  implemented; Encounter-side states (Roomed, InProgress, Documentation, Signed, ...) are Phase 3+.
+  implemented in Phase 2. Phase 3's `domains/clinical/src/encounter/encounter.service.ts`
+  continues the same golden path (spec §11.1): an Encounter can only be created from a
+  `checked_in` appointment, and its own state machine runs Roomed → InProgress → Documentation →
+  Signed → CodingReview — the RCM states after that (ClaimReady, Submitted, ...) are Phase 6.
+- **A signed clinical note is never mutated, ever** (spec §5.4) —
+  `domains/clinical/src/note/note.service.ts`'s lifecycle is DRAFT → READY_FOR_REVIEW → SIGNED,
+  with VOIDED/ENTERED_IN_ERROR reachable only pre-sign. Correcting a signed note (`amend()`)
+  inserts a brand-new note row with `amendsNoteId` pointing at the original; the original's
+  content and status are never written to again. `GET /api/v1/notes/{id}` returns the note plus
+  its full forward amendment chain.
+- **Problem/Allergy/Medication hang off Patient; Observation/Procedure hang off Encounter** —
+  a direct, deliberate reflection of spec §5.2's aggregate diagram, encoded structurally (which FK
+  is nullable vs. required) rather than left as an application-layer convention.
 
 ## Verification status
 
@@ -155,3 +171,17 @@ task, creating an intake template and submitting a response, reading the patient
 two similar patients (scored 70/100 on exact DOB + name match), merging them, and reversing that
 merge — every step producing the expected `audit_events`/`outbox_events` rows, with cross-tenant
 reads correctly returning 404 throughout.
+
+**Phase 3** was verified the same way: migrations `0013`–`0017` apply cleanly on top of Phase
+2's, the full `test`/`test:integration`/`test:tenant-isolation` suite is green across both new
+packages (`@ehr/clinical`, `@ehr/medication`) and the extended `@ehr/documents`, and a full HTTP
+walkthrough continuing the Phase 2 golden path from a checked-in appointment: creating an
+encounter → starting it → recording vitals (observations) and a procedure → recording a problem
+and an allergy → moving into documentation → creating a note template → creating a note from it
+→ editing/submitting/signing the note → **amending the signed note and confirming the original's
+content is byte-for-byte unchanged** (`GET /notes/{id}` shows the original plus its amendment
+chain) → recording a medication and a reconciliation event → uploading a patient/encounter-linked
+document → signing the encounter → sending it to coding review — every step producing the
+expected `audit_events`/`outbox_events` rows, with cross-tenant reads correctly returning 404
+throughout, and the encounter-creation state gate (`checked_in` appointments only) and note
+sign/void state-machine rules verified as real 409 conflicts, not just documentation.

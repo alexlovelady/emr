@@ -9,6 +9,8 @@ import { PatientModule } from '@ehr/patient';
 import { SchedulingModule } from '@ehr/scheduling';
 import { TasksModule } from '@ehr/tasks';
 import { IntakeModule } from '@ehr/intake';
+import { ClinicalModule } from '@ehr/clinical';
+import { MedicationModule } from '@ehr/medication';
 import { CoreModule } from './core/core.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { HealthController } from './health/health.controller.js';
@@ -34,6 +36,8 @@ import { ProblemDetailsFilter } from './common/problem-details.filter.js';
     TasksModule,
     IntakeModule,
     PatientModule,
+    ClinicalModule,
+    MedicationModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -3,14 +3,10 @@ import type { DB } from '@ehr/db';
 import { ConflictError, NotFoundError, type RequestContext } from '@ehr/domain-common';
 import { buildOutboxInsert } from '@ehr/outbox';
 import type { ObjectStorageGateway } from '@ehr/object-storage';
+import type { RequestUploadInput } from './document.dto.js';
 import { DocumentRepository, type DocumentRow } from './document.repository.js';
 
 type Executor = Kysely<DB> | Transaction<DB>;
-
-export interface RequestUploadInput {
-  filename: string;
-  contentType: string;
-}
 
 export interface RequestUploadResult {
   document: DocumentRow;
@@ -44,6 +40,9 @@ export class DocumentService {
       filename: input.filename,
       contentType: input.contentType,
       storageKey,
+      patientId: input.patientId ?? null,
+      encounterId: input.encounterId ?? null,
+      documentCategory: input.documentCategory ?? null,
       createdBy: actorId ?? ctx.tenantId,
     });
 
@@ -105,5 +104,9 @@ export class DocumentService {
     const document = await this.repo.findById(trx, ctx.tenantId, id);
     if (!document) throw new NotFoundError('Document not found', { id });
     return this.gateway.getDownloadUrl({ storageKey: document.storageKey });
+  }
+
+  async list(trx: Executor, ctx: RequestContext, filter: { patientId?: string } = {}): Promise<DocumentRow[]> {
+    return this.repo.list(trx, ctx.tenantId, filter);
   }
 }

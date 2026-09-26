@@ -146,6 +146,110 @@ export interface DocumentsTable extends CommonColumnsTable {
   storage_key: string;
   checksum_sha256: string | null;
   uploaded_by: string | null;
+  patient_id: string | null;
+  encounter_id: string | null;
+  document_category: string | null;
+}
+
+export interface EncountersTable extends CommonColumnsTable {
+  patient_id: string;
+  appointment_id: string;
+  location_id: string;
+  practitioner_id: string;
+  encounter_type: string;
+  started_at: GeneratedTimestamp;
+  ended_at: Timestamp | null;
+  chief_complaint: string | null;
+}
+
+export interface NoteTemplatesTable extends CommonColumnsTable {
+  name: string;
+  schema_version: Generated<number>;
+  sections: JsonColumn<NoteTemplateSection[]>;
+}
+
+export interface NoteTemplateSection {
+  key: string;
+  label: string;
+  defaultText: string | null;
+}
+
+export interface NotesTable extends CommonColumnsTable {
+  encounter_id: string;
+  patient_id: string;
+  template_id: string | null;
+  note_type: string;
+  content: GeneratedJsonColumn<Record<string, string>>;
+  amends_note_id: string | null;
+  signed_at: Timestamp | null;
+  signed_by: string | null;
+  void_reason: string | null;
+}
+
+export interface ProblemsTable extends CommonColumnsTable {
+  patient_id: string;
+  encounter_id: string | null;
+  code_system: string;
+  code: string;
+  display_name: string;
+  clinical_status: Generated<string>;
+  onset_date: Timestamp | null;
+  notes: string | null;
+}
+
+export interface AllergiesTable extends CommonColumnsTable {
+  patient_id: string;
+  encounter_id: string | null;
+  substance: string;
+  reaction: string | null;
+  severity: string | null;
+  onset_date: Timestamp | null;
+  notes: string | null;
+}
+
+export interface ObservationsTable extends CommonColumnsTable {
+  patient_id: string;
+  encounter_id: string;
+  category: Generated<string>;
+  code: string;
+  display_name: string;
+  value_quantity: string | null;
+  value_text: string | null;
+  unit: string | null;
+  effective_at: GeneratedTimestamp;
+}
+
+export interface ProceduresTable extends CommonColumnsTable {
+  patient_id: string;
+  encounter_id: string;
+  code_system: string | null;
+  code: string | null;
+  display_name: string;
+  performed_at: GeneratedTimestamp;
+  notes: string | null;
+}
+
+export interface MedicationsTable extends CommonColumnsTable {
+  patient_id: string;
+  encounter_id: string | null;
+  medication_name: string;
+  rxnorm_code: string | null;
+  dose: string | null;
+  route: string | null;
+  frequency: string | null;
+  entry_source: string;
+  started_at: Timestamp | null;
+  stopped_at: Timestamp | null;
+  prescriber_id: string | null;
+  notes: string | null;
+}
+
+export interface MedicationReconciliationEventsTable extends CommonColumnsTable {
+  patient_id: string;
+  encounter_id: string;
+  performed_by: string;
+  performed_at: GeneratedTimestamp;
+  notes: string | null;
 }
 
 export interface PatientsTable extends CommonColumnsTable {
@@ -315,6 +419,15 @@ export interface DB {
   tasks: TasksTable;
   intake_form_templates: IntakeFormTemplatesTable;
   intake_form_responses: IntakeFormResponsesTable;
+  encounters: EncountersTable;
+  note_templates: NoteTemplatesTable;
+  notes: NotesTable;
+  problems: ProblemsTable;
+  allergies: AllergiesTable;
+  observations: ObservationsTable;
+  procedures: ProceduresTable;
+  medications: MedicationsTable;
+  medication_reconciliation_events: MedicationReconciliationEventsTable;
   idempotency_keys: IdempotencyKeysTable;
   outbox_events: OutboxEventsTable;
   audit_events: AuditEventsTable;

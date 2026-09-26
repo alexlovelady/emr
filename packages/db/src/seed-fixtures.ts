@@ -46,6 +46,16 @@ export const PERMISSION_KEYS = {
   TASK_MANAGE: 'task.manage',
   INTAKE_FORM_MANAGE: 'intake_form.manage',
   INTAKE_RESPONSE_MANAGE: 'intake_response.manage',
+  PATIENT_READ_CLINICAL: 'patient.read.clinical',
+  ENCOUNTER_CREATE: 'encounter.create',
+  ENCOUNTER_SIGN: 'encounter.sign',
+  NOTE_CREATE: 'note.create',
+  NOTE_SIGN: 'note.sign',
+  PROBLEM_MANAGE: 'problem.manage',
+  ALLERGY_MANAGE: 'allergy.manage',
+  MEDICATION_MANAGE: 'medication.manage',
+  OBSERVATION_MANAGE: 'observation.manage',
+  PROCEDURE_MANAGE: 'procedure.manage',
 } as const;
 
 export interface SeededTenant {

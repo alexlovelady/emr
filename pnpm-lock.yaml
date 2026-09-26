@@ -44,6 +44,9 @@ importers:
       '@ehr/authz':
         specifier: workspace:*
         version: link:../../packages/authz
+      '@ehr/clinical':
+        specifier: workspace:*
+        version: link:../../domains/clinical
       '@ehr/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -59,6 +62,9 @@ importers:
       '@ehr/intake':
         specifier: workspace:*
         version: link:../../domains/intake
+      '@ehr/medication':
+        specifier: workspace:*
+        version: link:../../domains/medication
       '@ehr/object-storage':
         specifier: workspace:*
         version: link:../../packages/object-storage
@@ -164,6 +170,61 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@26.6.2)(supports-color@7.2.0)
 
+  domains/clinical:
+    dependencies:
+      '@ehr/api-contracts':
+        specifier: workspace:*
+        version: link:../../packages/api-contracts
+      '@ehr/audit':
+        specifier: workspace:*
+        version: link:../../packages/audit
+      '@ehr/authz':
+        specifier: workspace:*
+        version: link:../../packages/authz
+      '@ehr/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@ehr/domain-common':
+        specifier: workspace:*
+        version: link:../../packages/domain-common
+      '@ehr/outbox':
+        specifier: workspace:*
+        version: link:../../packages/outbox
+      '@ehr/patient':
+        specifier: workspace:*
+        version: link:../patient
+      '@ehr/scheduling':
+        specifier: workspace:*
+        version: link:../scheduling
+      '@nestjs/common':
+        specifier: ^10.4.15
+        version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
+      kysely:
+        specifier: ^0.27.4
+        version: 0.27.6
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      '@ehr/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
+      '@types/pg':
+        specifier: ^8.11.10
+        version: 8.23.1
+      fastify:
+        specifier: 4.28.1
+        version: 4.28.1
+      pg:
+        specifier: ^8.13.1
+        version: 8.23.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@26.6.2)(supports-color@7.2.0)
+
   domains/documents:
     dependencies:
       '@ehr/api-contracts':
@@ -236,6 +297,58 @@ importers:
       '@ehr/outbox':
         specifier: workspace:*
         version: link:../../packages/outbox
+      '@nestjs/common':
+        specifier: ^10.4.15
+        version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
+      kysely:
+        specifier: ^0.27.4
+        version: 0.27.6
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      '@ehr/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
+      '@types/pg':
+        specifier: ^8.11.10
+        version: 8.23.1
+      fastify:
+        specifier: 4.28.1
+        version: 4.28.1
+      pg:
+        specifier: ^8.13.1
+        version: 8.23.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@26.6.2)(supports-color@7.2.0)
+
+  domains/medication:
+    dependencies:
+      '@ehr/api-contracts':
+        specifier: workspace:*
+        version: link:../../packages/api-contracts
+      '@ehr/audit':
+        specifier: workspace:*
+        version: link:../../packages/audit
+      '@ehr/authz':
+        specifier: workspace:*
+        version: link:../../packages/authz
+      '@ehr/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@ehr/domain-common':
+        specifier: workspace:*
+        version: link:../../packages/domain-common
+      '@ehr/outbox':
+        specifier: workspace:*
+        version: link:../../packages/outbox
+      '@ehr/patient':
+        specifier: workspace:*
+        version: link:../patient
       '@nestjs/common':
         specifier: ^10.4.15
         version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)

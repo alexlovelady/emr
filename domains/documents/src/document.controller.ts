@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Param, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Post, Query, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { getCurrentTransaction } from '@ehr/db';
 import { ForbiddenError, type RequestContext } from '@ehr/domain-common';
@@ -38,6 +38,13 @@ export class DocumentController {
   async getDownloadUrl(@Param('id') id: string, @Req() req: FastifyRequest) {
     const url = await this.service.getDownloadUrl(getCurrentTransaction(), requireCtx(req), id);
     return { url };
+  }
+
+  @Get()
+  @RequirePermission(PERMISSION_KEYS.DOCUMENT_DOWNLOAD)
+  @Audited('document.list', 'Document')
+  async list(@Query('patientId') patientId: string | undefined, @Req() req: FastifyRequest) {
+    return this.service.list(getCurrentTransaction(), requireCtx(req), patientId ? { patientId } : {});
   }
 }
 

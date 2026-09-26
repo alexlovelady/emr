@@ -20,6 +20,19 @@ import {
   CreateIntakeFormResponseSchema,
   SubmitIntakeFormResponseSchema,
 } from '@ehr/intake';
+import {
+  CreateEncounterSchema,
+  CreateNoteTemplateSchema,
+  CreateNoteSchema,
+  UpdateNoteContentSchema,
+  VoidNoteSchema,
+  CreateProblemSchema,
+  UpdateProblemStatusSchema,
+  CreateAllergySchema,
+  CreateObservationSchema,
+  CreateProcedureSchema,
+} from '@ehr/clinical';
+import { CreateMedicationSchema, DiscontinueMedicationSchema, RecordReconciliationSchema } from '@ehr/medication';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -130,7 +143,10 @@ const document = {
       ...get('List practitioners in the caller’s tenant', 'Workforce'),
     },
     '/practitioners/{id}': get('Get a practitioner by id', 'Workforce', ['id']),
-    '/documents': post('Request a presigned upload URL', 'Documents', RequestUploadSchema, 'RequestUpload'),
+    '/documents': {
+      ...post('Request a presigned upload URL (optionally linked to a patient/encounter)', 'Documents', RequestUploadSchema, 'RequestUpload'),
+      ...get('List documents in the caller’s tenant', 'Documents'),
+    },
     '/documents/{id}/confirm': post('Confirm a completed upload', 'Documents'),
     '/documents/{id}/download-url': get('Get a presigned download URL', 'Documents', ['id']),
     '/patients': {
@@ -177,6 +193,61 @@ const document = {
     },
     '/intake-form-responses/{id}': get('Get an intake form response by id', 'Intake', ['id']),
     '/intake-form-responses/{id}/submit': post('Submit an intake form response', 'Intake', SubmitIntakeFormResponseSchema, 'SubmitIntakeFormResponse'),
+    '/encounters': {
+      ...post('Create an encounter from a checked-in appointment', 'Clinical', CreateEncounterSchema, 'CreateEncounter'),
+      ...get('List encounters in the caller’s tenant', 'Clinical'),
+    },
+    '/encounters/{id}': get('Get an encounter by id', 'Clinical', ['id']),
+    '/encounters/{id}/start': post('Start an encounter (Roomed -> InProgress)', 'Clinical'),
+    '/encounters/{id}/document': post('Move an encounter into documentation (InProgress -> Documentation)', 'Clinical'),
+    '/encounters/{id}/sign': post('Sign an encounter (Documentation -> Signed)', 'Clinical'),
+    '/encounters/{id}/send-to-coding': post('Send a signed encounter to coding review', 'Clinical'),
+    '/note-templates': {
+      ...post('Create a note template', 'Clinical', CreateNoteTemplateSchema, 'CreateNoteTemplate'),
+      ...get('List note templates', 'Clinical'),
+    },
+    '/note-templates/{id}': get('Get a note template by id', 'Clinical', ['id']),
+    '/notes': {
+      ...post('Create a draft note (optionally seeded from a template)', 'Clinical', CreateNoteSchema, 'CreateNote'),
+      ...get('List notes for an encounter', 'Clinical'),
+    },
+    '/notes/{id}': get('Get a note with its amendment chain', 'Clinical', ['id']),
+    '/notes/{id}/content': post('Update a draft/ready-for-review note’s content', 'Clinical', UpdateNoteContentSchema, 'UpdateNoteContent'),
+    '/notes/{id}/submit-for-review': post('Submit a draft note for review', 'Clinical'),
+    '/notes/{id}/sign': post('Sign a note (immutable once signed)', 'Clinical'),
+    '/notes/{id}/void': post('Void a note (only before it is signed)', 'Clinical', VoidNoteSchema, 'VoidNote'),
+    '/notes/{id}/amend': post('Create an additive amendment to a signed note', 'Clinical'),
+    '/patients/{patientId}/problems': {
+      ...post('Record a problem on the patient’s problem list', 'Clinical', CreateProblemSchema, 'CreateProblem'),
+      ...get('List a patient’s problems', 'Clinical', ['patientId']),
+    },
+    '/problems/{id}': get('Get a problem by id', 'Clinical', ['id']),
+    '/problems/{id}/status': post('Update a problem’s clinical status', 'Clinical', UpdateProblemStatusSchema, 'UpdateProblemStatus'),
+    '/patients/{patientId}/allergies': {
+      ...post('Record an allergy on the patient', 'Clinical', CreateAllergySchema, 'CreateAllergy'),
+      ...get('List a patient’s allergies', 'Clinical', ['patientId']),
+    },
+    '/allergies/{id}': get('Get an allergy by id', 'Clinical', ['id']),
+    '/encounters/{encounterId}/observations': {
+      ...post('Record an observation (e.g. a vital sign) for an encounter', 'Clinical', CreateObservationSchema, 'CreateObservation'),
+      ...get('List an encounter’s observations', 'Clinical', ['encounterId']),
+    },
+    '/observations/{id}': get('Get an observation by id', 'Clinical', ['id']),
+    '/encounters/{encounterId}/procedures': {
+      ...post('Record a procedure performed during an encounter', 'Clinical', CreateProcedureSchema, 'CreateProcedure'),
+      ...get('List an encounter’s procedures', 'Clinical', ['encounterId']),
+    },
+    '/procedures/{id}': get('Get a procedure by id', 'Clinical', ['id']),
+    '/patients/{patientId}/medications': {
+      ...post('Add a medication to the patient’s medication list', 'Medication', CreateMedicationSchema, 'CreateMedication'),
+      ...get('List a patient’s medications', 'Medication', ['patientId']),
+    },
+    '/medications/{id}': get('Get a medication by id', 'Medication', ['id']),
+    '/medications/{id}/discontinue': post('Discontinue a medication', 'Medication', DiscontinueMedicationSchema, 'DiscontinueMedication'),
+    '/patients/{patientId}/medication-reconciliations': {
+      ...post('Record a medication reconciliation event', 'Medication', RecordReconciliationSchema, 'RecordReconciliation'),
+      ...get('List a patient’s medication reconciliation events', 'Medication', ['patientId']),
+    },
   },
   components: {
     schemas: { ProblemDetail: problemDetail },

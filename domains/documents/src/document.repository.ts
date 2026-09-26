@@ -8,6 +8,9 @@ export interface DocumentRow {
   contentType: string;
   sizeBytes: number | null;
   storageKey: string;
+  patientId: string | null;
+  encounterId: string | null;
+  documentCategory: string | null;
   status: string;
   createdAt: Date;
   updatedAt: Date;
@@ -19,7 +22,16 @@ type Executor = Kysely<DB> | Transaction<DB>;
 export class DocumentRepository {
   async create(
     trx: Executor,
-    input: { tenantId: string; filename: string; contentType: string; storageKey: string; createdBy: string },
+    input: {
+      tenantId: string;
+      filename: string;
+      contentType: string;
+      storageKey: string;
+      patientId: string | null;
+      encounterId: string | null;
+      documentCategory: string | null;
+      createdBy: string;
+    },
   ): Promise<DocumentRow> {
     const row = await trx
       .insertInto('documents')
@@ -28,6 +40,9 @@ export class DocumentRepository {
         filename: input.filename,
         content_type: input.contentType,
         storage_key: input.storageKey,
+        patient_id: input.patientId,
+        encounter_id: input.encounterId,
+        document_category: input.documentCategory,
         status: 'pending_upload',
         uploaded_by: input.createdBy,
         created_by: input.createdBy,
@@ -46,6 +61,13 @@ export class DocumentRepository {
       .where('id', '=', id)
       .executeTakeFirst();
     return row ? toRow(row) : null;
+  }
+
+  async list(trx: Executor, tenantId: string, filter: { patientId?: string } = {}): Promise<DocumentRow[]> {
+    let query = trx.selectFrom('documents').selectAll().where('tenant_id', '=', tenantId);
+    if (filter.patientId) query = query.where('patient_id', '=', filter.patientId);
+    const rows = await query.orderBy('created_at', 'desc').execute();
+    return rows.map(toRow);
   }
 
   async markStored(trx: Executor, tenantId: string, id: string, sizeBytes: number): Promise<DocumentRow> {
@@ -68,6 +90,9 @@ function toRow(dbRow: Selectable<DB['documents']>): DocumentRow {
     contentType: dbRow.content_type,
     sizeBytes: dbRow.size_bytes === null ? null : Number(dbRow.size_bytes),
     storageKey: dbRow.storage_key,
+    patientId: dbRow.patient_id,
+    encounterId: dbRow.encounter_id,
+    documentCategory: dbRow.document_category,
     status: dbRow.status,
     createdAt: dbRow.created_at,
     updatedAt: dbRow.updated_at,
