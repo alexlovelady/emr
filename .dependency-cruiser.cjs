@@ -23,13 +23,24 @@ module.exports = {
       name: 'no-orphans',
       comment: 'Modules with no incoming/outgoing dependencies are usually dead code.',
       severity: 'warn',
-      from: { orphan: true, pathNot: ['\\.(test|spec)\\.ts$', 'README\\.md$'] },
+      from: {
+        orphan: true,
+        pathNot: [
+          '\\.(test|spec)\\.ts$',
+          'README\\.md$',
+          'vitest\\.\\S*config\\.ts$',
+          '(^|/)migrations/',
+        ],
+      },
       to: {},
     },
   ],
   options: {
     doNotFollow: {
       path: 'node_modules',
+    },
+    exclude: {
+      path: '(^|/)dist/',
     },
     tsPreCompilationDeps: true,
     tsConfig: {

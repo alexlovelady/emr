@@ -20,7 +20,7 @@ function makeContext(opts: {
   params?: Record<string, string>;
 }): { context: ExecutionContext; reflector: Reflector } {
   const reflector = {
-    get: (key: string) => {
+    getAllAndOverride: (key: string) => {
       if (key === AUDIT_METADATA_KEY) return opts.metadata?.[AUDIT_METADATA_KEY];
       if (key === SKIP_AUDIT_METADATA_KEY) return opts.metadata?.[SKIP_AUDIT_METADATA_KEY];
       return undefined;

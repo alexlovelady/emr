@@ -41,12 +41,18 @@ export class AuthzInterceptor implements NestInterceptor {
       return next.handle();
     }
 
-    const skip = this.reflector.get<boolean>(SKIP_AUTHZ_METADATA_KEY, context.getHandler());
+    const skip = this.reflector.getAllAndOverride<boolean>(SKIP_AUTHZ_METADATA_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
     if (skip) {
       return next.handle();
     }
 
-    const permission = this.reflector.get<string>(REQUIRE_PERMISSION_METADATA_KEY, context.getHandler());
+    const permission = this.reflector.getAllAndOverride<string>(REQUIRE_PERMISSION_METADATA_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
     if (!permission) {
       return throwError(
         () =>

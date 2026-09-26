@@ -19,7 +19,7 @@ import { AuthService } from './auth.service.js';
 @SkipAudit()
 export class AuthController {
   constructor(
-    private readonly authService: AuthService,
+    @Inject(AuthService) private readonly authService: AuthService,
     @Inject(IDENTITY_PROVIDER) private readonly identityProvider: IdentityProvider,
   ) {}
 
@@ -29,7 +29,7 @@ export class AuthController {
     return this.authService.login(body.tenantSlug, body.email, body.password, {
       requestId: req.ehrContext?.requestId ?? 'unknown',
       ip: req.ip,
-      userAgent: req.headers['user-agent'],
+      ...(req.headers['user-agent'] !== undefined ? { userAgent: req.headers['user-agent'] } : {}),
     });
   }
 

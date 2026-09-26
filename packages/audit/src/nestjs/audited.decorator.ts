@@ -17,8 +17,11 @@ export interface AuditMetadata {
  * neither this nor @SkipAudit — "audit events exist for all foundation APIs" (spec §26 Phase 1
  * exit gate) is meant to be mechanically true, not a promise developers can forget.
  */
-export const Audited = (action: string, resourceType: string): MethodDecorator =>
+export const Audited = (action: string, resourceType: string): ClassDecorator & MethodDecorator =>
   SetMetadata(AUDIT_METADATA_KEY, { action, resourceType } satisfies AuditMetadata);
 
-/** Explicit escape hatch for routes with no domain resource to audit (e.g. health checks). */
-export const SkipAudit = (): MethodDecorator => SetMetadata(SKIP_AUDIT_METADATA_KEY, true);
+/**
+ * Explicit escape hatch for routes with no domain resource to audit (e.g. health checks).
+ * Usable at the class level (exempts every route in the controller) or per method.
+ */
+export const SkipAudit = (): ClassDecorator & MethodDecorator => SetMetadata(SKIP_AUDIT_METADATA_KEY, true);

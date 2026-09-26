@@ -9,8 +9,11 @@ export const SKIP_AUTHZ_METADATA_KEY = 'ehr:skip-authz';
  * runs (spec rule #3: authorization is never optional/bypassable). A repo-level architecture
  * test fails CI if any controller method has neither this nor @SkipAuthz.
  */
-export const RequirePermission = (permission: string): MethodDecorator =>
+export const RequirePermission = (permission: string): ClassDecorator & MethodDecorator =>
   SetMetadata(REQUIRE_PERMISSION_METADATA_KEY, permission);
 
-/** Explicit escape hatch for routes with no permission check (health checks, login, JWKS). */
-export const SkipAuthz = (): MethodDecorator => SetMetadata(SKIP_AUTHZ_METADATA_KEY, true);
+/**
+ * Explicit escape hatch for routes with no permission check (health checks, login, JWKS).
+ * Usable at the class level (exempts every route in the controller) or per method.
+ */
+export const SkipAuthz = (): ClassDecorator & MethodDecorator => SetMetadata(SKIP_AUTHZ_METADATA_KEY, true);

@@ -12,6 +12,9 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     const request = ctx.getRequest<FastifyRequest>();
 
     const { status, type, title, detail } = classify(exception);
+    if (status >= 500) {
+      console.error('[ProblemDetailsFilter] unhandled exception:', exception);
+    }
 
     void response.status(status).send({
       type,

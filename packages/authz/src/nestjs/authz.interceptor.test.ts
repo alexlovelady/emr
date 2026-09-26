@@ -17,7 +17,7 @@ function makeContext(opts: { metadata?: Record<string, unknown>; ehrContext?: Re
   reflector: Reflector;
 } {
   const reflector = {
-    get: (key: string) => opts.metadata?.[key],
+    getAllAndOverride: (key: string) => opts.metadata?.[key],
   } as unknown as Reflector;
 
   const context = {

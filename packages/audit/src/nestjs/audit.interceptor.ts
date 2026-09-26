@@ -31,12 +31,18 @@ export class AuditInterceptor implements NestInterceptor {
       return next.handle();
     }
 
-    const skip = this.reflector.get<boolean>(SKIP_AUDIT_METADATA_KEY, context.getHandler());
+    const skip = this.reflector.getAllAndOverride<boolean>(SKIP_AUDIT_METADATA_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
     if (skip) {
       return next.handle();
     }
 
-    const meta = this.reflector.get<AuditMetadata>(AUDIT_METADATA_KEY, context.getHandler());
+    const meta = this.reflector.getAllAndOverride<AuditMetadata>(AUDIT_METADATA_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
     const req = context.switchToHttp().getRequest<RequestWithEhrContext>();
 
     if (!meta) {
