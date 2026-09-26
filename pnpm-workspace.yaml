@@ -2,3 +2,6 @@ packages:
   - "apps/*"
   - "packages/*"
   - "domains/*"
+allowBuilds:
+  argon2: true
+  esbuild: true
