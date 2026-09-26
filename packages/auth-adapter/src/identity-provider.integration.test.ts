@@ -9,19 +9,30 @@ import { InvalidRefreshTokenError, verifyAccessToken } from './tokens.js';
 
 /** Requires a live Postgres with migrations applied — run via `pnpm test:integration`. */
 describe('FirstPartyIdentityProvider (integration)', () => {
-  let db: Kysely<DB>;
+  let ownerDb: Kysely<DB>;
+  let appDb: Kysely<DB>;
   let seed: SeedResult;
   let provider: FirstPartyIdentityProvider;
   let keys: KeyMaterial;
 
   beforeAll(async () => {
-    db = new Kysely<DB>({
+    // Seeding needs the owner/bootstrap role (DATABASE_URL) — it writes across two tenants in
+    // one run, which the RLS-enforcing ehr_app role's per-tenant policies would reject.
+    ownerDb = new Kysely<DB>({
       dialect: new PostgresDialect({ pool: new Pool({ connectionString: process.env.DATABASE_URL }) }),
     });
-    seed = await seedSyntheticFixtures(db);
+    seed = await seedSyntheticFixtures(ownerDb);
+
+    // The provider itself MUST be tested against the same role apps/api actually uses
+    // (APP_DATABASE_URL / ehr_app) — connecting as the owner would bypass Row-Level Security
+    // entirely and silently pass even a broken cross-tenant query, proving nothing.
+    appDb = new Kysely<DB>({
+      dialect: new PostgresDialect({ pool: new Pool({ connectionString: process.env.APP_DATABASE_URL }) }),
+    });
+
     const { privateKey, publicKey } = await generateKeyPair(JWT_ALG, { extractable: true });
     keys = { privateKey, publicKey, kid: 'test-kid' };
-    provider = new FirstPartyIdentityProvider(db, keys, {
+    provider = new FirstPartyIdentityProvider(appDb, keys, {
       issuer: 'ehr-test',
       audience: 'ehr-api',
       accessTokenTtlSeconds: 900,
@@ -30,7 +41,8 @@ describe('FirstPartyIdentityProvider (integration)', () => {
   });
 
   afterAll(async () => {
-    await db.destroy();
+    await ownerDb.destroy();
+    await appDb.destroy();
   });
 
   it('verifies correct credentials for a seeded user', async () => {

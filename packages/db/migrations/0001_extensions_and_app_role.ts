@@ -68,7 +68,9 @@ function resolveAppPassword(): string {
   if (appUrl) {
     try {
       const parsed = new URL(appUrl);
-      if (parsed.password) return parsed.password;
+      // URL.password is percent-encoded as it appears in the string; decode it so a password
+      // containing URL-special characters (@, :, /, %) round-trips correctly.
+      if (parsed.password) return decodeURIComponent(parsed.password);
     } catch {
       // fall through to the error below
     }

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Body, Controller, HttpCode, Inject, Post, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { SkipAudit } from '@ehr/audit';
@@ -27,7 +28,11 @@ export class AuthController {
   @HttpCode(200)
   async login(@Body(new ZodValidationPipe(LoginSchema)) body: LoginInput, @Req() req: FastifyRequest) {
     return this.authService.login(body.tenantSlug, body.email, body.password, {
-      requestId: req.ehrContext?.requestId ?? 'unknown',
+      // req.ehrContext is always set by TenantContextMiddleware (with a real UUID requestId)
+      // even for this unauthenticated route — see its doc comment. The fallback here only
+      // guards against some future route bypassing that middleware; it must be a real UUID
+      // (audit_events.request_id is a uuid column), never a sentinel string like "unknown".
+      requestId: req.ehrContext?.requestId ?? randomUUID(),
       ip: req.ip,
       ...(req.headers['user-agent'] !== undefined ? { userAgent: req.headers['user-agent'] } : {}),
     });

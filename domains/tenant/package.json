@@ -25,7 +25,7 @@
   },
   "devDependencies": {
     "@ehr/testing": "workspace:*",
-    "fastify": "^5.1.0",
+    "fastify": "4.28.1",
     "pg": "^8.13.1",
     "@types/pg": "^8.11.10",
     "typescript": "^5.7.2",

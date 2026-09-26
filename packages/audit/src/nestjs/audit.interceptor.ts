@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { from, Observable, throwError } from 'rxjs';
@@ -55,14 +56,19 @@ export class AuditInterceptor implements NestInterceptor {
     }
 
     const ctx = req.ehrContext;
+    // tenant_id/request_id are `uuid` columns in audit_events — a fallback must be a real UUID,
+    // never a sentinel string. This path should be unreachable in practice: any @Audited route
+    // is necessarily also @RequirePermission-checked (or explicitly @SkipAuthz, which pairs with
+    // @SkipAudit on every current route), and TenantContextMiddleware always populates
+    // ehrContext. Kept as a last-resort guard, not a designed code path.
     const base = {
-      tenantId: ctx?.tenantId ?? 'unknown',
+      tenantId: ctx?.tenantId || randomUUID(),
       actor: {
         type: (ctx?.actor?.type ?? 'system') as 'user' | 'system' | 'api_client',
         id: ctx?.actor?.id ?? null,
       },
       action: meta.action,
-      requestId: ctx?.requestId ?? 'unknown',
+      requestId: ctx?.requestId ?? randomUUID(),
       ip: ctx?.ip ?? null,
       userAgent: ctx?.userAgent ?? null,
       purpose: ctx?.purpose ?? null,

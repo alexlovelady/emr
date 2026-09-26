@@ -1,4 +1,4 @@
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { AuthzInterceptor } from '@ehr/authz';
 import { AuditInterceptor } from '@ehr/audit';
@@ -8,11 +8,17 @@ import { DocumentsModule } from '@ehr/documents';
 import { CoreModule } from './core/core.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { HealthController } from './health/health.controller.js';
-import { TenantContextMiddleware } from './common/tenant-context.middleware.js';
 import { RequestTransactionInterceptor } from './common/request-transaction.interceptor.js';
 import { IdempotencyInterceptor } from './common/idempotency.interceptor.js';
 import { ProblemDetailsFilter } from './common/problem-details.filter.js';
 
+/**
+ * `req.ehrContext` is attached by a genuine Fastify `onRequest` hook (main.ts, via
+ * common/tenant-context.hook.ts), not Nest's `NestMiddleware`/`MiddlewareConsumer` — that
+ * Express-style abstraction receives the raw `http.IncomingMessage` under
+ * `@nestjs/platform-fastify`, a different object than the decorated `FastifyRequest` guards/
+ * interceptors/controllers see. See tenant-context.hook.ts's doc comment.
+ */
 @Module({
   imports: [CoreModule, AuthModule, TenantModule, WorkforceModule, DocumentsModule],
   controllers: [HealthController],
@@ -27,8 +33,4 @@ import { ProblemDetailsFilter } from './common/problem-details.filter.js';
     { provide: APP_FILTER, useClass: ProblemDetailsFilter },
   ],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(TenantContextMiddleware).forRoutes('*');
-  }
-}
+export class AppModule {}

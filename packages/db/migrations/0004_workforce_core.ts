@@ -11,7 +11,7 @@ import { withCommonColumns, enableTenantIsolation } from './_common-columns.js';
  */
 export async function up(db: Kysely<unknown>): Promise<void> {
   await withCommonColumns(db.schema.createTable('users'))
-    .addColumn('email', 'citext', (col) => col.notNull())
+    .addColumn('email', sql`citext`, (col) => col.notNull())
     .addColumn('password_hash', 'text', (col) => col.notNull())
     .addColumn('password_algo', 'text', (col) => col.notNull().defaultTo('argon2id'))
     .addColumn('mfa_enrolled', 'boolean', (col) => col.notNull().defaultTo(false))

@@ -17,7 +17,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
-    "fastify": "^5.1.0",
+    "fastify": "4.28.1",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }

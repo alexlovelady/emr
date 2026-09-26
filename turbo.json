@@ -1,6 +1,33 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "stream",
+  "globalEnv": [
+    "NODE_ENV",
+    "DATABASE_URL",
+    "APP_DATABASE_URL",
+    "EHR_APP_DB_PASSWORD",
+    "REDIS_URL",
+    "JWT_ISSUER",
+    "JWT_AUDIENCE",
+    "JWT_PRIVATE_KEY_PATH",
+    "JWT_PUBLIC_KEY_PATH",
+    "ACCESS_TOKEN_TTL_SECONDS",
+    "REFRESH_TOKEN_TTL_SECONDS",
+    "OBJECT_STORAGE_ENDPOINT",
+    "OBJECT_STORAGE_BUCKET",
+    "OBJECT_STORAGE_REGION",
+    "OBJECT_STORAGE_ACCESS_KEY_ID",
+    "OBJECT_STORAGE_SECRET_ACCESS_KEY",
+    "OBJECT_STORAGE_FORCE_PATH_STYLE",
+    "OBJECT_STORAGE_PRESIGN_TTL_SECONDS",
+    "PORT",
+    "WORKER_PORT",
+    "LOG_LEVEL",
+    "OTEL_EXPORTER_OTLP_ENDPOINT",
+    "OTEL_SERVICE_NAME",
+    "OUTBOX_RELAY_POLL_INTERVAL_MS",
+    "OUTBOX_RELAY_BATCH_SIZE"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

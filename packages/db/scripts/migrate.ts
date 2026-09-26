@@ -1,10 +1,22 @@
 import * as path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Kysely, Migrator, FileMigrationProvider, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Kysely's FileMigrationProvider does `import(props.path.join(migrationFolder, fileName))`
+ * internally. On Windows, `path.join` produces a raw drive-letter path (e.g. `C:\...`), and
+ * Node's ESM loader rejects that as an unsupported URL scheme — dynamic import() requires a
+ * file:// URL there. This wrapper matches path.join's signature but returns a proper file URL,
+ * while migrationFolder itself (used directly with fs.readdir, not through this) stays a plain
+ * OS path. Harmless on POSIX, where a plain path and its file:// URL both happen to import fine.
+ */
+const migrationImportPath = {
+  join: (...segments: string[]) => pathToFileURL(path.join(...segments)).href,
+};
 
 /**
  * Runs against DATABASE_URL — the bootstrap/owner connection — never APP_DATABASE_URL.
@@ -31,7 +43,7 @@ async function main(): Promise<void> {
     db,
     provider: new FileMigrationProvider({
       fs,
-      path,
+      path: migrationImportPath,
       migrationFolder: path.join(__dirname, '..', 'migrations'),
     }),
   });

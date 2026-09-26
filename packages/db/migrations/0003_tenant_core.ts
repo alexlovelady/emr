@@ -9,7 +9,7 @@ import { withCommonColumns, enableTenantIsolation } from './_common-columns.js';
 export async function up(db: Kysely<unknown>): Promise<void> {
   await withCommonColumns(db.schema.createTable('tenants'), { tenantScoped: false })
     .addColumn('name', 'text', (col) => col.notNull())
-    .addColumn('slug', 'citext', (col) => col.notNull().unique())
+    .addColumn('slug', sql`citext`, (col) => col.notNull().unique())
     .execute();
 
   await withCommonColumns(db.schema.createTable('organizations'))
