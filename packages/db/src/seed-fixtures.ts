@@ -56,6 +56,8 @@ export const PERMISSION_KEYS = {
   PROBLEM_MANAGE: 'problem.manage',
   ALLERGY_MANAGE: 'allergy.manage',
   MEDICATION_MANAGE: 'medication.manage',
+  MEDICATION_PRESCRIBE: 'medication.prescribe',
+  CONTROLLED_SUBSTANCE_PRESCRIBE: 'controlled_substance.prescribe',
   OBSERVATION_MANAGE: 'observation.manage',
   PROCEDURE_MANAGE: 'procedure.manage',
   ORDER_MANAGE: 'order.manage',

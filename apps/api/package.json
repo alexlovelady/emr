@@ -24,6 +24,7 @@
     "@ehr/db": "workspace:*",
     "@ehr/domain-common": "workspace:*",
     "@ehr/documents": "workspace:*",
+    "@ehr/erx-adapter": "workspace:*",
     "@ehr/intake": "workspace:*",
     "@ehr/lab-adapter": "workspace:*",
     "@ehr/medication": "workspace:*",

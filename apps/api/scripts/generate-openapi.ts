@@ -34,7 +34,13 @@ import {
   ImportExternalCandidatesSchema,
   ReplaceExternalCandidateSchema,
 } from '@ehr/clinical';
-import { CreateMedicationSchema, DiscontinueMedicationSchema, RecordReconciliationSchema } from '@ehr/medication';
+import {
+  CreateMedicationSchema,
+  DiscontinueMedicationSchema,
+  RecordReconciliationSchema,
+  CreatePrescriptionSchema,
+  DenyRefillSchema,
+} from '@ehr/medication';
 import { CreateOrderSchema, CreateSpecimenSchema } from '@ehr/orders';
 import { CreateDiagnosticReportSchema, ReviewDiagnosticReportSchema } from '@ehr/results';
 
@@ -252,6 +258,24 @@ const document = {
       ...post('Record a medication reconciliation event', 'Medication', RecordReconciliationSchema, 'RecordReconciliation'),
       ...get('List a patient’s medication reconciliation events', 'Medication', ['patientId']),
     },
+    '/patients/{patientId}/prescriptions': {
+      ...post('Prescribe a non-controlled-substance medication (eRx)', 'Medication', CreatePrescriptionSchema, 'CreatePrescription'),
+      ...get('List a patient’s prescriptions', 'Medication', ['patientId']),
+    },
+    '/patients/{patientId}/prescriptions/controlled': post(
+      'Prescribe a controlled substance (eRx) — requires the elevated controlled_substance.prescribe permission',
+      'Medication',
+      CreatePrescriptionSchema,
+      'CreateControlledPrescription',
+    ),
+    '/prescriptions/{id}': get('Get a prescription by id', 'Medication', ['id']),
+    '/prescriptions/{id}/cancel': post('Cancel a prescription', 'Medication'),
+    '/prescriptions/{id}/refill-requests': post('Log an incoming refill request for a prescription', 'Medication'),
+    '/prescription-refill-requests/{id}/approve': post('Approve a pending refill request', 'Medication'),
+    '/prescription-refill-requests/{id}/deny': post('Deny a pending refill request', 'Medication', DenyRefillSchema, 'DenyRefill'),
+    '/erx/medications/search': get('Search the eRx vendor’s medication catalog', 'Medication'),
+    '/erx/pharmacies/search': get('Search the eRx vendor’s pharmacy directory', 'Medication'),
+    '/erx/formulary': get('Look up formulary coverage for a medication', 'Medication'),
     '/orders': {
       ...post('Place an order (ServiceRequest)', 'Orders', CreateOrderSchema, 'CreateOrder'),
       ...get('List orders in the caller’s tenant', 'Orders'),

@@ -1,17 +1,22 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenantContext } from '@ehr/db';
-import { ConflictError, NotFoundError } from '@ehr/domain-common';
+import { ConflictError, NotFoundError, ValidationError } from '@ehr/domain-common';
 import { setupTestDb, requestContextFor, type TestDbHandle } from '@ehr/testing';
+import { NoopPrescribingGateway } from '@ehr/erx-adapter';
 import { MedicationService } from '../src/medication/medication.service.js';
 import { MedicationReconciliationService } from '../src/reconciliation/reconciliation.service.js';
+import { PrescriptionService } from '../src/prescription/prescription.service.js';
+import { CreatePrescriptionSchema, type CreatePrescriptionInput } from '../src/prescription/prescription.dto.js';
 
 /** EHR_BUILD_SPEC.md §18.2 — run via `pnpm test:tenant-isolation`, requires a live Postgres. */
 describe('tenant isolation — medications', () => {
   let handle: TestDbHandle;
   const medicationService = new MedicationService();
   const reconciliationService = new MedicationReconciliationService();
+  const prescriptionService = new PrescriptionService(new NoopPrescribingGateway());
   let tenantAPatientId: string;
   let tenantAEncounterId: string;
+  let tenantAPractitionerId: string;
   let tenantAMedicationId: string;
 
   beforeAll(async () => {
@@ -81,6 +86,7 @@ describe('tenant isolation — medications', () => {
         })
         .returning('id')
         .executeTakeFirstOrThrow();
+      tenantAPractitionerId = practitioner.id;
       return encounter.id;
     });
 
@@ -138,5 +144,131 @@ describe('tenant isolation — medications', () => {
     await expect(
       withTenantContext(handle.db, ctxB.tenantId, (trx) => reconciliationService.list(trx, ctxB, tenantAPatientId)),
     ).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  function ordinaryRxInput(overrides: Partial<CreatePrescriptionInput> = {}): CreatePrescriptionInput {
+    return {
+      encounterId: tenantAEncounterId,
+      prescriberId: tenantAPractitionerId,
+      medicationName: 'Amoxicillin 500 MG Oral Capsule',
+      quantity: '30 capsules',
+      daysSupply: 10,
+      refillsAuthorized: 1,
+      directions: 'Take 1 capsule by mouth three times daily',
+      pharmacyNcpdpId: '1234567',
+      pharmacyName: 'Synthetic Test Pharmacy #1',
+      isControlledSubstance: false,
+      ...overrides,
+    };
+  }
+
+  it('Phase 5: creates an ordinary prescription, creating the underlying medication row too', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const prescription = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      prescriptionService.create(trx, ctxA, tenantAPatientId, ordinaryRxInput(), false),
+    );
+    expect(prescription.status).toBe('active');
+    expect(prescription.refillsRemaining).toBe(1);
+    expect(prescription.gatewayReferenceId).toMatch(/^noop-rx-/);
+
+    const medications = await withTenantContext(handle.db, ctxA.tenantId, (trx) => medicationService.list(trx, ctxA, tenantAPatientId));
+    expect(medications.some((m) => m.id === prescription.medicationId)).toBe(true);
+  });
+
+  it('Phase 5: rejects a controlled-substance payload on the ordinary route', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const input = ordinaryRxInput({ isControlledSubstance: true, deaSchedule: 'IV' as const, refillsAuthorized: 0 });
+    await expect(
+      withTenantContext(handle.db, ctxA.tenantId, (trx) => prescriptionService.create(trx, ctxA, tenantAPatientId, input, false)),
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it('Phase 5: rejects a non-controlled payload on the /controlled route, and accepts a real one', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    await expect(
+      withTenantContext(handle.db, ctxA.tenantId, (trx) => prescriptionService.create(trx, ctxA, tenantAPatientId, ordinaryRxInput(), true)),
+    ).rejects.toBeInstanceOf(ValidationError);
+
+    const controlledInput = ordinaryRxInput({
+      medicationName: 'Alprazolam 0.5 MG Oral Tablet',
+      isControlledSubstance: true,
+      deaSchedule: 'IV' as const,
+      refillsAuthorized: 0,
+    });
+    const prescription = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      prescriptionService.create(trx, ctxA, tenantAPatientId, controlledInput, true),
+    );
+    expect(prescription.isControlledSubstance).toBe(true);
+    expect(prescription.deaSchedule).toBe('IV');
+  });
+
+  it('Phase 5: rejects a Schedule II prescription with refills at the DTO layer', () => {
+    const result = CreatePrescriptionSchema.safeParse(
+      ordinaryRxInput({ isControlledSubstance: true, deaSchedule: 'II', refillsAuthorized: 2 }),
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it('Phase 5: cross-tenant 404 on a prescription, and RLS blocks a raw cross-tenant query', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const prescription = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      prescriptionService.create(trx, ctxA, tenantAPatientId, ordinaryRxInput(), false),
+    );
+
+    const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
+    await expect(
+      withTenantContext(handle.db, ctxB.tenantId, (trx) => prescriptionService.getById(trx, ctxB, prescription.id)),
+    ).rejects.toBeInstanceOf(NotFoundError);
+
+    const rows = await withTenantContext(handle.db, ctxB.tenantId, (trx) =>
+      trx.selectFrom('prescriptions').selectAll().where('id', '=', prescription.id).execute(),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('Phase 5: full refill request -> approve cycle resets refillsRemaining', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const prescription = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      prescriptionService.create(trx, ctxA, tenantAPatientId, ordinaryRxInput({ refillsAuthorized: 2 }), false),
+    );
+
+    const refillRequest = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      prescriptionService.requestRefill(trx, ctxA, prescription.id),
+    );
+    expect(refillRequest.status).toBe('pending');
+
+    const approved = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      prescriptionService.respondToRefill(trx, ctxA, refillRequest.id, { approved: true, denialReason: null }),
+    );
+    expect(approved.status).toBe('approved');
+
+    const refreshed = await withTenantContext(handle.db, ctxA.tenantId, (trx) => prescriptionService.getById(trx, ctxA, prescription.id));
+    expect(refreshed.refillsRemaining).toBe(2);
+  });
+
+  it('Phase 5: refill request -> deny cycle records a reason', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const prescription = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      prescriptionService.create(trx, ctxA, tenantAPatientId, ordinaryRxInput(), false),
+    );
+    const refillRequest = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      prescriptionService.requestRefill(trx, ctxA, prescription.id),
+    );
+    const denied = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      prescriptionService.respondToRefill(trx, ctxA, refillRequest.id, { approved: false, denialReason: 'Patient due for follow-up first' }),
+    );
+    expect(denied.status).toBe('denied');
+    expect(denied.denialReason).toBe('Patient due for follow-up first');
+  });
+
+  it('Phase 5: cancelling an already-cancelled prescription is a real 409', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const prescription = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      prescriptionService.create(trx, ctxA, tenantAPatientId, ordinaryRxInput(), false),
+    );
+    await withTenantContext(handle.db, ctxA.tenantId, (trx) => prescriptionService.cancel(trx, ctxA, prescription.id));
+    await expect(
+      withTenantContext(handle.db, ctxA.tenantId, (trx) => prescriptionService.cancel(trx, ctxA, prescription.id)),
+    ).rejects.toBeInstanceOf(ConflictError);
   });
 });

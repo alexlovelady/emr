@@ -391,6 +391,32 @@ export interface DiagnosticReportsTable extends CommonColumnsTable {
   amends_report_id: string | null;
 }
 
+export interface PrescriptionsTable extends CommonColumnsTable {
+  patient_id: string;
+  medication_id: string;
+  encounter_id: string | null;
+  prescriber_id: string;
+  pharmacy_ncpdp_id: string;
+  pharmacy_name: string;
+  quantity: string;
+  days_supply: number | null;
+  refills_authorized: Generated<number>;
+  refills_remaining: Generated<number>;
+  directions: string;
+  is_controlled_substance: Generated<boolean>;
+  dea_schedule: string | null;
+  gateway_reference_id: string | null;
+  sent_at: Timestamp | null;
+}
+
+export interface PrescriptionRefillRequestsTable extends CommonColumnsTable {
+  prescription_id: string;
+  requested_at: GeneratedTimestamp;
+  responded_at: Timestamp | null;
+  responded_by: string | null;
+  denial_reason: string | null;
+}
+
 export interface Hl7MessagesTable extends CommonColumnsTable {
   message_control_id: string;
   message_type: string;
@@ -495,6 +521,8 @@ export interface DB {
   procedures: ProceduresTable;
   medications: MedicationsTable;
   medication_reconciliation_events: MedicationReconciliationEventsTable;
+  prescriptions: PrescriptionsTable;
+  prescription_refill_requests: PrescriptionRefillRequestsTable;
   orders: OrdersTable;
   specimens: SpecimensTable;
   diagnostic_reports: DiagnosticReportsTable;

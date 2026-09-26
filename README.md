@@ -1,7 +1,7 @@
-# EHR Platform — Phase 1 + 2 + 3 + 4 (Platform Foundation; Patient/Scheduling/Intake; Clinical Chart; Orders/Results + Interop)
+# EHR Platform — Phase 1 + 2 + 3 + 4 + 5 (Platform Foundation; Patient/Scheduling/Intake; Clinical Chart; Orders/Results + Interop; eRx)
 
 Cloud-native ambulatory EHR + practice-management + revenue-cycle platform. This repository
-currently implements **Phases 1–4** of `EHR_BUILD_SPEC.md`'s build order (§26). Phase 1: the
+currently implements **Phases 1–5** of `EHR_BUILD_SPEC.md`'s build order (§26). Phase 1: the
 monorepo skeleton, tenant/workforce identity, the layered authorization model, audit +
 transactional outbox, a first-party auth adapter, a thin documents flow, and the platform's
 testing/CI/CD/observability scaffolding. Phase 2: the patient registry (with a per-organization
@@ -15,8 +15,13 @@ ingestion. Phase 4: orders and specimens, a lab adapter framework, the result in
 critical-result workflow (spec §5.6), HL7 v2 ORU^R01 ingestion, C-CDA-style external-candidate
 reconciliation (spec §11.3), and a thin FHIR R4 + SMART-on-FHIR read facade with initial US Core
 profiles — each interop area scoped to a real-but-minimal slice rather than a full standard
-implementation (see "Phase 4 scope decisions" below). Later phases (eRx, RCM, AI, etc.) are not
-built yet — see the `README.md` in each reserved-but-empty folder for where it lands.
+implementation (see "Phase 4 scope decisions" below). Phase 5: eRx integration — a swappable
+`PrescribingGateway` vendor adapter (spec §14), new-Rx/refill/cancel workflows, pharmacy/medication
+search and formulary lookups, and a real, permission-gated controlled-substance data model, with
+EPCS itself (DEA-compliant identity-proofing/certified transmission) explicitly out of scope per
+the spec's own prerequisite ("EPCS only after compliance/vendor prerequisites are satisfied") — see
+"Phase 5 scope decisions" below. Later phases (RCM, query platform, patient portal, AI, etc.) are
+not built yet — see the `README.md` in each reserved-but-empty folder for where it lands.
 
 Read `EHR_BUILD_SPEC.md` and `EHR_REGULATORY_MANUAL.md` first — this README assumes their
 context. Three deliberate deviations from the spec's literal text are documented in
@@ -173,6 +178,43 @@ infra/          terraform/, policies/, dashboards/ — all deferred, see their R
   breaking cross-app token verification. All local dev commands in this README export `.env` into
   the shell first for exactly this reason.
 
+### Phase 5 scope decisions
+
+- **eRx lives inside `domains/medication`, not a new `domains/erx`** — the spec's own repo
+  structure (§4) doesn't reserve a separate eRx domain, and `domains/medication`'s original
+  migration doc-comment already earmarked this exact extension. A new `prescriptions` table layers
+  on top of Phase 3's `medications` table the same way Phase 4's `diagnostic_reports` layered on
+  top of `observations`: creating a prescription creates the underlying medication-list entry too.
+- **`packages/erx-adapter`** mirrors `packages/lab-adapter`'s shape exactly: a `PrescribingGateway`
+  interface (the 6 methods spec §14 names) + a `NoopPrescribingGateway` stub backed by a small
+  embedded synthetic medication/pharmacy dataset — "do not build pharmacy-network connectivity
+  from scratch for v1," same adapter-interface-now pattern as ADR-0002 and the Phase 4 lab adapter.
+- **Controlled substances are gated by route, not by an in-service second permission check** —
+  `POST /patients/{id}/prescriptions` requires `medication.prescribe` and rejects a
+  controlled-substance payload; `POST /patients/{id}/prescriptions/controlled` requires the
+  elevated `controlled_substance.prescribe` and rejects a non-controlled payload. A repo-wide
+  search turned up no precedent anywhere for a second, in-service `PolicyEngine.authorize()` call
+  — every route in every domain uses exactly one `@RequirePermission` decorator — so this two-route
+  split was chosen to fit the existing architecture rather than invent a new authorization pattern
+  for one phase.
+- **A real DEA rule is enforced for free**: the `CreatePrescriptionSchema` Zod refine rejects a
+  Schedule II prescription with any refills authorized (Schedule II drugs cannot be refilled —
+  each fill needs a new prescription) — cheap, genuine domain accuracy at the DTO layer.
+- **EPCS itself is not built.** `isControlledSubstance`/`deaSchedule` and the elevated permission
+  make the *data model and authorization gate* real, but actual DEA-compliant identity-proofing,
+  2FA, and certified transmission are out of scope — the spec's own Phase 5 bullet list says "EPCS
+  only after compliance/vendor prerequisites are satisfied," and `EHR_REGULATORY_MANUAL.md` §12.2
+  is explicit that EPCS needs "an experienced EPCS vendor and healthcare counsel," not an
+  improvised flow.
+- **The refill workflow has no inbound listener app** — `POST /prescriptions/{id}/refill-requests`
+  logs a request that stands in for a real inbound NCPDP SCRIPT message, the same class of
+  simplification as Phase 4 using an authenticated HTTP endpoint instead of a real MLLP listener
+  for HL7. Refill approval is always gated by the plain `medication.prescribe` permission, even for
+  a controlled-substance prescription's refill — a documented scope trim, not a silent gap.
+- **No new deployable app.** Unlike Phase 4's HL7/FHIR (external wire protocols needing dedicated
+  listeners), eRx here is an outbound gateway call plus ordinary internal CRUD/state-machine
+  routes, so everything lives in `apps/api`.
+
 ## Verification status
 
 Docker Desktop's backend would not start in the environment this was built in (its WSL2
@@ -248,3 +290,19 @@ typecheck could: two of the three apps' constructor-injected `Reflector`/service
 resolved to `undefined` at runtime despite an error-free Nest bootstrap (fixed with explicit
 `@Inject(...)`) — see `apps/interop-hl7/src/hl7/hl7.controller.ts` and
 `apps/interop-fhir/src/common/smart-scope.guard.ts`.
+
+**Phase 5** was verified the same way: migration `0022` applies cleanly on top of Phase 4's, the
+full `test`/`test:integration`/`test:tenant-isolation` suite is green across the new
+`@ehr/erx-adapter` package and the extended `@ehr/medication` (135/135 Turborepo tasks), and a full
+HTTP walkthrough against `apps/api`: an ordinary (non-controlled) prescription creates both the
+`prescriptions` row and its linked `medications` entry, with the gateway's receipt id landing on
+the record → a controlled-substance payload sent to the *ordinary* route is rejected with a real
+422, and a non-controlled payload sent to the `/controlled` route is rejected too → a real
+controlled-substance prescription succeeds on the `/controlled` route → a Schedule II prescription
+with `refillsAuthorized: 2` is rejected by the DTO's own Zod refine → medication/pharmacy search
+and a formulary lookup all return the embedded synthetic gateway data → a refill request → approve
+cycle resets `refillsRemaining`, and a second request → deny cycle records the denial reason → a
+second cancel on an already-cancelled prescription is a real 409 → a cross-tenant fetch of the
+prescription returns 404 — with every one of these actions (including the three read-only `/erx/*`
+lookups) landing in `audit_events`, and every state-changing one landing in `outbox_events`, in the
+same style as every prior phase's walkthrough.

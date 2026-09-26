@@ -59,6 +59,9 @@ importers:
       '@ehr/domain-common':
         specifier: workspace:*
         version: link:../../packages/domain-common
+      '@ehr/erx-adapter':
+        specifier: workspace:*
+        version: link:../../packages/erx-adapter
       '@ehr/intake':
         specifier: workspace:*
         version: link:../../domains/intake
@@ -522,6 +525,9 @@ importers:
       '@ehr/domain-common':
         specifier: workspace:*
         version: link:../../packages/domain-common
+      '@ehr/erx-adapter':
+        specifier: workspace:*
+        version: link:../../packages/erx-adapter
       '@ehr/outbox':
         specifier: workspace:*
         version: link:../../packages/outbox
@@ -1091,6 +1097,15 @@ importers:
       zod:
         specifier: ^3.24.1
         version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@26.6.2)(supports-color@7.2.0)
+
+  packages/erx-adapter:
     devDependencies:
       typescript:
         specifier: ^5.7.2
