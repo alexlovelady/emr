@@ -75,6 +75,8 @@ export const PERMISSION_KEYS = {
   COHORT_MANAGE: 'cohort.manage',
   REPORT_QUERY_POPULATION: 'report.query.population',
   SEARCH_REINDEX: 'search.reindex',
+  PROXY_GRANT_MANAGE: 'proxy_grant.manage',
+  MESSAGE_MANAGE: 'message.manage',
 } as const;
 
 export interface SeededTenant {

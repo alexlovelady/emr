@@ -91,6 +91,19 @@ export class DiagnosticReportRepository {
     return rows.map(toRow);
   }
 
+  /** Portal-visible results (`@ehr/portal`) — excludes `'pending'`, the result-inbox gate. */
+  async listReleasedByPatient(trx: Executor, tenantId: string, patientId: string): Promise<DiagnosticReportRow[]> {
+    const rows = await trx
+      .selectFrom('diagnostic_reports')
+      .selectAll()
+      .where('tenant_id', '=', tenantId)
+      .where('patient_id', '=', patientId)
+      .where('review_status', 'in', ['reviewed', 'acknowledged'])
+      .orderBy('issued_at', 'desc')
+      .execute();
+    return rows.map(toRow);
+  }
+
   async listInbox(trx: Executor, tenantId: string): Promise<DiagnosticReportRow[]> {
     const rows = await trx
       .selectFrom('diagnostic_reports')

@@ -5,6 +5,7 @@ import { getConfig } from '@ehr/config';
 import { startTracing, createLogger } from '@ehr/observability';
 import { AppModule } from './app.module.js';
 import { attachEhrContext } from './common/tenant-context.hook.js';
+import { attachPortalContext } from './common/portal-context.hook.js';
 import { KEY_MATERIAL, ENV_CONFIG } from './common/tokens.js';
 
 async function bootstrap(): Promise<void> {
@@ -26,6 +27,7 @@ async function bootstrap(): Promise<void> {
   const keys = app.get(KEY_MATERIAL);
   const envConfig = app.get(ENV_CONFIG);
   app.getHttpAdapter().getInstance().addHook('onRequest', attachEhrContext(keys, envConfig));
+  app.getHttpAdapter().getInstance().addHook('onRequest', attachPortalContext(keys, envConfig));
 
   await app.listen(env.PORT, '0.0.0.0');
   logger.info({ port: env.PORT }, 'apps/api listening');

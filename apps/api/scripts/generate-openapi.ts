@@ -47,6 +47,8 @@ import { CreateChargeSchema, FinalizeChargeCodingSchema } from '@ehr/billing';
 import { CreateClaimSchema, ResolveDenialSchema } from '@ehr/claims';
 import { CreateEligibilityCheckSchema } from '@ehr/payments';
 import { SaveCohortSchema, ExecuteAdHocCohortSchema } from '@ehr/query';
+import { CreateProxyGrantSchema, RevokeProxyGrantSchema } from '@ehr/consent';
+import { CreateMessageThreadSchema, ReplyMessageSchema } from '@ehr/messaging';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -356,6 +358,20 @@ const document = {
     '/governed-queries/{name}/execute': post('Execute a governed query by name', 'Query'),
     '/search': get('Full-text search across indexed resources (tenant/sensitivity-scoped)', 'Query'),
     '/search/reindex': post('Reindex patients, documents, and claims for full-text search', 'Query'),
+    '/patients/{patientId}/proxy-grants': {
+      ...post('Grant a portal account proxy access to a patient', 'Consent', CreateProxyGrantSchema, 'CreateProxyGrant'),
+      ...get('List a patient’s proxy grants', 'Consent', ['patientId']),
+    },
+    '/proxy-grants/{id}/revoke': post('Revoke a proxy grant', 'Consent', RevokeProxyGrantSchema, 'RevokeProxyGrant'),
+    '/patients/{patientId}/message-threads': {
+      ...post('Start a secure message thread with a patient', 'Messaging', CreateMessageThreadSchema, 'CreateMessageThread'),
+      ...get('List a patient’s message threads', 'Messaging', ['patientId']),
+    },
+    '/patients/{patientId}/message-threads/{threadId}/messages': {
+      ...post('Reply in a secure message thread', 'Messaging', ReplyMessageSchema, 'ReplyMessage'),
+      ...get('List messages in a thread', 'Messaging', ['patientId', 'threadId']),
+    },
+    '/patients/{patientId}/message-threads/{threadId}/read': post('Mark a thread’s messages as read (staff side)', 'Messaging'),
   },
   components: {
     schemas: { ProblemDetail: problemDetail },

@@ -75,6 +75,19 @@ export class NoteRepository {
     return rows.map(toRow);
   }
 
+  /** Portal-visible notes (`@ehr/portal`) — only fully signed notes, never drafts. */
+  async listSignedByPatient(trx: Executor, tenantId: string, patientId: string): Promise<NoteRow[]> {
+    const rows = await trx
+      .selectFrom('notes')
+      .selectAll()
+      .where('tenant_id', '=', tenantId)
+      .where('patient_id', '=', patientId)
+      .where('status', '=', 'signed')
+      .orderBy('created_at', 'desc')
+      .execute();
+    return rows.map(toRow);
+  }
+
   /** Walks the amendment chain forward from `originalNoteId` (each note that amends the previous one). */
   async listAmendmentChain(trx: Executor, tenantId: string, originalNoteId: string): Promise<NoteRow[]> {
     const rows = await trx

@@ -31,6 +31,19 @@ export const FindDuplicatesQuerySchema = z.object({
 });
 export type FindDuplicatesQuery = z.infer<typeof FindDuplicatesQuerySchema>;
 
+/** Contact fields only — never name/DOB (`@ehr/portal`'s profile-update feature). */
+export const UpdatePatientContactSchema = z.object({
+  phone: z.string().max(50).nullish(),
+  email: z.string().email().nullish(),
+  addressLine1: z.string().max(300).nullish(),
+  addressLine2: z.string().max(300).nullish(),
+  city: z.string().max(200).nullish(),
+  state: z.string().max(100).nullish(),
+  postalCode: z.string().max(20).nullish(),
+  country: z.string().max(100).nullish(),
+});
+export type UpdatePatientContactInput = z.infer<typeof UpdatePatientContactSchema>;
+
 export const MergePatientsSchema = z.object({
   sourcePatientId: z.string().uuid(),
   reason: z.string().max(500).nullish(),

@@ -15,6 +15,10 @@ import { NoopClearinghouseGateway } from '@ehr/clearinghouse-adapter';
 import { CLEARINGHOUSE_GATEWAY } from '@ehr/claims';
 import { PostgresSearchIndexGateway } from '@ehr/search-adapter';
 import { SEARCH_INDEX_GATEWAY } from '@ehr/query';
+import { NoopNotificationGateway } from '@ehr/notification-adapter';
+import { NOTIFICATION_GATEWAY } from '@ehr/messaging';
+import { NoopPaymentGateway } from '@ehr/payment-adapter';
+import { PAYMENT_GATEWAY } from '@ehr/portal';
 import { DB_CONNECTION, KEY_MATERIAL, IDENTITY_PROVIDER, ENV_CONFIG } from '../common/tokens.js';
 
 const env = getConfig();
@@ -66,6 +70,8 @@ const db = createDb({ connectionString: env.APP_DATABASE_URL });
     { provide: ERX_GATEWAY, useValue: new NoopPrescribingGateway() },
     { provide: CLEARINGHOUSE_GATEWAY, useValue: new NoopClearinghouseGateway() },
     { provide: SEARCH_INDEX_GATEWAY, useValue: new PostgresSearchIndexGateway() },
+    { provide: NOTIFICATION_GATEWAY, useValue: new NoopNotificationGateway() },
+    { provide: PAYMENT_GATEWAY, useValue: new NoopPaymentGateway() },
     { provide: PolicyEngine, useValue: new PolicyEngine() },
     Reflector,
   ],
@@ -79,6 +85,8 @@ const db = createDb({ connectionString: env.APP_DATABASE_URL });
     ERX_GATEWAY,
     CLEARINGHOUSE_GATEWAY,
     SEARCH_INDEX_GATEWAY,
+    NOTIFICATION_GATEWAY,
+    PAYMENT_GATEWAY,
     PolicyEngine,
     Reflector,
   ],

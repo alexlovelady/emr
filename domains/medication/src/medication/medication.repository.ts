@@ -88,6 +88,19 @@ export class MedicationRepository {
     return rows.map(toRow);
   }
 
+  /** Portal-visible "active medications" (`@ehr/portal`). */
+  async listActiveByPatient(trx: Executor, tenantId: string, patientId: string): Promise<MedicationRow[]> {
+    const rows = await trx
+      .selectFrom('medications')
+      .selectAll()
+      .where('tenant_id', '=', tenantId)
+      .where('patient_id', '=', patientId)
+      .where('status', '=', 'active')
+      .orderBy('created_at', 'desc')
+      .execute();
+    return rows.map(toRow);
+  }
+
   async setStatus(
     trx: Executor,
     tenantId: string,

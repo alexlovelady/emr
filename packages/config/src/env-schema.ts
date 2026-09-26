@@ -17,6 +17,10 @@ export const envSchema = z.object({
   // --- Auth ---
   JWT_ISSUER: z.string().min(1).default('ehr-local'),
   JWT_AUDIENCE: z.string().min(1).default('ehr-api'),
+  // Portal tokens are signed with the same KeyMaterial as staff tokens (one JWKS endpoint verifies
+  // both) but carry a different audience so a staff token can never be replayed on a portal route
+  // or vice versa — see packages/auth-adapter/src/portal-tokens.ts.
+  PORTAL_JWT_AUDIENCE: z.string().min(1).default('ehr-portal'),
   JWT_PRIVATE_KEY_PATH: z.string().min(1).default('./.dev/jwt-private.pem'),
   JWT_PUBLIC_KEY_PATH: z.string().min(1).default('./.dev/jwt-public.pem'),
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(900),

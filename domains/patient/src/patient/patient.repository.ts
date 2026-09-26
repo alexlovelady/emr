@@ -104,6 +104,43 @@ export class PatientRepository {
     return rows.map(toRow);
   }
 
+  async updateContactInfo(
+    trx: Executor,
+    tenantId: string,
+    id: string,
+    patch: {
+      phone?: string | null | undefined;
+      email?: string | null | undefined;
+      addressLine1?: string | null | undefined;
+      addressLine2?: string | null | undefined;
+      city?: string | null | undefined;
+      state?: string | null | undefined;
+      postalCode?: string | null | undefined;
+      country?: string | null | undefined;
+    },
+    updatedBy: string,
+  ): Promise<PatientRow> {
+    const row = await trx
+      .updateTable('patients')
+      .set({
+        ...(patch.phone !== undefined ? { phone: patch.phone } : {}),
+        ...(patch.email !== undefined ? { email: patch.email } : {}),
+        ...(patch.addressLine1 !== undefined ? { address_line1: patch.addressLine1 } : {}),
+        ...(patch.addressLine2 !== undefined ? { address_line2: patch.addressLine2 } : {}),
+        ...(patch.city !== undefined ? { city: patch.city } : {}),
+        ...(patch.state !== undefined ? { state: patch.state } : {}),
+        ...(patch.postalCode !== undefined ? { postal_code: patch.postalCode } : {}),
+        ...(patch.country !== undefined ? { country: patch.country } : {}),
+        updated_by: updatedBy,
+        updated_at: new Date(),
+      })
+      .where('tenant_id', '=', tenantId)
+      .where('id', '=', id)
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return toRow(row);
+  }
+
   async setStatus(trx: Executor, tenantId: string, id: string, status: string, metadataPatch: Record<string, unknown>, updatedBy: string): Promise<PatientRow> {
     const row = await trx
       .updateTable('patients')

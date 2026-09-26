@@ -545,6 +545,54 @@ export interface CohortExecutionsTable extends CommonColumnsTable {
   export_storage_key: string | null;
 }
 
+export interface PortalAccountsTable extends CommonColumnsTable {
+  email: string;
+  password_hash: string;
+  mfa_enrolled: Generated<boolean>;
+  last_login_at: Timestamp | null;
+}
+
+export interface PortalRefreshTokensTable extends CommonColumnsTable {
+  portal_account_id: string;
+  token_hash: string;
+  expires_at: Timestamp;
+  revoked_at: Timestamp | null;
+}
+
+export interface PatientProxyGrantsTable extends CommonColumnsTable {
+  patient_id: string;
+  portal_account_id: string;
+  relationship_type: string;
+  scope: Generated<string[]>;
+  effective_start: GeneratedTimestamp;
+  effective_end: Timestamp | null;
+  granted_by: string | null;
+  authority_document_id: string | null;
+  revoked_at: Timestamp | null;
+  revocation_reason: string | null;
+}
+
+export interface MessageThreadsTable extends CommonColumnsTable {
+  patient_id: string;
+  subject: string;
+  created_by_type: string;
+  last_message_at: Timestamp | null;
+}
+
+export interface MessagesTable extends CommonColumnsTable {
+  thread_id: string;
+  sender_type: string;
+  sender_id: string;
+  body: string;
+  read_at: Timestamp | null;
+}
+
+export interface ExportRequestsTable extends CommonColumnsTable {
+  patient_id: string;
+  requested_by_portal_account_id: string;
+  storage_key: string | null;
+}
+
 export interface IdempotencyKeysTable {
   tenant_id: string;
   key: string;
@@ -639,6 +687,12 @@ export interface DB {
   search_documents: SearchDocumentsTable;
   cohorts: CohortsTable;
   cohort_executions: CohortExecutionsTable;
+  portal_accounts: PortalAccountsTable;
+  portal_refresh_tokens: PortalRefreshTokensTable;
+  patient_proxy_grants: PatientProxyGrantsTable;
+  message_threads: MessageThreadsTable;
+  messages: MessagesTable;
+  export_requests: ExportRequestsTable;
   idempotency_keys: IdempotencyKeysTable;
   outbox_events: OutboxEventsTable;
   audit_events: AuditEventsTable;

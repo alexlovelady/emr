@@ -78,6 +78,19 @@ export class ProblemRepository {
     return rows.map(toRow);
   }
 
+  /** Portal-visible "active problems" (`@ehr/portal`). */
+  async listActiveByPatient(trx: Executor, tenantId: string, patientId: string): Promise<ProblemRow[]> {
+    const rows = await trx
+      .selectFrom('problems')
+      .selectAll()
+      .where('tenant_id', '=', tenantId)
+      .where('patient_id', '=', patientId)
+      .where('clinical_status', '=', 'active')
+      .orderBy('created_at', 'desc')
+      .execute();
+    return rows.map(toRow);
+  }
+
   async setClinicalStatus(trx: Executor, tenantId: string, id: string, clinicalStatus: string, updatedBy: string): Promise<ProblemRow> {
     const row = await trx
       .updateTable('problems')

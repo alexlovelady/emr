@@ -74,6 +74,18 @@ export class AllergyRepository {
       .execute();
     return rows.map(toRow);
   }
+  /** Portal-visible "active allergies" (`@ehr/portal`). */
+  async listActiveByPatient(trx: Executor, tenantId: string, patientId: string): Promise<AllergyRow[]> {
+    const rows = await trx
+      .selectFrom('allergies')
+      .selectAll()
+      .where('tenant_id', '=', tenantId)
+      .where('patient_id', '=', patientId)
+      .where('status', '=', 'active')
+      .orderBy('created_at', 'desc')
+      .execute();
+    return rows.map(toRow);
+  }
 }
 
 function toRow(dbRow: Selectable<DB['allergies']>): AllergyRow {

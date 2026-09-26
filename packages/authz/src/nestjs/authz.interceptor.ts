@@ -66,7 +66,11 @@ export class AuthzInterceptor implements NestInterceptor {
 
     const req = context.switchToHttp().getRequest<RequestWithEhrContext>();
     const ehrCtx = req.ehrContext;
-    if (!ehrCtx?.actor) {
+    if (!ehrCtx?.actor || ehrCtx.actor.type === 'patient') {
+      // A 'patient' actor reaching a @RequirePermission route (i.e. NOT @SkipAuthz) is always a
+      // misconfiguration, never a legitimate caller — see RequestContext.actor.type's doc comment:
+      // portal routes must be @SkipAuthz + an explicit ConsentService.assertAccess() check
+      // instead, since rolePermissionLayer is staff-only and would deny this anyway.
       return throwError(() => new ForbiddenError('No authenticated actor on request'));
     }
 

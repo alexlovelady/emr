@@ -1,7 +1,7 @@
-# EHR Platform — Phase 1 + 2 + 3 + 4 + 5 + 6 + 7 (Platform Foundation; Patient/Scheduling/Intake; Clinical Chart; Orders/Results + Interop; eRx; RCM; Query Platform)
+# EHR Platform — Phase 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 (Platform Foundation; Patient/Scheduling/Intake; Clinical Chart; Orders/Results + Interop; eRx; RCM; Query Platform; Patient Portal)
 
 Cloud-native ambulatory EHR + practice-management + revenue-cycle platform. This repository
-currently implements **Phases 1–7** of `EHR_BUILD_SPEC.md`'s build order (§26). Phase 1: the
+currently implements **Phases 1–8** of `EHR_BUILD_SPEC.md`'s build order (§26). Phase 1: the
 monorepo skeleton, tenant/workforce identity, the layered authorization model, audit +
 transactional outbox, a first-party auth adapter, a thin documents flow, and the platform's
 testing/CI/CD/observability scaffolding. Phase 2: the patient registry (with a per-organization
@@ -33,8 +33,16 @@ directly against Postgres, a real Postgres full-text search index behind a swapp
 for internal analysts (not raw SQL — spec's own "do not expose unrestricted SQL" rule), and CSV
 cohort exports — with OpenSearch/ClickHouse deferred the same way ADR-0002 deferred Kafka (see
 `docs/adr/0003-postgres-search-and-analytics-instead-of-opensearch-clickhouse.md` and "Phase 7
-scope decisions" below). Later phases (patient portal, AI, etc.) are not built yet — see the `README.md` in each
-reserved-but-empty folder for where it lands.
+scope decisions" below). Phase 8: the patient portal backend — portal registration with real
+patient-identity proofing (patientId + date of birth), a wholly separate portal JWT audience/token
+pair, explicit effective-dated proxy-grant consent (`domains/consent`) rather than extending the
+staff-only `PolicyEngine`, secure messaging (`domains/messaging`) with one staff controller and one
+portal controller over the same tables, read-only portal chart access reusing the *existing*
+release-status columns (no new "patient visibility" flag), a `PaymentGateway` vendor adapter
+posting real `patient_payment` ledger entries, a synchronous JSON records-export, and portal
+session management — see "Phase 8 scope decisions" below. No frontend has been built in any phase
+(`apps/patient-portal` stays reserved); AI (Phase 9+) is not built yet — see the `README.md` in
+each reserved-but-empty folder for where it lands.
 
 Read `EHR_BUILD_SPEC.md` and `EHR_REGULATORY_MANUAL.md` first — this README assumes their
 context. Four deliberate deviations from the spec's literal text are documented in
@@ -338,6 +346,71 @@ infra/          terraform/, policies/, dashboards/ — all deferred, see their R
   `apps/*-web` folder remains reserved-but-empty); this phase stays consistent with that
   established, backend-only boundary.
 
+### Phase 8 scope decisions
+
+- **`PolicyEngine` structurally cannot grant a patient/proxy actor access** —
+  `packages/authz/src/layers/role-permission.layer.ts`'s `rolePermissionLayer` unconditionally
+  returns `DENY` for any actor whose `type !== 'user'`, no matter what the (still-stubbed)
+  `consentProxyLayer` would say. Rather than extending the staff-only 8-layer engine, portal
+  routes use `@SkipAuthz()` plus an explicit `ConsentService.assertAccess()` call — the same
+  structural reason Phase 4 gave `apps/interop-fhir` its own `SmartScopeGuard` instead of teaching
+  `PolicyEngine` about SMART clients.
+- **Portal routes live inside `apps/api`**, not a new app/process — unlike interop-fhir/
+  interop-hl7/webhook-gateway (genuinely external callers with real deployment-boundary reasons),
+  the portal is our own product's other user type reading/writing the same tables. A second,
+  parallel Fastify `onRequest` hook (`attachPortalContext`) tries a portal-audience token whenever
+  `attachEhrContext` didn't already set an actor from a staff token — the two hooks trying the same
+  bearer token against two different audiences is what makes a staff token structurally unable to
+  authenticate a portal route and vice versa (confirmed live, see below).
+- **Portal registration/login/refresh/logout live in `apps/api/src/portal-auth`**, not
+  `domains/portal`, for the exact reason staff auth already lives in `apps/api/src/auth` instead of
+  a domain package: these routes run before any request-scoped transaction exists, so they can't
+  use `getCurrentTransaction()` and must hold the raw pool connection directly.
+- **`RequestContext.actor.type` gained `'patient'`** (confirmed non-breaking via a repo-wide grep —
+  no exhaustive switch on this field existed anywhere). `@ehr/audit`'s `AuditEnvelope.actor.type`
+  needed the same widening so portal actions are genuinely audited, not silently rejected by a
+  stale union type.
+- **Proxy/consent is a real, effective-dated, scoped grant model** (`domains/consent`,
+  `patient_proxy_grants`) — `ConsentService.assertAccess()` throws 404 (not 403) whenever no
+  active, in-window grant exists, so a portal caller can never distinguish "no such patient" from
+  "not your patient," the same tenant-isolation philosophy applied to proxy access. Self-access is
+  just another grant (`relationship_type: 'self'`, auto-created at registration) — no special-casing
+  anywhere in the authorization code. The `scope` column is real but not yet enforced
+  per-category — any active grant currently grants full access. **Minor/state-law consent
+  transition rules are explicitly NOT implemented** — spec's own words: "not a simple `parent=true`
+  flag" — the same treatment Phase 5 gave EPCS.
+- **Results/notes portal visibility reuses existing release-status columns**
+  (`diagnostic_reports.review_status in ('reviewed','acknowledged')`, `notes.status = 'signed'`)
+  rather than inventing a parallel "patient visibility" flag — confirmed live: a `pending` result
+  and a `draft` note are both correctly excluded from what a portal caller can see.
+- **Secure messaging is one resource, two controllers** (`domains/messaging`) — a staff-authored
+  message notifies every portal account with an active proxy grant for the patient via the new
+  `NotificationGateway` adapter; **a portal-authored message does not notify staff** in this pass —
+  no assigned-practitioner/staff-inbox model exists yet to resolve a real delivery target, a
+  documented gap rather than a fake mechanism.
+- **A successful portal payment posts a real `patient_payment` ledger entry** via the existing
+  `LedgerService.postEntry()` — a value the check constraint already allowed (migration `0025`) but
+  nothing had exercised until now — through a new swappable `PaymentGateway` adapter (spec §13.1's
+  "buy" item, finally exercised by a real caller).
+- **Records export is synchronous, not a job queue** (`export_requests`) — same reasoning as Phase
+  4's FHIR bulk-export deferral — and its download link is scoped to the requesting portal account
+  only, not every proxy with access to the patient, since an export bundle is a standing PHI
+  artifact in object storage.
+- **"API/app authorization management" is scoped to real session/device management**
+  (`portal_refresh_tokens` list/revoke) — a full third-party OAuth-app consent flow is a separate,
+  larger feature the spec's own bullet doesn't detail further.
+- **Profile updates apply directly**, contact fields only (never name/DOB), through
+  `PatientRepository.updateContactInfo` — no separate staff-review queue, a documented trim of
+  spec's "with review rules" language.
+- **A real DI bug surfaced and was fixed during manual verification**: `apps/api`'s dev-mode
+  esbuild transform (via `tsx watch`) did not reliably emit constructor parameter-type metadata for
+  a brand-new controller with a single, purely type-inferred constructor parameter
+  (`PortalAuthController`) — every prior `apps/api`-local controller happened to always mix in at
+  least one explicit `@Inject(TOKEN)` parameter, so this path had never been exercised. Fixed by
+  adding an explicit `@Inject(PortalAuthService)` token, the same defensive pattern
+  `AuthController` already used for its own non-class token dependency; domain-package controllers
+  (real `tsc` output, not `tsx`/esbuild) were unaffected.
+
 ## Verification status
 
 Docker Desktop's backend would not start in the environment this was built in (its WSL2
@@ -472,3 +545,36 @@ running Docker/MinIO instance in the environment it was built in (the same pre-e
 phase) — the export *logic* itself (`CohortService.exportExecution`) is still fully verified by the
 automated test suite against a fake gateway; only the generic, already-existing S3 connectivity
 path remains untested end-to-end in this environment.
+
+**Phase 8** was verified the same way: migrations `0028`–`0031` apply cleanly on top of Phase 7's,
+the full `test`/`test:integration`/`test:tenant-isolation` suite is green across the new
+`@ehr/payment-adapter`, `@ehr/notification-adapter`, `@ehr/consent`, `@ehr/messaging`, and
+`@ehr/portal` (191/191 Turborepo tasks, including 8 new tenant-isolation specs), and a full HTTP
+walkthrough against `apps/api`: registering a portal account against a real patient with the wrong
+date of birth is rejected, the correct date of birth succeeds and returns a portal-audience token
+pair → a staff-audience token presented on a portal route and a portal-audience token presented on
+a staff route are both correctly rejected (403, "no authenticated \[...\] actor") → a portal
+account with no grant reading a patient's chart gets a real 404, not a leak → staff creates a proxy
+grant for a second ("guardian") portal account, which immediately gains read access to the same
+empty-but-real appointments/results/notes/problems chart → staff revokes the grant and the
+guardian's access drops back to 404 → a cross-tenant staff token cannot read the patient at all →
+a portal-authored message thread is visible to staff, a staff reply is visible on the portal side,
+and the reply fires a real `NotificationGateway.sendEmail()` call to every active grant holder
+(confirmed in server logs) → a portal payment posts a real `patient_payment` ledger entry and moves
+the balance, and a failed payment posts none → a portal profile read/update round-trips correctly
+→ a portal session is listed and revoked, and revoking another account's session by id correctly
+404s → login/refresh/logout all work, refresh correctly rotates the token (old refresh token
+becomes unusable) → every one of these actions lands in `audit_events` with `actor_type: 'patient'`
+and the matching `outbox_events` rows (`proxy_grant.created.v1`/`.revoked.v1`,
+`message_thread.created.v1`, `message.posted.v1`). One gap the walkthrough surfaced the same
+honest way Phase 7's did: `POST /portal/patients/{id}/export-requests` calls
+`ObjectStorageGateway.putObject()`, a genuine server-side write, and failed with `ECONNREFUSED`
+against MinIO in this Docker-free environment — the export logic itself (bundle assembly, the
+`ConsentService.assertAccess()` gate, scoping the download link to the requesting portal account)
+is fully verified by the tenant-isolation suite against a fake gateway; only the generic S3
+connectivity path — already untested end-to-end since Phase 4 — remains unverified live. A second,
+genuinely new bug this pass's manual walkthrough caught that no automated test had: `apps/api`'s
+`tsx watch` dev-mode transform silently failed to inject `PortalAuthController`'s constructor
+parameter (a `TypeError: Cannot read properties of undefined` at request time, not a bootstrap
+error) because it was the first `apps/api`-local controller with a single, purely type-inferred
+constructor dependency — see "Phase 8 scope decisions" above for the fix.

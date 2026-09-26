@@ -12,6 +12,8 @@ export {
   type FindDuplicatesQuery,
   MergePatientsSchema,
   type MergePatientsInput,
+  UpdatePatientContactSchema,
+  type UpdatePatientContactInput,
 } from './patient/patient.dto.js';
 export { PatientIdentifierService } from './identifier/identifier.service.js';
 export { PatientIdentifierRepository, type PatientIdentifierRow } from './identifier/identifier.repository.js';

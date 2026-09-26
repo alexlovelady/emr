@@ -18,3 +18,10 @@ export {
   type AuthResult,
   type TokenPair,
 } from './identity-provider.js';
+export {
+  signPortalAccessToken,
+  verifyPortalAccessToken,
+  InvalidPortalTokenError,
+  type PortalTokenIssuerConfig,
+  type PortalAccessTokenClaims,
+} from './portal-tokens.js';

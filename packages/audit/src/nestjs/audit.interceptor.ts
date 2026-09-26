@@ -64,7 +64,7 @@ export class AuditInterceptor implements NestInterceptor {
     const base = {
       tenantId: ctx?.tenantId || randomUUID(),
       actor: {
-        type: (ctx?.actor?.type ?? 'system') as 'user' | 'system' | 'api_client',
+        type: ctx?.actor?.type ?? 'system',
         id: ctx?.actor?.id ?? null,
       },
       action: meta.action,

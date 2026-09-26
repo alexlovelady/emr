@@ -68,6 +68,19 @@ export class PatientService {
     return this.repo.list(trx, ctx.tenantId);
   }
 
+  /** Contact fields only — never name/DOB. Applies directly, no separate staff-review queue (`@ehr/portal`'s trim of spec's "with review rules"). */
+  async updateContactInfo(
+    trx: Executor,
+    ctx: RequestContext,
+    id: string,
+    patch: Parameters<PatientRepository['updateContactInfo']>[3],
+  ): Promise<PatientRow> {
+    const patient = await this.repo.findById(trx, ctx.tenantId, id);
+    if (!patient) throw new NotFoundError('Patient not found', { id });
+    const actorId = ctx.actor?.id ?? null;
+    return this.repo.updateContactInfo(trx, ctx.tenantId, id, patch, actorId ?? ctx.tenantId);
+  }
+
   /**
    * Deterministic scoring only — spec §5.3: "no automatic patient merge without configurable
    * high-confidence rules and review." This never merges anything; it only surfaces candidates

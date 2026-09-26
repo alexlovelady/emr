@@ -16,7 +16,15 @@ export interface RequestContext {
    */
   actor?: {
     id: string;
-    type: 'user' | 'system' | 'api_client';
+    /**
+     * `'patient'` is a portal account acting for itself or (via an active
+     * `patient_proxy_grants` row — see `@ehr/consent`) for a linked patient. It intentionally
+     * never satisfies `@ehr/authz`'s `rolePermissionLayer` (staff-only, spec §6.2) — portal routes
+     * use `@SkipAuthz()` plus an explicit `ConsentService.assertAccess()` call instead. See
+     * README's Phase 8 scope decisions for why this is a separate authorization path, not an
+     * extension of the 8-layer PolicyEngine.
+     */
+    type: 'user' | 'system' | 'api_client' | 'patient';
   };
   ip?: string;
   userAgent?: string;
