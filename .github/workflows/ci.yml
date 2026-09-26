@@ -1,0 +1,164 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+  PNPM_VERSION: '11.18.0'
+
+jobs:
+  lint-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run build lint typecheck
+      - run: pnpm lint:arch
+
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ehr_owner
+          POSTGRES_PASSWORD: ehr_owner_dev_password
+          POSTGRES_DB: ehr
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ehr_owner -d ehr"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      valkey:
+        image: valkey/valkey:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "valkey-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      minio:
+        image: minio/minio:latest
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        ports: ['9000:9000']
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgres://ehr_owner:ehr_owner_dev_password@localhost:5432/ehr
+      APP_DATABASE_URL: postgres://ehr_app:ehr_app_dev_password@localhost:5432/ehr
+      EHR_APP_DB_PASSWORD: ehr_app_dev_password
+      REDIS_URL: redis://localhost:6379
+      OBJECT_STORAGE_ENDPOINT: http://localhost:9000
+      OBJECT_STORAGE_BUCKET: ehr-test-documents
+      OBJECT_STORAGE_ACCESS_KEY_ID: minioadmin
+      OBJECT_STORAGE_SECRET_ACCESS_KEY: minioadmin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run build
+      - name: Create the ehr-test-documents bucket
+        run: |
+          docker run --rm --network host minio/mc:latest \
+            sh -c "mc alias set local http://localhost:9000 minioadmin minioadmin && mc mb -p local/ehr-test-documents"
+      - run: pnpm --filter @ehr/db migrate:latest
+      - run: pnpm turbo run test
+      - run: pnpm turbo run test:integration
+      # The Phase 1 exit gate (EHR_BUILD_SPEC.md §18.2) as its own named, non-skippable step.
+      - run: pnpm turbo run test:tenant-isolation
+
+  openapi-contract-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run build
+      - run: pnpm --filter @ehr/api generate:openapi
+      - name: Fail if docs/api/openapi.json is out of date
+        run: |
+          if ! git diff --quiet -- docs/api/openapi.json; then
+            echo "docs/api/openapi.json is stale — run 'pnpm --filter @ehr/api generate:openapi' and commit the result." >&2
+            git diff -- docs/api/openapi.json
+            exit 1
+          fi
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  dependency-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --audit-level=high || true # advisory until a triage process exists
+
+  docker-build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [api, worker]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build ${{ matrix.app }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          push: false
+          tags: ehr-${{ matrix.app }}:ci
+          load: true
+      - name: Scan image for critical/high vulnerabilities
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          image-ref: ehr-${{ matrix.app }}:ci
+          severity: CRITICAL,HIGH
+          exit-code: '0' # advisory until a remediation SLA process exists (spec §21.2)
