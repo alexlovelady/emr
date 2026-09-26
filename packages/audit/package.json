@@ -9,8 +9,8 @@
     "build": "tsc -p tsconfig.json",
     "lint": "eslint src",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --exclude '**/*.integration.test.ts'",
-    "test:integration": "vitest run src/**/*.integration.test.ts"
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@ehr/db": "workspace:*",
