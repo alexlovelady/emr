@@ -1,7 +1,7 @@
-# EHR Platform — Phase 1 + 2 + 3 + 4 + 5 + 6 (Platform Foundation; Patient/Scheduling/Intake; Clinical Chart; Orders/Results + Interop; eRx; RCM)
+# EHR Platform — Phase 1 + 2 + 3 + 4 + 5 + 6 + 7 (Platform Foundation; Patient/Scheduling/Intake; Clinical Chart; Orders/Results + Interop; eRx; RCM; Query Platform)
 
 Cloud-native ambulatory EHR + practice-management + revenue-cycle platform. This repository
-currently implements **Phases 1–6** of `EHR_BUILD_SPEC.md`'s build order (§26). Phase 1: the
+currently implements **Phases 1–7** of `EHR_BUILD_SPEC.md`'s build order (§26). Phase 1: the
 monorepo skeleton, tenant/workforce identity, the layered authorization model, audit +
 transactional outbox, a first-party auth adapter, a thin documents flow, and the platform's
 testing/CI/CD/observability scaffolding. Phase 2: the patient registry (with a per-organization
@@ -26,17 +26,25 @@ denial/task workflow (`domains/claims`), and remittance posting, the patient led
 eligibility checks (`domains/payments`), all against a swappable `ClearinghouseGateway` vendor
 adapter (spec §13.1) — plus a new `apps/webhook-gateway` with real HMAC-signed webhook
 verification for inbound 277CA/835 callbacks (spec §12's "signed webhooks"). No real X12 837/277/
-835 transport is built (an explicit spec "buy" item) — see "Phase 6 scope decisions" below. Later
-phases (query platform, patient portal, AI, etc.) are not built yet — see the `README.md` in each
+835 transport is built (an explicit spec "buy" item) — see "Phase 6 scope decisions" below. Phase
+7: query platform — a versioned cohort DSL and 7-step query compiler (spec §8.3) executing
+directly against Postgres, a real Postgres full-text search index behind a swappable
+`SearchIndexGateway` (standing in for Amazon OpenSearch), a governed, parameterized query catalog
+for internal analysts (not raw SQL — spec's own "do not expose unrestricted SQL" rule), and CSV
+cohort exports — with OpenSearch/ClickHouse deferred the same way ADR-0002 deferred Kafka (see
+`docs/adr/0003-postgres-search-and-analytics-instead-of-opensearch-clickhouse.md` and "Phase 7
+scope decisions" below). Later phases (patient portal, AI, etc.) are not built yet — see the `README.md` in each
 reserved-but-empty folder for where it lands.
 
 Read `EHR_BUILD_SPEC.md` and `EHR_REGULATORY_MANUAL.md` first — this README assumes their
-context. Three deliberate deviations from the spec's literal text are documented in
-[`docs/adr/0001-railway-hosting.md`](docs/adr/0001-railway-hosting.md) and
-[`docs/adr/0002-deferred-event-bus-and-idp.md`](docs/adr/0002-deferred-event-bus-and-idp.md):
+context. Four deliberate deviations from the spec's literal text are documented in
+[`docs/adr/0001-railway-hosting.md`](docs/adr/0001-railway-hosting.md),
+[`docs/adr/0002-deferred-event-bus-and-idp.md`](docs/adr/0002-deferred-event-bus-and-idp.md), and
+[`docs/adr/0003-postgres-search-and-analytics-instead-of-opensearch-clickhouse.md`](docs/adr/0003-postgres-search-and-analytics-instead-of-opensearch-clickhouse.md):
 Railway instead of AWS (no PHI exists yet, Phase 0 compliance work hasn't happened), a
-first-party JWT auth adapter instead of Auth0/Okta, and a Postgres-outbox instead of a managed
-event bus — both swappable later behind the interfaces already in place.
+first-party JWT auth adapter instead of Auth0/Okta, a Postgres-outbox instead of a managed
+event bus, and Postgres full-text search plus a Postgres-executed cohort query compiler instead
+of Amazon OpenSearch/ClickHouse — all swappable later behind the interfaces already in place.
 
 ## Prerequisites
 
@@ -284,6 +292,52 @@ infra/          terraform/, policies/, dashboards/ — all deferred, see their R
   this repo) — `claims.coverage_id` is a nullable FK to it, matching the existing shape exactly
   rather than introducing new normalization this phase doesn't need.
 
+### Phase 7 scope decisions
+
+- **OpenSearch and ClickHouse are both deferred**, ADR-0002-style — see
+  `docs/adr/0003-postgres-search-and-analytics-instead-of-opensearch-clickhouse.md`. Postgres
+  full-text search (`tsvector`/GIN) and the cohort compiler running directly against the primary
+  database are real, working substitutes, not stubs — the same posture ADR-0002 used for the
+  outbox standing in for Kafka.
+- **The cohort DSL implements spec §8.3's JSON shape literally**, supporting exactly what its own
+  worked example shows: one `field` (`age`), three `concept`s (`condition`/`allergy`/`medication`,
+  prefix-matched), and the two named `measure`s (`latest_hba1c` — LOINC `4548-4` — and
+  `days_since_completed_encounter`) — confirmed live: the spec's own example (age 45-75, active
+  E11 diagnosis, HbA1c > 9, days since last encounter > 180) compiles and returns exactly the
+  matching patient.
+- **The query compiler's cost estimate is real** — `EXPLAIN (FORMAT JSON)` against the actual
+  compiled query, not a fabricated number. Confirmed live: the estimate and the true result count
+  can legitimately differ (Postgres's planner estimate vs. actual rows), which is genuine planner
+  behavior, not a bug.
+- **Cohort executions return a bounded patient-id list** (capped at 5,000), never full
+  demographics — matching population-query minimum-necessary principles. A separate, audited
+  export step (`POST /cohort-executions/{id}/export`) is the deliberate path to get more.
+- **"Governed SQL for internal analysts" is a fixed, parameterized catalog**, not a SQL parser or
+  executor — spec §8.3 itself opens with "Do not expose unrestricted SQL to normal customers." Three
+  governed queries are registered (patient count by active problem, encounters by month, claims
+  status breakdown); each has its own Zod param schema and runs pre-written, tenant-scoped SQL —
+  callers never supply table/column names or raw SQL.
+- **Only three resource types are wired into search** (Patient, Document, Claim) of the seven spec
+  §9 lists, triggered by an explicit `POST /search/reindex` admin action rather than live on-write
+  indexing hooks — a documented gap the existing outbox events could feed a future indexer-worker
+  without changing `SearchIndexGateway`'s interface.
+- **Authorization filters inside the search query, not after retrieval** (spec §9's explicit
+  rule) — every indexed document carries `sensitivityTags`/`allowedContextTags` and the SQL
+  `WHERE` clause checks array containment directly. Confirmed live and in the automated suite:
+  nothing currently *produces* a non-empty `sensitivityTags` value (no resource type in this repo
+  has a "restricted" classification yet) — the column and the filter are real, the classification
+  rule that would populate it isn't, an honest gap rather than a silently-skipped one.
+- **`ObjectStorageGateway` gained a real `putObject()` method** (a genuine server-side write, every
+  other method on that interface only issues a pre-signed URL for a client) — needed because
+  cohort CSV exports are server-generated with no client upload step to presign against.
+- **NL-to-DSL's actual LLM step is not built** — spec §8.4 is explicit that "NL query is only a
+  front end to the cohort DSL," and the AI gateway (approved-model list, redaction, provenance)
+  that step needs is Phase 9's own deliverable, not this phase's. The DSL/validator/executor it
+  would sit in front of is fully real today.
+- **No visual cohort builder** — no frontend has been built in any phase so far (every
+  `apps/*-web` folder remains reserved-but-empty); this phase stays consistent with that
+  established, backend-only boundary.
+
 ## Verification status
 
 Docker Desktop's backend would not start in the environment this was built in (its WSL2
@@ -397,3 +451,24 @@ writes intentionally have no `audit_events` counterpart. One real gap this walkt
 that no automated test had: the ledger never posted a charge debit at all until this pass added
 that step to `apps/webhook-gateway`'s 277CA-acceptance handler — see "Phase 6 scope decisions"
 above.
+
+**Phase 7** was verified the same way: migrations `0026`–`0027` apply cleanly on top of Phase 6's,
+the full `test`/`test:integration`/`test:tenant-isolation` suite is green across the new
+`@ehr/search-adapter` and `@ehr/query` (168/168 Turborepo tasks), and a full HTTP walkthrough
+against `apps/api`: creating a patient with an active diabetes diagnosis, saving a cohort using the
+spec's own worked-example DSL, and executing it correctly returns that patient (and not an
+unrelated one) with a real `EXPLAIN`-derived cost estimate → submitting a DSL with an unknown field
+name is rejected with a real 422 before it ever reaches the compiler → each of the three governed
+queries (patient count by active problem, encounters by month, claims status breakdown) returns a
+real tenant-scoped aggregate, confirmed against live RCM data from earlier phases → a full-tenant
+reindex correctly picks up patients, documents, and claims, and a subsequent search finds a
+newly-created patient by name → a cross-tenant fetch of a saved cohort returns 404, and a
+cross-tenant search for the same term returns nothing (filtered inside the query, not after) —
+with every action landing in `audit_events` and `outbox_events` as expected. One gap the
+walkthrough surfaced honestly rather than silently: exporting a cohort execution's CSV to object
+storage failed with `ECONNREFUSED` against MinIO, because this whole project has never had a
+running Docker/MinIO instance in the environment it was built in (the same pre-existing constraint
+`README`'s own "Docker Desktop's backend would not start" note already describes for every prior
+phase) — the export *logic* itself (`CohortService.exportExecution`) is still fully verified by the
+automated test suite against a fake gateway; only the generic, already-existing S3 connectivity
+path remains untested end-to-end in this environment.

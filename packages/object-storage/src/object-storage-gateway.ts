@@ -18,6 +18,10 @@ export interface HeadObjectResult {
   contentType: string;
 }
 
+export interface PutObjectResult {
+  storageKey: string;
+}
+
 /**
  * EHR_BUILD_SPEC.md §16: tenant-prefixed keys, no public access, pre-signed URLs with short
  * expiry, authorization checked BEFORE a URL is ever issued (that check happens in
@@ -29,4 +33,10 @@ export interface ObjectStorageGateway {
   getUploadUrl(params: { tenantId: string; filename: string; contentType: string }): Promise<UploadUrlResult>;
   getDownloadUrl(params: { storageKey: string }): Promise<string>;
   headObject(params: { storageKey: string }): Promise<HeadObjectResult | null>;
+  /**
+   * A genuine server-side write — every other method above only issues a pre-signed URL for a
+   * *client* to act on directly. Added for server-generated files (e.g. domains/query's cohort
+   * CSV exports) that have no client upload step to presign against.
+   */
+  putObject(params: { tenantId: string; filename: string; contentType: string; body: Buffer | string }): Promise<PutObjectResult>;
 }

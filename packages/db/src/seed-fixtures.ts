@@ -72,6 +72,9 @@ export const PERMISSION_KEYS = {
   DENIAL_MANAGE: 'denial.manage',
   LEDGER_READ: 'ledger.read',
   ELIGIBILITY_CHECK: 'eligibility.check',
+  COHORT_MANAGE: 'cohort.manage',
+  REPORT_QUERY_POPULATION: 'report.query.population',
+  SEARCH_REINDEX: 'search.reindex',
 } as const;
 
 export interface SeededTenant {

@@ -5,6 +5,7 @@ import type {
   HeadObjectResult,
   ObjectStorageConfig,
   ObjectStorageGateway,
+  PutObjectResult,
   UploadUrlResult,
 } from './object-storage-gateway.js';
 
@@ -47,10 +48,23 @@ export class S3ObjectStorageGateway implements ObjectStorageGateway {
       throw err;
     }
   }
+
+  async putObject(params: { tenantId: string; filename: string; contentType: string; body: Buffer | string }): Promise<PutObjectResult> {
+    const storageKey = buildStorageKey(params.tenantId, params.filename, 'exports');
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.config.bucket,
+        Key: storageKey,
+        ContentType: params.contentType,
+        Body: params.body,
+      }),
+    );
+    return { storageKey };
+  }
 }
 
 /** Tenant-prefixed key (spec §16) — never derived from client-supplied path segments directly. */
-export function buildStorageKey(tenantId: string, filename: string): string {
+export function buildStorageKey(tenantId: string, filename: string, folder: string = 'documents'): string {
   const sanitized = filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200);
-  return `tenants/${tenantId}/documents/${randomUUID()}-${sanitized}`;
+  return `tenants/${tenantId}/${folder}/${randomUUID()}-${sanitized}`;
 }

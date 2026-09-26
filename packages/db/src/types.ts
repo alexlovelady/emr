@@ -517,6 +517,34 @@ export interface EligibilityChecksTable extends CommonColumnsTable {
   checked_at: GeneratedTimestamp;
 }
 
+export interface SearchDocumentsTable extends CommonColumnsTable {
+  patient_id: string | null;
+  resource_type: string;
+  resource_id: string;
+  sensitivity_tags: Generated<string[]>;
+  allowed_context_tags: Generated<string[]>;
+  title: string;
+  body: string;
+  /** Postgres-computed `generated always as (...) stored` column — never written directly. */
+  search_vector: ColumnType<string, never, never>;
+}
+
+export interface CohortsTable extends CommonColumnsTable {
+  name: string;
+  description: string | null;
+  dsl_payload: JsonColumn<Record<string, unknown>>;
+}
+
+export interface CohortExecutionsTable extends CommonColumnsTable {
+  cohort_id: string | null;
+  dsl_payload: JsonColumn<Record<string, unknown>>;
+  estimated_rows: number | null;
+  result_patient_ids: Generated<string[]>;
+  result_count: number;
+  executed_at: GeneratedTimestamp;
+  export_storage_key: string | null;
+}
+
 export interface IdempotencyKeysTable {
   tenant_id: string;
   key: string;
@@ -608,6 +636,9 @@ export interface DB {
   remittances: RemittancesTable;
   ledger_entries: LedgerEntriesTable;
   eligibility_checks: EligibilityChecksTable;
+  search_documents: SearchDocumentsTable;
+  cohorts: CohortsTable;
+  cohort_executions: CohortExecutionsTable;
   idempotency_keys: IdempotencyKeysTable;
   outbox_events: OutboxEventsTable;
   audit_events: AuditEventsTable;

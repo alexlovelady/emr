@@ -46,6 +46,7 @@ import { CreateDiagnosticReportSchema, ReviewDiagnosticReportSchema } from '@ehr
 import { CreateChargeSchema, FinalizeChargeCodingSchema } from '@ehr/billing';
 import { CreateClaimSchema, ResolveDenialSchema } from '@ehr/claims';
 import { CreateEligibilityCheckSchema } from '@ehr/payments';
+import { SaveCohortSchema, ExecuteAdHocCohortSchema } from '@ehr/query';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -341,6 +342,20 @@ const document = {
       ...post('Run an eligibility check against the clearinghouse', 'Payments', CreateEligibilityCheckSchema, 'CreateEligibilityCheck'),
       ...get('List a patient’s eligibility check history', 'Payments', ['patientId']),
     },
+    '/cohorts': {
+      ...post('Save a named, reusable cohort definition', 'Query', SaveCohortSchema, 'SaveCohort'),
+      ...get('List saved cohorts', 'Query'),
+    },
+    '/cohorts/execute': post('Compile and run an ad-hoc (unsaved) cohort DSL query', 'Query', ExecuteAdHocCohortSchema, 'ExecuteAdHocCohort'),
+    '/cohorts/{id}': get('Get a saved cohort by id', 'Query', ['id']),
+    '/cohorts/{id}/execute': post('Compile and run a saved cohort', 'Query'),
+    '/cohorts/{id}/executions': get('List a cohort’s past executions', 'Query', ['id']),
+    '/cohort-executions/{id}': get('Get a cohort execution by id', 'Query', ['id']),
+    '/cohort-executions/{id}/export': post('Export a cohort execution’s patient list to CSV', 'Query'),
+    '/governed-queries': get('List the catalog of governed, parameterized analyst queries', 'Query'),
+    '/governed-queries/{name}/execute': post('Execute a governed query by name', 'Query'),
+    '/search': get('Full-text search across indexed resources (tenant/sensitivity-scoped)', 'Query'),
+    '/search/reindex': post('Reindex patients, documents, and claims for full-text search', 'Query'),
   },
   components: {
     schemas: { ProblemDetail: problemDetail },

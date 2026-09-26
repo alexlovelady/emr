@@ -16,6 +16,7 @@ import { ResultsModule } from '@ehr/results';
 import { BillingModule } from '@ehr/billing';
 import { ClaimsModule } from '@ehr/claims';
 import { PaymentsModule } from '@ehr/payments';
+import { QueryModule } from '@ehr/query';
 import { CoreModule } from './core/core.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { HealthController } from './health/health.controller.js';
@@ -48,6 +49,7 @@ import { ProblemDetailsFilter } from './common/problem-details.filter.js';
     BillingModule,
     ClaimsModule,
     PaymentsModule,
+    QueryModule,
   ],
   controllers: [HealthController],
   providers: [

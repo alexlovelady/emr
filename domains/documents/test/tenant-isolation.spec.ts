@@ -16,6 +16,7 @@ describe('tenant isolation — documents', () => {
       .mockResolvedValue({ url: 'https://example.test/upload', storageKey: `tenants/x/documents/${Date.now()}` }),
     getDownloadUrl: vi.fn().mockResolvedValue('https://example.test/download'),
     headObject: vi.fn().mockResolvedValue({ sizeBytes: 10, contentType: 'text/plain' }),
+    putObject: vi.fn().mockResolvedValue({ storageKey: `tenants/x/exports/${Date.now()}` }),
   };
   const documentService = new DocumentService(fakeGateway);
   let tenantADocumentId: string;
