@@ -13,6 +13,8 @@ export interface ObservationRow {
   valueText: string | null;
   unit: string | null;
   effectiveAt: Date;
+  orderId: string | null;
+  specimenId: string | null;
   status: string;
   createdAt: Date;
   updatedAt: Date;
@@ -34,6 +36,8 @@ export class ObservationRepository {
       valueQuantity: string | null;
       valueText: string | null;
       unit: string | null;
+      orderId?: string | null;
+      specimenId?: string | null;
       createdBy: string;
     },
   ): Promise<ObservationRow> {
@@ -49,6 +53,8 @@ export class ObservationRepository {
         value_quantity: input.valueQuantity,
         value_text: input.valueText,
         unit: input.unit,
+        order_id: input.orderId ?? null,
+        specimen_id: input.specimenId ?? null,
         status: 'final',
         created_by: input.createdBy,
         updated_by: input.createdBy,
@@ -78,6 +84,14 @@ export class ObservationRepository {
       .execute();
     return rows.map(toRow);
   }
+
+  /** Patient-scoped (not just per-encounter) — backs `apps/interop-fhir`'s `/fhir/r4/Observation?patient=` search. */
+  async listByPatient(trx: Executor, tenantId: string, patientId: string, filter: { category?: string } = {}): Promise<ObservationRow[]> {
+    let query = trx.selectFrom('observations').selectAll().where('tenant_id', '=', tenantId).where('patient_id', '=', patientId);
+    if (filter.category) query = query.where('category', '=', filter.category);
+    const rows = await query.orderBy('effective_at', 'desc').execute();
+    return rows.map(toRow);
+  }
 }
 
 function toRow(dbRow: Selectable<DB['observations']>): ObservationRow {
@@ -93,6 +107,8 @@ function toRow(dbRow: Selectable<DB['observations']>): ObservationRow {
     valueText: dbRow.value_text,
     unit: dbRow.unit,
     effectiveAt: dbRow.effective_at,
+    orderId: dbRow.order_id,
+    specimenId: dbRow.specimen_id,
     status: dbRow.status,
     createdAt: dbRow.created_at,
     updatedAt: dbRow.updated_at,

@@ -13,6 +13,11 @@ import { ObservationController, ObservationDetailController } from './observatio
 import { ObservationService } from './observation/observation.service.js';
 import { ProcedureController, ProcedureDetailController } from './procedure/procedure.controller.js';
 import { ProcedureService } from './procedure/procedure.service.js';
+import {
+  ExternalCandidateController,
+  ExternalCandidateDetailController,
+} from './external-candidate/external-candidate.controller.js';
+import { ExternalCandidateService } from './external-candidate/external-candidate.service.js';
 
 @Module({
   controllers: [
@@ -27,6 +32,8 @@ import { ProcedureService } from './procedure/procedure.service.js';
     ObservationDetailController,
     ProcedureController,
     ProcedureDetailController,
+    ExternalCandidateController,
+    ExternalCandidateDetailController,
   ],
   providers: [
     EncounterService,
@@ -36,6 +43,7 @@ import { ProcedureService } from './procedure/procedure.service.js';
     AllergyService,
     ObservationService,
     ProcedureService,
+    ExternalCandidateService,
   ],
 })
 export class ClinicalModule {}

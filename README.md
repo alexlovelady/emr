@@ -1,7 +1,7 @@
-# EHR Platform — Phase 1 + 2 + 3 (Platform Foundation; Patient/Scheduling/Intake; Clinical Chart)
+# EHR Platform — Phase 1 + 2 + 3 + 4 (Platform Foundation; Patient/Scheduling/Intake; Clinical Chart; Orders/Results + Interop)
 
 Cloud-native ambulatory EHR + practice-management + revenue-cycle platform. This repository
-currently implements **Phases 1–3** of `EHR_BUILD_SPEC.md`'s build order (§26). Phase 1: the
+currently implements **Phases 1–4** of `EHR_BUILD_SPEC.md`'s build order (§26). Phase 1: the
 monorepo skeleton, tenant/workforce identity, the layered authorization model, audit +
 transactional outbox, a first-party auth adapter, a thin documents flow, and the platform's
 testing/CI/CD/observability scaffolding. Phase 2: the patient registry (with a per-organization
@@ -11,8 +11,12 @@ dynamic intake forms, and a read-only patient timeline shell. Phase 3: encounter
 golden path from CheckedIn through CodingReview), clinical notes with templates and a real
 sign/amend lifecycle (spec §5.4), problems, allergies, vitals/observations, procedures, the
 patient's medication list with reconciliation events (spec §5.5), and clinically-linked document
-ingestion. Later phases (orders/results + interoperability, eRx, RCM, AI, etc.) are not built yet
-— see the `README.md` in each reserved-but-empty folder for where it lands.
+ingestion. Phase 4: orders and specimens, a lab adapter framework, the result inbox and
+critical-result workflow (spec §5.6), HL7 v2 ORU^R01 ingestion, C-CDA-style external-candidate
+reconciliation (spec §11.3), and a thin FHIR R4 + SMART-on-FHIR read facade with initial US Core
+profiles — each interop area scoped to a real-but-minimal slice rather than a full standard
+implementation (see "Phase 4 scope decisions" below). Later phases (eRx, RCM, AI, etc.) are not
+built yet — see the `README.md` in each reserved-but-empty folder for where it lands.
 
 Read `EHR_BUILD_SPEC.md` and `EHR_REGULATORY_MANUAL.md` first — this README assumes their
 context. Three deliberate deviations from the spec's literal text are documented in
@@ -132,6 +136,43 @@ infra/          terraform/, policies/, dashboards/ — all deferred, see their R
   a direct, deliberate reflection of spec §5.2's aggregate diagram, encoded structurally (which FK
   is nullable vs. required) rather than left as an application-layer convention.
 
+### Phase 4 scope decisions
+
+- **Orders are encounter-scoped, not patient-scoped** (`domains/orders`, `orders.encounter_id`
+  is `NOT NULL`) — a refinement made mid-build so an inbound HL7 result can always correlate back
+  to a concrete encounter. Individual lab result values reuse Phase 3's `observations` table
+  (`category: 'laboratory'`, with new nullable `order_id`/`specimen_id` FKs) rather than a
+  parallel table — paying off that table's original generic design.
+- **Critical results are durable workflow tasks, not UI toasts** (spec §5.6) — creating a
+  `diagnostic_reports` row with `criticalFlag: true` automatically creates a `Task` via the
+  existing `@ehr/tasks` package (`domains/results/src/diagnostic-report/diagnostic-report.service.ts`).
+- **HL7 v2 support is real but narrow**: `packages/hl7` parses only `ORU^R01` (result) messages;
+  ADT/SIU/ORM/MDM are explicitly deferred per the spec's own "as needed" license. `apps/interop-hl7`
+  exposes an authenticated HTTP endpoint (not a real MLLP listener — documented simplification)
+  that always stores the raw message first, is idempotent on `(tenant_id, message_control_id)`
+  redelivery, and NACKs without crashing when an order can't be correlated.
+- **C-CDA reconciliation accepts pre-structured JSON**, not real C-CDA XML — the actual product
+  requirement (spec §11.3's accept/reject/mark-duplicate/replace workflow) is fully real in
+  `domains/clinical`'s `external-candidate` sub-module; only the XML-parsing front door is deferred.
+- **FHIR R4 is a thin read-only Lane A facade** (`apps/interop-fhir`): `/fhir/r4/metadata`,
+  `Patient/{id}`, `Observation?patient=&category=`, `Encounter?patient=` only —
+  `$everything`/bulk `$export` need a job queue this repo doesn't have yet and are a documented
+  gap, not a silent one.
+- **SMART auth is client-credentials only** — a seeded `smart_clients` row, no interactive
+  authorization-code/launch/patient-picker flow (needs a consent UI this API-only build doesn't
+  have). Scope enforcement (`SmartScopeGuard` + `@RequireScope`) is a separate mechanism from
+  `@ehr/authz`'s 8-layer `PolicyEngine` — SMART apps aren't staff users with `user_roles`.
+- **Two new deployable apps** (`apps/interop-fhir`, `apps/interop-hl7`) mirror `apps/api`'s
+  bootstrap shape but are trimmed to their own concerns — `interop-fhir` uses FHIR
+  `OperationOutcome` errors and SMART scopes instead of RFC 7807 and the staff permission catalog;
+  `interop-hl7` reuses the same staff/system JWT auth and the full authz/audit interceptor chain
+  as `apps/api`.
+- **JWT signing key material must be an absolute path once more than one app reads it** — see the
+  comment in `.env.example`. `pnpm --filter X exec tsx src/main.ts` runs with CWD set to package
+  `X`'s own directory, so a relative key path silently generates a different keypair per app,
+  breaking cross-app token verification. All local dev commands in this README export `.env` into
+  the shell first for exactly this reason.
+
 ## Verification status
 
 Docker Desktop's backend would not start in the environment this was built in (its WSL2
@@ -185,3 +226,25 @@ document → signing the encounter → sending it to coding review — every ste
 expected `audit_events`/`outbox_events` rows, with cross-tenant reads correctly returning 404
 throughout, and the encounter-creation state gate (`checked_in` appointments only) and note
 sign/void state-machine rules verified as real 409 conflicts, not just documentation.
+
+**Phase 4** was verified the same way: migrations `0018`–`0021` apply cleanly on top of Phase 3's,
+the full `test`/`test:integration`/`test:tenant-isolation` suite is green across all five new
+packages (`@ehr/orders`, `@ehr/results`, `@ehr/hl7`, `@ehr/fhir-mapping`, `@ehr/lab-adapter`), the
+two new apps (`@ehr/interop-fhir`, `@ehr/interop-hl7`), and the extended `@ehr/clinical` (131/131
+Turborepo tasks), and a full HTTP walkthrough exercising all three apps together: placing an order
+and collecting a specimen (`apps/api`) → posting a synthetic `ORU^R01` HL7 message to
+`apps/interop-hl7` and confirming the resulting `diagnostic_report` and linked `observations`
+rows landed → confirming a critical result automatically created a `Task`
+(`taskType: 'critical_result_review'`, `priority: 'urgent'`) → reviewing/acknowledging the report
+→ amending it and confirming the original is byte-for-byte unchanged → importing a batch of
+external candidates and accepting one (landing in `domains/clinical`'s allergies table) while
+rejecting another → obtaining a SMART access token from `apps/interop-fhir` via client-credentials
+and fetching `/fhir/r4/Patient/{id}` and `/fhir/r4/Observation?patient=`/`Encounter?patient=`,
+confirming a request without the required scope gets 403, one with it gets a correctly-mapped
+FHIR resource or `Bundle`, `/fhir/r4/metadata` is reachable unauthenticated, and a cross-tenant
+SMART client fetching another tenant's patient gets 404 — throughout, every write landing in the
+expected `audit_events`/`outbox_events` rows. One real bug this walkthrough caught that no
+typecheck could: two of the three apps' constructor-injected `Reflector`/service dependencies
+resolved to `undefined` at runtime despite an error-free Nest bootstrap (fixed with explicit
+`@Inject(...)`) — see `apps/interop-hl7/src/hl7/hl7.controller.ts` and
+`apps/interop-fhir/src/common/smart-scope.guard.ts`.

@@ -39,3 +39,15 @@ export { CreateObservationSchema, type CreateObservationInput } from './observat
 export { ProcedureService } from './procedure/procedure.service.js';
 export { ProcedureRepository, type ProcedureRow } from './procedure/procedure.repository.js';
 export { CreateProcedureSchema, type CreateProcedureInput } from './procedure/procedure.dto.js';
+
+export { ExternalCandidateService } from './external-candidate/external-candidate.service.js';
+export {
+  ExternalCandidateRepository,
+  type ExternalCandidateRow,
+} from './external-candidate/external-candidate.repository.js';
+export {
+  ImportExternalCandidatesSchema,
+  type ImportExternalCandidatesInput,
+  ReplaceExternalCandidateSchema,
+  type ReplaceExternalCandidateInput,
+} from './external-candidate/external-candidate.dto.js';

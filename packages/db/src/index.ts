@@ -8,6 +8,8 @@ export type { DB, IntakeFormField, IntakeFormFieldDefinition, NoteTemplateSectio
 export {
   seedSyntheticFixtures,
   DEV_PASSWORD,
+  DEV_SMART_CLIENT_SECRET,
+  DEV_SMART_CLIENT_SCOPES,
   SYSTEM_ROLE_KEYS,
   PERMISSION_KEYS,
   type SeedResult,

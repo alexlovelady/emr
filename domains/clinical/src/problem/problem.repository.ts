@@ -13,6 +13,7 @@ export interface ProblemRow {
   onsetDate: string | null;
   notes: string | null;
   status: string;
+  metadata: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
   version: number;
@@ -102,6 +103,7 @@ function toRow(dbRow: Selectable<DB['problems']>): ProblemRow {
     onsetDate: formatDate(dbRow.onset_date),
     notes: dbRow.notes,
     status: dbRow.status,
+    metadata: dbRow.metadata,
     createdAt: dbRow.created_at,
     updatedAt: dbRow.updated_at,
     version: Number(dbRow.version),

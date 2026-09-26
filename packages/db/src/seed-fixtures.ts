@@ -14,6 +14,8 @@ import type { DB } from './types.js';
  */
 
 export const DEV_PASSWORD = 'Dev-Passw0rd!';
+export const DEV_SMART_CLIENT_SECRET = 'Dev-Smart-Client-Secr3t!';
+export const DEV_SMART_CLIENT_SCOPES = ['patient/Patient.read', 'patient/Observation.read', 'patient/Encounter.read'];
 
 export const SYSTEM_ROLE_KEYS = {
   PLATFORM_ADMIN: 'platform_admin',
@@ -56,6 +58,11 @@ export const PERMISSION_KEYS = {
   MEDICATION_MANAGE: 'medication.manage',
   OBSERVATION_MANAGE: 'observation.manage',
   PROCEDURE_MANAGE: 'procedure.manage',
+  ORDER_MANAGE: 'order.manage',
+  RESULT_MANAGE: 'result.manage',
+  RESULT_REVIEW: 'result.review',
+  INTEROP_HL7_INGEST: 'interop.hl7.ingest',
+  EXTERNAL_CANDIDATE_MANAGE: 'external_candidate.manage',
 } as const;
 
 export interface SeededTenant {
@@ -67,6 +74,7 @@ export interface SeededTenant {
   adminEmail: string;
   staffUserId: string;
   staffEmail: string;
+  smartClientId: string;
 }
 
 export interface SeedResult {
@@ -83,6 +91,7 @@ export interface SeedResult {
  */
 export async function seedSyntheticFixtures(db: Kysely<DB>): Promise<SeedResult> {
   const passwordHash = await argon2.hash(DEV_PASSWORD, { type: argon2.argon2id });
+  const smartClientSecretHash = await argon2.hash(DEV_SMART_CLIENT_SECRET, { type: argon2.argon2id });
 
   const platformAdminRoleId = await upsertRole(db, SYSTEM_ROLE_KEYS.PLATFORM_ADMIN, 'Platform Administrator');
   const staffRoleId = await upsertRole(db, SYSTEM_ROLE_KEYS.STAFF, 'Staff');
@@ -94,6 +103,7 @@ export async function seedSyntheticFixtures(db: Kysely<DB>): Promise<SeedResult>
     slug: 'tenant-a',
     name: 'Tenant A Ambulatory Care',
     passwordHash,
+    smartClientSecretHash,
     platformAdminRoleId,
     staffRoleId,
   });
@@ -101,6 +111,7 @@ export async function seedSyntheticFixtures(db: Kysely<DB>): Promise<SeedResult>
     slug: 'tenant-b',
     name: 'Tenant B Family Medicine',
     passwordHash,
+    smartClientSecretHash,
     platformAdminRoleId,
     staffRoleId,
   });
@@ -133,6 +144,7 @@ async function seedTenant(
     slug: string;
     name: string;
     passwordHash: string;
+    smartClientSecretHash: string;
     platformAdminRoleId: string;
     staffRoleId: string;
   },
@@ -177,6 +189,20 @@ async function seedTenant(
   const staffUser = await upsertUser(db, tenantId, staffEmail, opts.passwordHash);
   await grantRole(db, tenantId, staffUser, opts.staffRoleId);
 
+  const smartClientId = `smart-test-client-${opts.slug}`;
+  await db
+    .insertInto('smart_clients')
+    .values({
+      tenant_id: tenantId,
+      client_id: smartClientId,
+      client_secret_hash: opts.smartClientSecretHash,
+      display_name: `${opts.name} SMART Test Client`,
+      allowed_scopes: DEV_SMART_CLIENT_SCOPES,
+      status: 'active',
+    })
+    .onConflict((oc) => oc.column('client_id').doUpdateSet({ client_secret_hash: opts.smartClientSecretHash }))
+    .execute();
+
   return {
     tenantId,
     slug: opts.slug,
@@ -186,6 +212,7 @@ async function seedTenant(
     adminEmail,
     staffUserId: staffUser,
     staffEmail,
+    smartClientId,
   };
 }
 

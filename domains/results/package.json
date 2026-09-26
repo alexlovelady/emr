@@ -1,0 +1,38 @@
+{
+  "name": "@ehr/results",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint src test",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "test:tenant-isolation": "vitest run --config vitest.tenant-isolation.config.ts"
+  },
+  "dependencies": {
+    "@ehr/api-contracts": "workspace:*",
+    "@ehr/audit": "workspace:*",
+    "@ehr/authz": "workspace:*",
+    "@ehr/clinical": "workspace:*",
+    "@ehr/db": "workspace:*",
+    "@ehr/domain-common": "workspace:*",
+    "@ehr/orders": "workspace:*",
+    "@ehr/outbox": "workspace:*",
+    "@ehr/patient": "workspace:*",
+    "@ehr/tasks": "workspace:*",
+    "@nestjs/common": "^10.4.15",
+    "kysely": "^0.27.4",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@ehr/testing": "workspace:*",
+    "fastify": "4.28.1",
+    "pg": "^8.13.1",
+    "@types/pg": "^8.11.10",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

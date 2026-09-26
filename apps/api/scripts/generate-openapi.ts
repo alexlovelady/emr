@@ -31,8 +31,12 @@ import {
   CreateAllergySchema,
   CreateObservationSchema,
   CreateProcedureSchema,
+  ImportExternalCandidatesSchema,
+  ReplaceExternalCandidateSchema,
 } from '@ehr/clinical';
 import { CreateMedicationSchema, DiscontinueMedicationSchema, RecordReconciliationSchema } from '@ehr/medication';
+import { CreateOrderSchema, CreateSpecimenSchema } from '@ehr/orders';
+import { CreateDiagnosticReportSchema, ReviewDiagnosticReportSchema } from '@ehr/results';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -248,6 +252,41 @@ const document = {
       ...post('Record a medication reconciliation event', 'Medication', RecordReconciliationSchema, 'RecordReconciliation'),
       ...get('List a patient’s medication reconciliation events', 'Medication', ['patientId']),
     },
+    '/orders': {
+      ...post('Place an order (ServiceRequest)', 'Orders', CreateOrderSchema, 'CreateOrder'),
+      ...get('List orders in the caller’s tenant', 'Orders'),
+    },
+    '/orders/{id}': get('Get an order by id', 'Orders', ['id']),
+    '/orders/{id}/cancel': post('Cancel an order', 'Orders'),
+    '/orders/{orderId}/specimens': {
+      ...post('Record a collected specimen for an order', 'Orders', CreateSpecimenSchema, 'CreateSpecimen'),
+      ...get('List an order’s specimens', 'Orders', ['orderId']),
+    },
+    '/patients/{patientId}/diagnostic-reports': {
+      ...post('Create a diagnostic report (with its result values)', 'Results', CreateDiagnosticReportSchema, 'CreateDiagnosticReport'),
+      ...get('List a patient’s diagnostic reports', 'Results', ['patientId']),
+    },
+    '/diagnostic-reports/{id}': get('Get a diagnostic report by id', 'Results', ['id']),
+    '/diagnostic-reports/{id}/review': post('Review/acknowledge a diagnostic report', 'Results', ReviewDiagnosticReportSchema, 'ReviewDiagnosticReport'),
+    '/diagnostic-reports/{id}/amend': post('Create an additive amendment to a diagnostic report', 'Results', CreateDiagnosticReportSchema, 'AmendDiagnosticReport'),
+    '/results/inbox': get('List unreviewed diagnostic reports (the result inbox)', 'Results'),
+    '/patients/{patientId}/external-candidates/import': post(
+      'Import external-record reconciliation candidates (from C-CDA/FHIR/HL7)',
+      'ExternalCandidates',
+      ImportExternalCandidatesSchema,
+      'ImportExternalCandidates',
+    ),
+    '/patients/{patientId}/external-candidates': get('List a patient’s external-record candidates', 'ExternalCandidates', ['patientId']),
+    '/external-candidates/{id}': get('Get an external-record candidate by id', 'ExternalCandidates', ['id']),
+    '/external-candidates/{id}/accept': post('Accept an external-record candidate into the chart', 'ExternalCandidates'),
+    '/external-candidates/{id}/reject': post('Reject an external-record candidate', 'ExternalCandidates'),
+    '/external-candidates/{id}/mark-duplicate': post('Mark an external-record candidate as a duplicate', 'ExternalCandidates'),
+    '/external-candidates/{id}/replace': post(
+      'Accept a candidate and mark the resource it corrects as superseded',
+      'ExternalCandidates',
+      ReplaceExternalCandidateSchema,
+      'ReplaceExternalCandidate',
+    ),
   },
   components: {
     schemas: { ProblemDetail: problemDetail },

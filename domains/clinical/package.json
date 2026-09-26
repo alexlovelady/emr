@@ -18,6 +18,7 @@
     "@ehr/authz": "workspace:*",
     "@ehr/db": "workspace:*",
     "@ehr/domain-common": "workspace:*",
+    "@ehr/medication": "workspace:*",
     "@ehr/outbox": "workspace:*",
     "@ehr/patient": "workspace:*",
     "@ehr/scheduling": "workspace:*",

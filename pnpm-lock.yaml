@@ -62,6 +62,9 @@ importers:
       '@ehr/intake':
         specifier: workspace:*
         version: link:../../domains/intake
+      '@ehr/lab-adapter':
+        specifier: workspace:*
+        version: link:../../packages/lab-adapter
       '@ehr/medication':
         specifier: workspace:*
         version: link:../../domains/medication
@@ -71,12 +74,18 @@ importers:
       '@ehr/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@ehr/orders':
+        specifier: workspace:*
+        version: link:../../domains/orders
       '@ehr/outbox':
         specifier: workspace:*
         version: link:../../packages/outbox
       '@ehr/patient':
         specifier: workspace:*
         version: link:../../domains/patient
+      '@ehr/results':
+        specifier: workspace:*
+        version: link:../../domains/results
       '@ehr/scheduling':
         specifier: workspace:*
         version: link:../../domains/scheduling
@@ -126,6 +135,173 @@ importers:
       supertest:
         specifier: ^7.0.0
         version: 7.3.0(supports-color@7.2.0)
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.15
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.4)(supports-color@7.2.0)
+
+  apps/interop-fhir:
+    dependencies:
+      '@ehr/api-contracts':
+        specifier: workspace:*
+        version: link:../../packages/api-contracts
+      '@ehr/auth-adapter':
+        specifier: workspace:*
+        version: link:../../packages/auth-adapter
+      '@ehr/clinical':
+        specifier: workspace:*
+        version: link:../../domains/clinical
+      '@ehr/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@ehr/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@ehr/domain-common':
+        specifier: workspace:*
+        version: link:../../packages/domain-common
+      '@ehr/fhir-mapping':
+        specifier: workspace:*
+        version: link:../../packages/fhir-mapping
+      '@ehr/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
+      '@ehr/patient':
+        specifier: workspace:*
+        version: link:../../domains/patient
+      '@nestjs/common':
+        specifier: ^10.4.15
+        version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
+      '@nestjs/core':
+        specifier: ^10.4.15
+        version: 10.4.22(@nestjs/common@10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0))(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/platform-fastify':
+        specifier: ^10.4.15
+        version: 10.4.22(@nestjs/common@10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0))(@nestjs/core@10.4.22(@nestjs/common@10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0))(reflect-metadata@0.2.2)(rxjs@7.8.2))
+      argon2:
+        specifier: ^0.41.1
+        version: 0.41.1
+      fastify:
+        specifier: 4.28.1
+        version: 4.28.1
+      jose:
+        specifier: ^5.9.6
+        version: 5.10.0
+      kysely:
+        specifier: ^0.27.4
+        version: 0.27.6
+      reflect-metadata:
+        specifier: ^0.2.2
+        version: 0.2.2
+      rxjs:
+        specifier: ^7.8.1
+        version: 7.8.2
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      '@ehr/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.4
+      '@types/pg':
+        specifier: ^8.11.10
+        version: 8.23.1
+      pg:
+        specifier: ^8.13.1
+        version: 8.23.0
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.15
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.4)(supports-color@7.2.0)
+
+  apps/interop-hl7:
+    dependencies:
+      '@ehr/api-contracts':
+        specifier: workspace:*
+        version: link:../../packages/api-contracts
+      '@ehr/audit':
+        specifier: workspace:*
+        version: link:../../packages/audit
+      '@ehr/auth-adapter':
+        specifier: workspace:*
+        version: link:../../packages/auth-adapter
+      '@ehr/authz':
+        specifier: workspace:*
+        version: link:../../packages/authz
+      '@ehr/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@ehr/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@ehr/domain-common':
+        specifier: workspace:*
+        version: link:../../packages/domain-common
+      '@ehr/hl7':
+        specifier: workspace:*
+        version: link:../../packages/hl7
+      '@ehr/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
+      '@ehr/orders':
+        specifier: workspace:*
+        version: link:../../domains/orders
+      '@ehr/results':
+        specifier: workspace:*
+        version: link:../../domains/results
+      '@nestjs/common':
+        specifier: ^10.4.15
+        version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
+      '@nestjs/core':
+        specifier: ^10.4.15
+        version: 10.4.22(@nestjs/common@10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0))(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/platform-fastify':
+        specifier: ^10.4.15
+        version: 10.4.22(@nestjs/common@10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0))(@nestjs/core@10.4.22(@nestjs/common@10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0))(reflect-metadata@0.2.2)(rxjs@7.8.2))
+      fastify:
+        specifier: 4.28.1
+        version: 4.28.1
+      kysely:
+        specifier: ^0.27.4
+        version: 0.27.6
+      reflect-metadata:
+        specifier: ^0.2.2
+        version: 0.2.2
+      rxjs:
+        specifier: ^7.8.1
+        version: 7.8.2
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      '@ehr/lab-adapter':
+        specifier: workspace:*
+        version: link:../../packages/lab-adapter
+      '@ehr/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.4
+      '@types/pg':
+        specifier: ^8.11.10
+        version: 8.23.1
+      pg:
+        specifier: ^8.13.1
+        version: 8.23.0
       tsx:
         specifier: ^4.19.2
         version: 4.23.15
@@ -187,6 +363,9 @@ importers:
       '@ehr/domain-common':
         specifier: workspace:*
         version: link:../../packages/domain-common
+      '@ehr/medication':
+        specifier: workspace:*
+        version: link:../medication
       '@ehr/outbox':
         specifier: workspace:*
         version: link:../../packages/outbox
@@ -378,6 +557,64 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@26.6.2)(supports-color@7.2.0)
 
+  domains/orders:
+    dependencies:
+      '@ehr/api-contracts':
+        specifier: workspace:*
+        version: link:../../packages/api-contracts
+      '@ehr/audit':
+        specifier: workspace:*
+        version: link:../../packages/audit
+      '@ehr/authz':
+        specifier: workspace:*
+        version: link:../../packages/authz
+      '@ehr/clinical':
+        specifier: workspace:*
+        version: link:../clinical
+      '@ehr/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@ehr/domain-common':
+        specifier: workspace:*
+        version: link:../../packages/domain-common
+      '@ehr/lab-adapter':
+        specifier: workspace:*
+        version: link:../../packages/lab-adapter
+      '@ehr/outbox':
+        specifier: workspace:*
+        version: link:../../packages/outbox
+      '@ehr/patient':
+        specifier: workspace:*
+        version: link:../patient
+      '@nestjs/common':
+        specifier: ^10.4.15
+        version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
+      kysely:
+        specifier: ^0.27.4
+        version: 0.27.6
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      '@ehr/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
+      '@types/pg':
+        specifier: ^8.11.10
+        version: 8.23.1
+      fastify:
+        specifier: 4.28.1
+        version: 4.28.1
+      pg:
+        specifier: ^8.13.1
+        version: 8.23.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@26.6.2)(supports-color@7.2.0)
+
   domains/patient:
     dependencies:
       '@ehr/api-contracts':
@@ -401,6 +638,67 @@ importers:
       '@ehr/scheduling':
         specifier: workspace:*
         version: link:../scheduling
+      '@ehr/tasks':
+        specifier: workspace:*
+        version: link:../tasks
+      '@nestjs/common':
+        specifier: ^10.4.15
+        version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
+      kysely:
+        specifier: ^0.27.4
+        version: 0.27.6
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      '@ehr/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
+      '@types/pg':
+        specifier: ^8.11.10
+        version: 8.23.1
+      fastify:
+        specifier: 4.28.1
+        version: 4.28.1
+      pg:
+        specifier: ^8.13.1
+        version: 8.23.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@26.6.2)(supports-color@7.2.0)
+
+  domains/results:
+    dependencies:
+      '@ehr/api-contracts':
+        specifier: workspace:*
+        version: link:../../packages/api-contracts
+      '@ehr/audit':
+        specifier: workspace:*
+        version: link:../../packages/audit
+      '@ehr/authz':
+        specifier: workspace:*
+        version: link:../../packages/authz
+      '@ehr/clinical':
+        specifier: workspace:*
+        version: link:../clinical
+      '@ehr/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@ehr/domain-common':
+        specifier: workspace:*
+        version: link:../../packages/domain-common
+      '@ehr/orders':
+        specifier: workspace:*
+        version: link:../orders
+      '@ehr/outbox':
+        specifier: workspace:*
+        version: link:../../packages/outbox
+      '@ehr/patient':
+        specifier: workspace:*
+        version: link:../patient
       '@ehr/tasks':
         specifier: workspace:*
         version: link:../tasks
@@ -793,6 +1091,40 @@ importers:
       zod:
         specifier: ^3.24.1
         version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@26.6.2)(supports-color@7.2.0)
+
+  packages/fhir-mapping:
+    dependencies:
+      '@ehr/clinical':
+        specifier: workspace:*
+        version: link:../../domains/clinical
+      '@ehr/patient':
+        specifier: workspace:*
+        version: link:../../domains/patient
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@26.6.2)(supports-color@7.2.0)
+
+  packages/hl7:
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@26.6.2)(supports-color@7.2.0)
+
+  packages/lab-adapter:
     devDependencies:
       typescript:
         specifier: ^5.7.2

@@ -37,6 +37,8 @@ export const envSchema = z.object({
   // --- HTTP ---
   PORT: z.coerce.number().int().positive().default(3000),
   WORKER_PORT: z.coerce.number().int().positive().default(3100),
+  INTEROP_FHIR_PORT: z.coerce.number().int().positive().default(3200),
+  INTEROP_HL7_PORT: z.coerce.number().int().positive().default(3300),
 
   // --- Observability ---
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),

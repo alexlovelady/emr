@@ -217,6 +217,8 @@ export interface ObservationsTable extends CommonColumnsTable {
   value_text: string | null;
   unit: string | null;
   effective_at: GeneratedTimestamp;
+  order_id: string | null;
+  specimen_id: string | null;
 }
 
 export interface ProceduresTable extends CommonColumnsTable {
@@ -352,6 +354,71 @@ export interface IntakeFormResponsesTable extends CommonColumnsTable {
   submitted_at: Timestamp | null;
 }
 
+export interface OrdersTable extends CommonColumnsTable {
+  patient_id: string;
+  encounter_id: string;
+  ordering_practitioner_id: string;
+  order_type: string;
+  code_system: string | null;
+  code: string | null;
+  display_name: string;
+  priority: Generated<string>;
+  ordered_at: GeneratedTimestamp;
+}
+
+export interface SpecimensTable extends CommonColumnsTable {
+  order_id: string;
+  specimen_type: string;
+  accession_number: string | null;
+  collected_at: Timestamp | null;
+}
+
+export interface DiagnosticReportsTable extends CommonColumnsTable {
+  order_id: string | null;
+  patient_id: string;
+  encounter_id: string;
+  code_system: string | null;
+  code: string | null;
+  display_name: string;
+  conclusion: string | null;
+  performing_lab: string | null;
+  issued_at: GeneratedTimestamp;
+  critical_flag: Generated<boolean>;
+  abnormal_flag: Generated<boolean>;
+  review_status: Generated<string>;
+  reviewed_at: Timestamp | null;
+  reviewed_by: string | null;
+  amends_report_id: string | null;
+}
+
+export interface Hl7MessagesTable extends CommonColumnsTable {
+  message_control_id: string;
+  message_type: string;
+  raw_message: string;
+  direction: Generated<string>;
+  parse_error: string | null;
+  processed_at: Timestamp | null;
+}
+
+export interface ExternalCandidatesTable extends CommonColumnsTable {
+  patient_id: string;
+  origin_type: string;
+  source_document_id: string;
+  resource_type: string;
+  payload: JsonColumn<Record<string, unknown>>;
+  replaces_resource_id: string | null;
+  created_resource_id: string | null;
+  reviewed_at: Timestamp | null;
+  reviewed_by: string | null;
+}
+
+export interface SmartClientsTable extends CommonColumnsTable {
+  client_id: string;
+  client_secret_hash: string;
+  display_name: string;
+  allowed_scopes: string[];
+}
+
 export interface IdempotencyKeysTable {
   tenant_id: string;
   key: string;
@@ -428,6 +495,12 @@ export interface DB {
   procedures: ProceduresTable;
   medications: MedicationsTable;
   medication_reconciliation_events: MedicationReconciliationEventsTable;
+  orders: OrdersTable;
+  specimens: SpecimensTable;
+  diagnostic_reports: DiagnosticReportsTable;
+  hl7_messages: Hl7MessagesTable;
+  external_candidates: ExternalCandidatesTable;
+  smart_clients: SmartClientsTable;
   idempotency_keys: IdempotencyKeysTable;
   outbox_events: OutboxEventsTable;
   audit_events: AuditEventsTable;

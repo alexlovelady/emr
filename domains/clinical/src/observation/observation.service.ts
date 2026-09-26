@@ -14,7 +14,19 @@ export class ObservationService {
     private readonly encounterRepo: EncounterRepository = new EncounterRepository(),
   ) {}
 
-  async create(trx: Executor, ctx: RequestContext, encounterId: string, input: CreateObservationInput): Promise<ObservationRow> {
+  /**
+   * `links` is for cross-domain callers only (`@ehr/results`, correlating a lab value back to
+   * the order/specimen that produced it) — the public `CreateObservationSchema` DTO deliberately
+   * has no `orderId`/`specimenId` fields, since a staff member recording vitals by hand has
+   * neither.
+   */
+  async create(
+    trx: Executor,
+    ctx: RequestContext,
+    encounterId: string,
+    input: CreateObservationInput,
+    links: { orderId?: string; specimenId?: string } = {},
+  ): Promise<ObservationRow> {
     const encounter = await this.encounterRepo.findById(trx, ctx.tenantId, encounterId);
     if (!encounter) throw new NotFoundError('Encounter not found', { encounterId });
 
@@ -29,6 +41,8 @@ export class ObservationService {
       valueQuantity: input.valueQuantity != null ? String(input.valueQuantity) : null,
       valueText: input.valueText ?? null,
       unit: input.unit ?? null,
+      orderId: links.orderId ?? null,
+      specimenId: links.specimenId ?? null,
       createdBy: actorId ?? ctx.tenantId,
     });
 

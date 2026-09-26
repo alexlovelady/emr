@@ -7,6 +7,8 @@ import { PolicyEngine } from '@ehr/authz';
 import { loadOrCreateKeyMaterial, FirstPartyIdentityProvider } from '@ehr/auth-adapter';
 import { S3ObjectStorageGateway } from '@ehr/object-storage';
 import { OBJECT_STORAGE_GATEWAY } from '@ehr/documents';
+import { NoopLabOrderGateway } from '@ehr/lab-adapter';
+import { LAB_ORDER_GATEWAY } from '@ehr/orders';
 import { DB_CONNECTION, KEY_MATERIAL, IDENTITY_PROVIDER, ENV_CONFIG } from '../common/tokens.js';
 
 const env = getConfig();
@@ -54,9 +56,19 @@ const db = createDb({ connectionString: env.APP_DATABASE_URL });
           presignTtlSeconds: env.OBJECT_STORAGE_PRESIGN_TTL_SECONDS,
         }),
     },
+    { provide: LAB_ORDER_GATEWAY, useValue: new NoopLabOrderGateway() },
     { provide: PolicyEngine, useValue: new PolicyEngine() },
     Reflector,
   ],
-  exports: [ENV_CONFIG, DB_CONNECTION, KEY_MATERIAL, IDENTITY_PROVIDER, OBJECT_STORAGE_GATEWAY, PolicyEngine, Reflector],
+  exports: [
+    ENV_CONFIG,
+    DB_CONNECTION,
+    KEY_MATERIAL,
+    IDENTITY_PROVIDER,
+    OBJECT_STORAGE_GATEWAY,
+    LAB_ORDER_GATEWAY,
+    PolicyEngine,
+    Reflector,
+  ],
 })
 export class CoreModule {}

@@ -9,6 +9,7 @@ import { ProblemService } from '../src/problem/problem.service.js';
 import { AllergyService } from '../src/allergy/allergy.service.js';
 import { ObservationService } from '../src/observation/observation.service.js';
 import { ProcedureService } from '../src/procedure/procedure.service.js';
+import { ExternalCandidateService } from '../src/external-candidate/external-candidate.service.js';
 
 /** EHR_BUILD_SPEC.md §18.2 — run via `pnpm test:tenant-isolation`, requires a live Postgres. */
 describe('tenant isolation — clinical', () => {
@@ -19,6 +20,7 @@ describe('tenant isolation — clinical', () => {
   const problemService = new ProblemService();
   const allergyService = new AllergyService();
   const observationService = new ObservationService();
+  const externalCandidateService = new ExternalCandidateService();
   const procedureService = new ProcedureService();
 
   let tenantAPatientId: string;
@@ -223,5 +225,59 @@ describe('tenant isolation — clinical', () => {
 
     const rawProblems = await withTenantContext(handle.db, ctxB.tenantId, (trx) => trx.selectFrom('problems').selectAll().where('id', '=', problem.id).execute());
     expect(rawProblems).toHaveLength(0);
+  });
+
+  it('external-candidate reconciliation: import, accept, reject, and replace, isolated per tenant', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
+
+    const existingProblem = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      problemService.create(trx, ctxA, tenantAPatientId, { codeSystem: 'ICD-10', code: 'E11.9', displayName: 'Type 2 diabetes' }),
+    );
+
+    const candidates = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      externalCandidateService.import(trx, ctxA, tenantAPatientId, {
+        originType: 'c-cda',
+        sourceDocumentId: 'ccd-doc-1',
+        items: [
+          { resourceType: 'allergy', payload: { substance: 'Sulfa drugs', severity: 'moderate' } },
+          { resourceType: 'problem', payload: { codeSystem: 'ICD-10', code: 'E11.9', displayName: 'Type 2 diabetes mellitus (updated)' } },
+        ],
+      }),
+    );
+    expect(candidates).toHaveLength(2);
+    const [allergyCandidate, problemCandidate] = candidates;
+
+    const accepted = await withTenantContext(handle.db, ctxA.tenantId, (trx) => externalCandidateService.accept(trx, ctxA, allergyCandidate!.id));
+    expect(accepted.status).toBe('accepted');
+    expect(accepted.createdResourceId).not.toBeNull();
+
+    const rejected = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      externalCandidateService.reject(trx, ctxA, problemCandidate!.id),
+    );
+    expect(rejected.status).toBe('rejected');
+    await expect(
+      withTenantContext(handle.db, ctxA.tenantId, (trx) => externalCandidateService.accept(trx, ctxA, problemCandidate!.id)),
+    ).rejects.toBeInstanceOf(ConflictError);
+
+    const [replaceCandidate] = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      externalCandidateService.import(trx, ctxA, tenantAPatientId, {
+        originType: 'fhir',
+        sourceDocumentId: 'fhir-bundle-1',
+        items: [{ resourceType: 'problem', payload: { codeSystem: 'ICD-10', code: 'E11.9', displayName: 'Type 2 diabetes (corrected)' } }],
+      }),
+    );
+    const replaced = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      externalCandidateService.replace(trx, ctxA, replaceCandidate!.id, existingProblem.id),
+    );
+    expect(replaced.status).toBe('replaced');
+    expect(replaced.replacesResourceId).toBe(existingProblem.id);
+
+    const supersededProblem = await withTenantContext(handle.db, ctxA.tenantId, (trx) => problemService.getById(trx, ctxA, existingProblem.id));
+    expect(supersededProblem.metadata).toMatchObject({ supersededByCandidateId: replaceCandidate!.id });
+
+    await expect(
+      withTenantContext(handle.db, ctxB.tenantId, (trx) => externalCandidateService.getById(trx, ctxB, allergyCandidate!.id)),
+    ).rejects.toBeInstanceOf(NotFoundError);
   });
 });
