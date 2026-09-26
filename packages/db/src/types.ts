@@ -1,4 +1,4 @@
-import type { ColumnType, Generated, JSONColumnType } from 'kysely';
+import type { ColumnType, Generated } from 'kysely';
 
 /**
  * Kysely's typed view of the schema created by packages/db/migrations. Column names are
@@ -14,6 +14,17 @@ import type { ColumnType, Generated, JSONColumnType } from 'kysely';
 
 type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
+/**
+ * A jsonb column: Kysely never serializes JS values for you, so Insert/Update must be a
+ * pre-`JSON.stringify`'d string while Select comes back already parsed as `T` (pg's driver
+ * parses jsonb automatically). NOTE: do NOT wrap this in `Generated<...>` for columns with a DB
+ * default — `Generated<S>` treats `S` as one opaque value for all three positions, which breaks
+ * when `S` is itself a `ColumnType`; use `GeneratedJsonColumn<T>` instead, which flattens both
+ * concerns into a single ColumnType.
+ */
+type JsonColumn<T extends object> = ColumnType<T, string, string>;
+type GeneratedJsonColumn<T extends object> = ColumnType<T, string | undefined, string>;
+
 interface CommonColumnsTable {
   tenant_id: string;
   id: Generated<string>;
@@ -27,7 +38,7 @@ interface CommonColumnsTable {
   source_system: string | null;
   source_id: string | null;
   status: string;
-  metadata: Generated<JSONColumnType<Record<string, unknown>>>;
+  metadata: GeneratedJsonColumn<Record<string, unknown>>;
 }
 
 export interface TenantsTable {
@@ -42,7 +53,7 @@ export interface TenantsTable {
   source_system: string | null;
   source_id: string | null;
   status: string;
-  metadata: Generated<JSONColumnType<Record<string, unknown>>>;
+  metadata: GeneratedJsonColumn<Record<string, unknown>>;
   name: string;
   slug: string;
 }
@@ -134,7 +145,7 @@ export interface IdempotencyKeysTable {
   key: string;
   request_hash: string;
   response_status: number;
-  response_body: JSONColumnType<Record<string, unknown>>;
+  response_body: JsonColumn<Record<string, unknown>>;
   created_at: Generated<Timestamp>;
 }
 
@@ -149,7 +160,7 @@ export interface OutboxEventsTable {
   actor_id: string | null;
   correlation_id: string;
   causation_id: string | null;
-  data: JSONColumnType<Record<string, unknown>>;
+  data: JsonColumn<Record<string, unknown>>;
   status: Generated<string>;
   attempts: Generated<number>;
   published_at: Timestamp | null;
@@ -171,7 +182,7 @@ export interface AuditEventsTable {
   ip: string | null;
   user_agent: string | null;
   outcome: string;
-  metadata: Generated<JSONColumnType<Record<string, unknown>>>;
+  metadata: GeneratedJsonColumn<Record<string, unknown>>;
   created_at: Generated<Timestamp>;
 }
 

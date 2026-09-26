@@ -1,4 +1,9 @@
 export { createDb, withTenantContext, withSystemContext, type DbConnectionConfig } from './kysely.js';
+export {
+  runWithRequestTransaction,
+  getCurrentTransaction,
+  hasCurrentTransaction,
+} from './request-transaction.js';
 export type { DB } from './types.js';
 export {
   seedSyntheticFixtures,

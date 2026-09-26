@@ -3,5 +3,6 @@ packages:
   - "packages/*"
   - "domains/*"
 allowBuilds:
+  '@nestjs/core': true
   argon2: true
   esbuild: true
