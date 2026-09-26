@@ -5,6 +5,10 @@ import { AuditInterceptor } from '@ehr/audit';
 import { TenantModule } from '@ehr/tenant';
 import { WorkforceModule } from '@ehr/workforce';
 import { DocumentsModule } from '@ehr/documents';
+import { PatientModule } from '@ehr/patient';
+import { SchedulingModule } from '@ehr/scheduling';
+import { TasksModule } from '@ehr/tasks';
+import { IntakeModule } from '@ehr/intake';
 import { CoreModule } from './core/core.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { HealthController } from './health/health.controller.js';
@@ -20,7 +24,17 @@ import { ProblemDetailsFilter } from './common/problem-details.filter.js';
  * interceptors/controllers see. See tenant-context.hook.ts's doc comment.
  */
 @Module({
-  imports: [CoreModule, AuthModule, TenantModule, WorkforceModule, DocumentsModule],
+  imports: [
+    CoreModule,
+    AuthModule,
+    TenantModule,
+    WorkforceModule,
+    DocumentsModule,
+    SchedulingModule,
+    TasksModule,
+    IntakeModule,
+    PatientModule,
+  ],
   controllers: [HealthController],
   providers: [
     // Order matters: Nest nests global interceptors in registration order (first = outermost).

@@ -148,6 +148,106 @@ export interface DocumentsTable extends CommonColumnsTable {
   uploaded_by: string | null;
 }
 
+export interface PatientsTable extends CommonColumnsTable {
+  given_name: string;
+  family_name: string;
+  middle_name: string | null;
+  date_of_birth: Timestamp;
+  sex_at_birth: string | null;
+  gender_identity: string | null;
+  phone: string | null;
+  email: string | null;
+  address_line1: string | null;
+  address_line2: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
+  country: string | null;
+  preferred_language: string | null;
+}
+
+export interface PatientIdentifiersTable extends CommonColumnsTable {
+  patient_id: string;
+  organization_id: string | null;
+  identifier_system: string;
+  value: string;
+  is_primary: Generated<boolean>;
+}
+
+export interface CoveragesTable extends CommonColumnsTable {
+  patient_id: string;
+  payer_name: string;
+  member_id: string;
+  group_number: string | null;
+  plan_name: string | null;
+  coverage_type: Generated<string>;
+  effective_start: Timestamp;
+  effective_end: Timestamp | null;
+}
+
+export interface PatientMergeHistoryTable extends CommonColumnsTable {
+  source_patient_id: string;
+  target_patient_id: string;
+  merged_by: string;
+  merge_reason: string | null;
+  reversed_at: Timestamp | null;
+  reversed_by: string | null;
+}
+
+export interface AppointmentsTable extends CommonColumnsTable {
+  patient_id: string;
+  location_id: string;
+  practitioner_id: string;
+  appointment_type: string;
+  scheduled_start: Timestamp;
+  scheduled_end: Timestamp;
+  confirmed_at: Timestamp | null;
+  checked_in_at: Timestamp | null;
+  cancelled_at: Timestamp | null;
+  cancellation_reason: string | null;
+  no_show_at: Timestamp | null;
+}
+
+export interface TasksTable extends CommonColumnsTable {
+  patient_id: string | null;
+  assigned_to_user_id: string | null;
+  assigned_to_role_id: string | null;
+  task_type: string;
+  title: string;
+  description: string | null;
+  due_at: Timestamp | null;
+  priority: Generated<string>;
+  related_resource_type: string | null;
+  related_resource_id: string | null;
+  completed_at: Timestamp | null;
+  cancelled_at: Timestamp | null;
+}
+
+export interface IntakeFormTemplatesTable extends CommonColumnsTable {
+  name: string;
+  schema_version: Generated<number>;
+  schema: JsonColumn<IntakeFormFieldDefinition[]>;
+}
+
+export interface IntakeFormField {
+  key: string;
+  label: string;
+  type: 'text' | 'textarea' | 'number' | 'boolean' | 'date' | 'select';
+  required: boolean;
+  options: string[] | null;
+}
+
+// Alias kept separate from the table interface so consumers can import just the field shape.
+export type IntakeFormFieldDefinition = IntakeFormField;
+
+export interface IntakeFormResponsesTable extends CommonColumnsTable {
+  template_id: string;
+  patient_id: string;
+  appointment_id: string | null;
+  answers: GeneratedJsonColumn<Record<string, unknown>>;
+  submitted_at: Timestamp | null;
+}
+
 export interface IdempotencyKeysTable {
   tenant_id: string;
   key: string;
@@ -207,6 +307,14 @@ export interface DB {
   role_permissions: RolePermissionsTable;
   user_roles: UserRolesTable;
   documents: DocumentsTable;
+  patients: PatientsTable;
+  patient_identifiers: PatientIdentifiersTable;
+  coverages: CoveragesTable;
+  patient_merge_history: PatientMergeHistoryTable;
+  appointments: AppointmentsTable;
+  tasks: TasksTable;
+  intake_form_templates: IntakeFormTemplatesTable;
+  intake_form_responses: IntakeFormResponsesTable;
   idempotency_keys: IdempotencyKeysTable;
   outbox_events: OutboxEventsTable;
   audit_events: AuditEventsTable;

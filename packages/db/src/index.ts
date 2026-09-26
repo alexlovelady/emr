@@ -4,7 +4,7 @@ export {
   getCurrentTransaction,
   hasCurrentTransaction,
 } from './request-transaction.js';
-export type { DB } from './types.js';
+export type { DB, IntakeFormField, IntakeFormFieldDefinition } from './types.js';
 export {
   seedSyntheticFixtures,
   DEV_PASSWORD,

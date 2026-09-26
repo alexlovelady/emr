@@ -7,6 +7,19 @@ import { LoginSchema, RefreshSchema, MfaChallengeSchema } from '../src/auth/auth
 import { CreateOrganizationSchema, CreateLocationSchema } from '@ehr/tenant';
 import { CreateUserSchema, CreatePractitionerSchema } from '@ehr/workforce';
 import { RequestUploadSchema } from '@ehr/documents';
+import {
+  CreatePatientSchema,
+  MergePatientsSchema,
+  CreatePatientIdentifierSchema,
+  CreateCoverageSchema,
+} from '@ehr/patient';
+import { CreateAppointmentSchema, CancelAppointmentSchema } from '@ehr/scheduling';
+import { CreateTaskSchema } from '@ehr/tasks';
+import {
+  CreateIntakeFormTemplateSchema,
+  CreateIntakeFormResponseSchema,
+  SubmitIntakeFormResponseSchema,
+} from '@ehr/intake';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -120,6 +133,50 @@ const document = {
     '/documents': post('Request a presigned upload URL', 'Documents', RequestUploadSchema, 'RequestUpload'),
     '/documents/{id}/confirm': post('Confirm a completed upload', 'Documents'),
     '/documents/{id}/download-url': get('Get a presigned download URL', 'Documents', ['id']),
+    '/patients': {
+      ...post('Register a patient', 'Patient', CreatePatientSchema, 'CreatePatient'),
+      ...get('List patients in the caller’s tenant', 'Patient'),
+    },
+    '/patients/duplicates': get('Search for duplicate-candidate patients (scoring only, never auto-merges)', 'Patient'),
+    '/patients/{id}': get('Get a patient by id', 'Patient', ['id']),
+    '/patients/{id}/merge': post('Merge a source patient into this one (reversible)', 'Patient', MergePatientsSchema, 'MergePatients'),
+    '/patients/merges/{mergeId}/reverse': post('Reverse a previous patient merge', 'Patient'),
+    '/patients/{id}/timeline': get('Read a patient’s timeline (appointments + tasks)', 'Patient', ['id']),
+    '/patients/{patientId}/identifiers': {
+      ...post('Add a patient identifier (e.g. MRN, scoped to an issuing organization)', 'Patient', CreatePatientIdentifierSchema, 'CreatePatientIdentifier'),
+      ...get('List a patient’s identifiers', 'Patient', ['patientId']),
+    },
+    '/patients/{patientId}/coverages': {
+      ...post('Add insurance coverage for a patient', 'Patient', CreateCoverageSchema, 'CreateCoverage'),
+      ...get('List a patient’s coverages', 'Patient', ['patientId']),
+    },
+    '/appointments': {
+      ...post('Book an appointment', 'Scheduling', CreateAppointmentSchema, 'CreateAppointment'),
+      ...get('List appointments in the caller’s tenant', 'Scheduling'),
+    },
+    '/appointments/{id}': get('Get an appointment by id', 'Scheduling', ['id']),
+    '/appointments/{id}/confirm': post('Confirm a scheduled appointment', 'Scheduling'),
+    '/appointments/{id}/check-in': post('Check in an appointment', 'Scheduling'),
+    '/appointments/{id}/cancel': post('Cancel an appointment', 'Scheduling', CancelAppointmentSchema, 'CancelAppointment'),
+    '/appointments/{id}/no-show': post('Mark an appointment as a no-show', 'Scheduling'),
+    '/tasks': {
+      ...post('Create a task', 'Tasks', CreateTaskSchema, 'CreateTask'),
+      ...get('List tasks in the caller’s tenant', 'Tasks'),
+    },
+    '/tasks/{id}': get('Get a task by id', 'Tasks', ['id']),
+    '/tasks/{id}/complete': post('Complete a task', 'Tasks'),
+    '/tasks/{id}/cancel': post('Cancel a task', 'Tasks'),
+    '/intake-form-templates': {
+      ...post('Create an intake form template', 'Intake', CreateIntakeFormTemplateSchema, 'CreateIntakeFormTemplate'),
+      ...get('List intake form templates', 'Intake'),
+    },
+    '/intake-form-templates/{id}': get('Get an intake form template by id', 'Intake', ['id']),
+    '/intake-form-responses': {
+      ...post('Create a draft intake form response', 'Intake', CreateIntakeFormResponseSchema, 'CreateIntakeFormResponse'),
+      ...get('List intake form responses', 'Intake'),
+    },
+    '/intake-form-responses/{id}': get('Get an intake form response by id', 'Intake', ['id']),
+    '/intake-form-responses/{id}/submit': post('Submit an intake form response', 'Intake', SubmitIntakeFormResponseSchema, 'SubmitIntakeFormResponse'),
   },
   components: {
     schemas: { ProblemDetail: problemDetail },

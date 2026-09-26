@@ -1,11 +1,15 @@
-# EHR Platform — Phase 1 (Platform Foundation)
+# EHR Platform — Phase 1 + 2 (Platform Foundation; Patient + Scheduling + Intake)
 
 Cloud-native ambulatory EHR + practice-management + revenue-cycle platform. This repository
-currently implements **Phase 1** of `EHR_BUILD_SPEC.md`'s build order (§26): the monorepo
-skeleton, tenant/workforce identity, the layered authorization model, audit + transactional
-outbox, a first-party auth adapter, a thin documents flow, and the platform's testing/CI/CD/
-observability scaffolding. Later phases (clinical chart, orders/results, RCM, AI, etc.) are not
-built yet — see the `README.md` in each reserved-but-empty folder for where it lands.
+currently implements **Phase 1** and **Phase 2** of `EHR_BUILD_SPEC.md`'s build order (§26).
+Phase 1: the monorepo skeleton, tenant/workforce identity, the layered authorization model,
+audit + transactional outbox, a first-party auth adapter, a thin documents flow, and the
+platform's testing/CI/CD/observability scaffolding. Phase 2: the patient registry (with a
+per-organization identifier table and a reversible duplicate-merge workflow — spec §5.3),
+insurance coverage basics, appointment scheduling through check-in (spec §11.1), a generic task
+queue, lightweight dynamic intake forms, and a read-only patient timeline shell. Later phases
+(clinical chart/encounters, orders/results, RCM, AI, etc.) are not built yet — see the
+`README.md` in each reserved-but-empty folder for where it lands.
 
 Read `EHR_BUILD_SPEC.md` and `EHR_REGULATORY_MANUAL.md` first — this README assumes their
 context. Three deliberate deviations from the spec's literal text are documented in
@@ -78,7 +82,9 @@ apps/           api (NestJS/Fastify), worker (outbox relay)
 packages/       config, domain-common, db, outbox, audit, authz, auth-adapter,
                 object-storage, observability, testing, api-contracts
 domains/        tenant (organizations/locations), workforce (users/practitioners),
-                documents (thin upload/download flow)
+                documents (thin upload/download flow), patient (registry/identifiers/coverage/
+                merge/timeline), scheduling (appointments), tasks, intake (form templates/
+                responses)
 docs/           adr/, api/openapi.json, deploy/railway.md
 infra/          terraform/, policies/, dashboards/ — all deferred, see their READMEs
 ```
@@ -99,6 +105,16 @@ infra/          terraform/, policies/, dashboards/ — all deferred, see their R
 - **MFA and real identity federation are structural stubs, not implemented.** Do not point this
   at real workforce credentials or real patient data — see ADR-0002 and
   `EHR_REGULATORY_MANUAL.md` §29's pre-pilot gate.
+- **Patient identity never uses an external identifier as the primary key** (spec §5.3) — `patients.id`
+  is the only stable key; MRNs and other external identifiers live in `patient_identifiers`,
+  scoped to the issuing organization. Duplicate detection (`GET /api/v1/patients/duplicates`) is
+  deterministic scoring only and never merges anything automatically — `POST
+  /api/v1/patients/{id}/merge` is an explicit human action, and it's reversible via `POST
+  /api/v1/patients/merges/{mergeId}/reverse` (`domains/patient`).
+- **The appointment status column is an explicit state machine**
+  (`domains/scheduling/src/appointment/appointment.service.ts`), not a free-text field — only the
+  states before an Encounter exists (Scheduled/Confirmed/CheckedIn, plus Cancelled/NoShow) are
+  implemented; Encounter-side states (Roomed, InProgress, Documentation, Signed, ...) are Phase 3+.
 
 ## Verification status
 
@@ -119,11 +135,23 @@ isolation was never actually being exercised by its own tests, and a NestJS+Fast
 incompatibility that meant `req.ehrContext` was being set on an object nothing downstream ever
 read). All are fixed — see that commit's message for the full list.
 
-Currently verified live, end to end, against a real Postgres: all 7 migrations, seeding, the
-full `test`/`test:integration`/`test:tenant-isolation` suite (73/73 Turborepo tasks) with Row-Level
-Security genuinely exercised (not just each repository's own `where tenant_id = ...` filter), and
-a full HTTP walkthrough — login, organization/location creation, listing, a cross-tenant read
-correctly returning 404 (never leaking that the row exists under another tenant), an
-unauthenticated request returning 403, every action landing in `audit_events` with the correct
-actor/outcome, every domain write landing in `outbox_events`, and `apps/worker` relaying all of
-them to `published`.
+Currently verified live, end to end, against a real Postgres: all 7 Phase 1 migrations, seeding,
+the full `test`/`test:integration`/`test:tenant-isolation` suite (73/73 Turborepo tasks) with
+Row-Level Security genuinely exercised (not just each repository's own `where tenant_id = ...`
+filter), and a full HTTP walkthrough — login, organization/location creation, listing, a
+cross-tenant read correctly returning 404 (never leaking that the row exists under another
+tenant), an unauthenticated request returning 403, every action landing in `audit_events` with
+the correct actor/outcome, every domain write landing in `outbox_events`, and `apps/worker`
+relaying all of them to `published`.
+
+**Phase 2** was verified the same way (`docker compose up -d` once Docker is available, or the
+same Docker-free `embedded-postgres` workaround): migrations `0008`–`0012` apply cleanly, the
+full `test`/`test:integration`/`test:tenant-isolation` suite is green across all four new
+packages (`@ehr/patient`, `@ehr/scheduling`, `@ehr/tasks`, `@ehr/intake`), and a full HTTP
+walkthrough covering the whole Phase 2 golden path: patient registration, adding an identifier
+and a coverage, booking → confirming → checking in an appointment, creating and completing a
+task, creating an intake template and submitting a response, reading the patient timeline
+(correctly aggregating the appointment and task), running the duplicate-candidate search against
+two similar patients (scored 70/100 on exact DOB + name match), merging them, and reversing that
+merge — every step producing the expected `audit_events`/`outbox_events` rows, with cross-tenant
+reads correctly returning 404 throughout.

@@ -38,6 +38,14 @@ export const PERMISSION_KEYS = {
   AUDIT_READ: 'audit.read',
   API_MANAGE_CLIENTS: 'api.manage_clients',
   BREAKGLASS_INVOKE: 'breakglass.invoke',
+  PATIENT_READ_DEMOGRAPHICS: 'patient.read.demographics',
+  PATIENT_WRITE_DEMOGRAPHICS: 'patient.write.demographics',
+  PATIENT_MERGE: 'patient.merge',
+  COVERAGE_MANAGE: 'coverage.manage',
+  APPOINTMENT_MANAGE: 'appointment.manage',
+  TASK_MANAGE: 'task.manage',
+  INTAKE_FORM_MANAGE: 'intake_form.manage',
+  INTAKE_RESPONSE_MANAGE: 'intake_response.manage',
 } as const;
 
 export interface SeededTenant {
