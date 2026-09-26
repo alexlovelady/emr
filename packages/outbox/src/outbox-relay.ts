@@ -39,7 +39,11 @@ export class OutboxRelay {
   start(): void {
     if (this.timer) return;
     this.timer = setInterval(() => {
-      void this.tick();
+      // A tick failure (e.g. the database being temporarily unreachable) must not crash the
+      // whole worker process via an unhandled rejection — log it and let the next tick retry.
+      this.tick().catch((err: unknown) => {
+        console.error('[OutboxRelay] tick failed, will retry next interval:', err);
+      });
     }, this.options.pollIntervalMs);
   }
 

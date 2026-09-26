@@ -1,0 +1,97 @@
+import { createServer } from 'node:http';
+import { Kysely, PostgresDialect } from 'kysely';
+import { Pool } from 'pg';
+import { getConfig } from '@ehr/config';
+import type { DB } from '@ehr/db';
+import { DomainEventBus, OutboxRelay } from '@ehr/outbox';
+import { startTracing, createLogger, getMetrics } from '@ehr/observability';
+
+/**
+ * Connects via DATABASE_URL (the bootstrap/owner role), not APP_DATABASE_URL — see
+ * OutboxRelay's own doc comment for why: it reads/updates outbox bookkeeping across every
+ * tenant in one loop, which the tenant-scoped, RLS-enforcing `ehr_app` role cannot do.
+ */
+async function main(): Promise<void> {
+  const env = getConfig();
+
+  startTracing({
+    serviceName: 'ehr-worker',
+    ...(env.OTEL_EXPORTER_OTLP_ENDPOINT ? { otlpEndpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT } : {}),
+  });
+  const logger = createLogger({ level: env.LOG_LEVEL, serviceName: 'ehr-worker' });
+  const metrics = getMetrics('ehr-worker');
+
+  const db = new Kysely<DB>({
+    dialect: new PostgresDialect({ pool: new Pool({ connectionString: env.DATABASE_URL }) }),
+  });
+  const bus = new DomainEventBus();
+  const relay = new OutboxRelay(db, bus, {
+    pollIntervalMs: env.OUTBOX_RELAY_POLL_INTERVAL_MS,
+    batchSize: env.OUTBOX_RELAY_BATCH_SIZE,
+  });
+
+  bus.on('*', (event) => {
+    logger.debug({ eventType: event.event_type, aggregateId: event.aggregate_id }, 'domain event published');
+  });
+
+  // Both callbacks must never throw — a transient DB outage must not take down metrics
+  // collection (or, via an unhandled rejection, the whole worker process).
+  metrics.outboxPendingCount.addCallback(async (result) => {
+    try {
+      const row = await db
+        .selectFrom('outbox_events')
+        .select(({ fn }) => fn.countAll<string>().as('count'))
+        .where('status', '=', 'pending')
+        .executeTakeFirst();
+      result.observe(Number(row?.count ?? 0));
+    } catch (err) {
+      logger.warn({ err }, 'failed to collect outbox_pending_count');
+    }
+  });
+
+  metrics.outboxRelayLagSeconds.addCallback(async (result) => {
+    try {
+      const row = await db
+        .selectFrom('outbox_events')
+        .select('created_at')
+        .where('status', '=', 'pending')
+        .orderBy('created_at', 'asc')
+        .limit(1)
+        .executeTakeFirst();
+      const lagSeconds = row ? (Date.now() - row.created_at.getTime()) / 1000 : 0;
+      result.observe(lagSeconds);
+    } catch (err) {
+      logger.warn({ err }, 'failed to collect outbox_relay_lag_seconds');
+    }
+  });
+
+  relay.start();
+  logger.info({ pollIntervalMs: env.OUTBOX_RELAY_POLL_INTERVAL_MS }, 'outbox relay started');
+
+  const server = createServer((req, res) => {
+    if (req.url === '/healthz') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }));
+      return;
+    }
+    res.writeHead(404).end();
+  });
+  server.listen(env.WORKER_PORT, '0.0.0.0', () => {
+    logger.info({ port: env.WORKER_PORT }, 'apps/worker health endpoint listening');
+  });
+
+  const shutdown = async (signal: string): Promise<void> => {
+    logger.info({ signal }, 'apps/worker shutting down');
+    relay.stop();
+    server.close();
+    await db.destroy();
+    process.exit(0);
+  };
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
+  process.on('SIGINT', () => void shutdown('SIGINT'));
+}
+
+main().catch((err: unknown) => {
+  console.error('[apps/worker] fatal error during startup:', err);
+  process.exit(1);
+});
