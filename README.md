@@ -100,24 +100,30 @@ infra/          terraform/, policies/, dashboards/ — all deferred, see their R
   at real workforce credentials or real patient data — see ADR-0002 and
   `EHR_REGULATORY_MANUAL.md` §29's pre-pilot gate.
 
-## What's NOT verified yet
+## Verification status
 
-This environment could not run Docker during Phase 1 development (the Docker Desktop backend
-would not start), so `docker compose up`, the migrations, the seed script, and every
-`test:integration`/`test:tenant-isolation` suite are written and typecheck cleanly but have
-**not been run against a live Postgres**. Before relying on this as a working foundation, run:
+Docker Desktop's backend would not start in the environment this was built in (its WSL2
+integration was crash-looping on a corrupted socket file — a local machine issue, not a project
+one), so initial development verified everything it could without it (full build/typecheck/lint/
+unit tests, a live NestJS DI bootstrap, `/healthz`, `/.well-known/jwks.json`, a 403 for
+unauthenticated requests) but left migrations, seeding, and the `test:integration`/
+`test:tenant-isolation` suites unverified against a real database.
 
-```bash
-docker compose up -d
-pnpm --filter @ehr/db migrate:latest
-pnpm --filter @ehr/db seed
-pnpm turbo run test:integration test:tenant-isolation
-```
+That gap has since been closed — using a temporary Docker-free Postgres (the `embedded-postgres`
+npm package; equally, `docker compose up -d` works the same way once Docker is available) rather
+than waiting on Docker further. Doing this for the first time surfaced several real bugs pure
+typechecking couldn't have caught (a Windows-only ESM path bug in the migrator, an unrecognized
+`citext` column type, `turbo.json` silently dropping `DATABASE_URL` from task environments, a
+test harness that connected as the RLS-bypassing owner role instead of `ehr_app` — so tenant
+isolation was never actually being exercised by its own tests, and a NestJS+Fastify middleware
+incompatibility that meant `req.ehrContext` was being set on an object nothing downstream ever
+read). All are fixed — see that commit's message for the full list.
 
-Everything that could be verified without Docker was: full monorepo build/typecheck/lint/unit
-tests (all green), a live NestJS DI bootstrap of `apps/api` and `apps/worker` (no live DB
-needed — Kysely's connection pool is lazy), `GET /healthz`, `GET /.well-known/jwks.json`, an
-unauthenticated request to a protected route returning a correct 403, and a login request
-reaching a real `ECONNREFUSED` against Postgres (proving the whole pipeline up to the database
-boundary is wired correctly). The outbox relay's resilience to a database outage was also
-verified live (see the corresponding commit).
+Currently verified live, end to end, against a real Postgres: all 7 migrations, seeding, the
+full `test`/`test:integration`/`test:tenant-isolation` suite (73/73 Turborepo tasks) with Row-Level
+Security genuinely exercised (not just each repository's own `where tenant_id = ...` filter), and
+a full HTTP walkthrough — login, organization/location creation, listing, a cross-tenant read
+correctly returning 404 (never leaking that the row exists under another tenant), an
+unauthenticated request returning 403, every action landing in `audit_events` with the correct
+actor/outcome, every domain write landing in `outbox_events`, and `apps/worker` relaying all of
+them to `published`.
