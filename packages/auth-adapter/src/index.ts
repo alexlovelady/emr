@@ -19,7 +19,9 @@ export {
   InvalidCredentialsError,
   InvalidMfaCodeError,
   type IdentityProvider,
+  type PasswordCredentialProvider,
   type AuthResult,
+  type ResolvedUser,
   type TokenPair,
   type MfaEnrollment,
 } from './identity-provider.js';

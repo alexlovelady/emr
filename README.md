@@ -624,11 +624,20 @@ and [`docs/adr/0006-clinician-web-bff-auth.md`](docs/adr/0006-clinician-web-bff-
   each boots cleanly with tracing/metrics initialized before Nest's own startup log, and an
   authenticated end-to-end request (login → `GET /patients`) still round-trips through the full
   guard/interceptor chain with fastify auto-instrumentation active.
-- **IdentityProvider is not yet refactored for SSO-readiness** — ADR-0002's own stated intent
-  (splitting "resolve which user this is" from "check this password" so a future federated
-  implementation doesn't need to accept a password at all) remains a real, tracked gap; no SSO
-  vendor is contracted (see `docs/ecw-athena-parity-manual-action-items.md`), and this specific
-  refactor wasn't reached this pass — a candidate for a future Phase L follow-up.
+- **`IdentityProvider` refactored for SSO-readiness**, per ADR-0002's own stated intent — no SSO
+  vendor is contracted yet (see `docs/ecw-athena-parity-manual-action-items.md`), so this is a pure
+  seam-cleaning refactor, not a working integration. `verifyCredentials(tenantSlug, email,
+  password)` was split into `resolveUser(tenantSlug, email)` (the only lookup step every provider
+  needs — a future SAML/OIDC provider resolves the user from its own signed assertion) and a new,
+  separate `PasswordCredentialProvider.checkPassword(userId, tenantId, password)` interface that
+  only a password-based provider implements — a federated provider is never forced to accept a
+  password at all. `FirstPartyIdentityProvider` implements both; `apps/api`'s `AuthService.login()`
+  now calls `resolveUser` then `checkPassword` as two explicit steps instead of one combined call.
+  `issueTokens`/`refresh`/`revoke`/`getJWKS`/the MFA methods are unchanged. Verified as a true
+  no-behavior-change refactor: full repo-wide lint/typecheck/build (144 tasks) and
+  test/test:integration/test:tenant-isolation (114 tasks) green, plus a live restart of `apps/api`
+  confirming a correct login, a wrong password, an unknown email, and an unknown tenant slug all
+  produce byte-for-byte the same responses as before the refactor.
 
 ## Verification status
 

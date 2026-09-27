@@ -24,6 +24,8 @@ export interface AuthResult {
   mfaEnrolled: boolean;
 }
 
+export type ResolvedUser = AuthResult;
+
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
@@ -42,9 +44,15 @@ export class InvalidMfaCodeError extends Error {}
  * through JWKS only (see packages/auth-adapter's tokens.ts `verifyAccessToken`) so swapping in a
  * real OIDC provider later never touches verification call sites — only this class's
  * implementation of `IdentityProvider` changes.
+ *
+ * `resolveUser` — "which user is this authentication event for" — is the only user-lookup step
+ * every provider must implement, password-based or federated: a future SAML/OIDC provider
+ * resolves the user from its own signed assertion and never needs `checkPassword` at all. Password
+ * verification is split out into the separate `PasswordCredentialProvider` interface below so it
+ * isn't forced onto implementations that don't use passwords.
  */
 export interface IdentityProvider {
-  verifyCredentials(tenantSlug: string, email: string, password: string): Promise<AuthResult>;
+  resolveUser(tenantSlug: string, email: string): Promise<ResolvedUser>;
   issueTokens(userId: string, tenantId: string): Promise<TokenPair>;
   refresh(refreshToken: string): Promise<TokenPair>;
   revoke(refreshToken: string): Promise<void>;
@@ -60,14 +68,23 @@ export interface IdentityProvider {
   verifyMfaChallenge(userId: string, tenantId: string, code: string): Promise<boolean>;
 }
 
-export class FirstPartyIdentityProvider implements IdentityProvider {
+/**
+ * The password-checking half of authentication — deliberately not part of `IdentityProvider`
+ * itself, since a federated provider (SAML/OIDC) proves identity via its own signed assertion in
+ * `resolveUser` and never needs to accept or check a password.
+ */
+export interface PasswordCredentialProvider {
+  checkPassword(userId: string, tenantId: string, password: string): Promise<boolean>;
+}
+
+export class FirstPartyIdentityProvider implements IdentityProvider, PasswordCredentialProvider {
   constructor(
     private readonly db: Kysely<DB>,
     private readonly keys: KeyMaterial,
     private readonly config: TokenIssuerConfig & { refreshTokenTtlSeconds: number },
   ) {}
 
-  async verifyCredentials(tenantSlug: string, email: string, password: string): Promise<AuthResult> {
+  async resolveUser(tenantSlug: string, email: string): Promise<ResolvedUser> {
     const tenant = await withSystemContext(this.db, (trx) =>
       trx
         .selectFrom('tenants')
@@ -81,7 +98,7 @@ export class FirstPartyIdentityProvider implements IdentityProvider {
     const user = await withTenantContext(this.db, tenant.id, (trx) =>
       trx
         .selectFrom('users')
-        .select(['id', 'password_hash', 'status', 'mfa_enrolled'])
+        .select(['id', 'status', 'mfa_enrolled'])
         .where('email', '=', email)
         .executeTakeFirst(),
     );
@@ -91,10 +108,15 @@ export class FirstPartyIdentityProvider implements IdentityProvider {
       throw new InvalidCredentialsError('Unknown tenant, or invalid email/password');
     }
 
-    const valid = await argon2.verify(user.password_hash, password);
-    if (!valid) throw new InvalidCredentialsError('Unknown tenant, or invalid email/password');
-
     return { userId: user.id, tenantId: tenant.id, mfaEnrolled: user.mfa_enrolled };
+  }
+
+  async checkPassword(userId: string, tenantId: string, password: string): Promise<boolean> {
+    const user = await withTenantContext(this.db, tenantId, (trx) =>
+      trx.selectFrom('users').select(['password_hash']).where('id', '=', userId).executeTakeFirst(),
+    );
+    if (!user) return false;
+    return argon2.verify(user.password_hash, password);
   }
 
   async issueTokens(userId: string, tenantId: string): Promise<TokenPair> {

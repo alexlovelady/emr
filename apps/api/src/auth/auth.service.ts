@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { Kysely } from 'kysely';
 import { withTenantContext, type DB } from '@ehr/db';
 import { recordAuditEvent } from '@ehr/audit';
-import type { IdentityProvider, MfaEnrollment, TokenPair } from '@ehr/auth-adapter';
+import { InvalidCredentialsError, type IdentityProvider, type MfaEnrollment, type PasswordCredentialProvider, type TokenPair } from '@ehr/auth-adapter';
 import { DB_CONNECTION, IDENTITY_PROVIDER } from '../common/tokens.js';
 
 export interface RequestMeta {
@@ -29,7 +29,7 @@ export type LoginResult = { mfaRequired: true; mfaPendingToken: string } | ({ mf
 @Injectable()
 export class AuthService {
   constructor(
-    @Inject(IDENTITY_PROVIDER) private readonly identityProvider: IdentityProvider,
+    @Inject(IDENTITY_PROVIDER) private readonly identityProvider: IdentityProvider & PasswordCredentialProvider,
     @Inject(DB_CONNECTION) private readonly db: Kysely<DB>,
   ) {}
 
@@ -37,9 +37,18 @@ export class AuthService {
    * Real MFA (2026-09-27 pass, replacing ADR-0002's structural stub): if the user has enrolled,
    * this returns a short-lived `mfaPendingToken` instead of real tokens — the caller must present
    * it plus a valid TOTP code to `completeMfaChallenge()` before getting a usable session.
+   *
+   * Resolves the user, then checks the password as two separate calls (per ADR-0002's
+   * SSO-readiness seam — `resolveUser` is the half a future federated provider would also
+   * implement; `checkPassword` is first-party-only) rather than one combined call.
    */
   async login(tenantSlug: string, email: string, password: string, meta: RequestMeta): Promise<LoginResult> {
-    const { userId, tenantId, mfaEnrolled } = await this.identityProvider.verifyCredentials(tenantSlug, email, password);
+    const { userId, tenantId, mfaEnrolled } = await this.identityProvider.resolveUser(tenantSlug, email);
+    const validPassword = await this.identityProvider.checkPassword(userId, tenantId, password);
+    if (!validPassword) {
+      // Same error/message as "unknown user" — do not reveal whether the email exists.
+      throw new InvalidCredentialsError('Unknown tenant, or invalid email/password');
+    }
 
     if (mfaEnrolled) {
       const mfaPendingToken = await this.identityProvider.issueMfaPendingToken(userId, tenantId);

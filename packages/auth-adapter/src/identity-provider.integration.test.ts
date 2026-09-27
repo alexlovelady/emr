@@ -46,26 +46,26 @@ describe('FirstPartyIdentityProvider (integration)', () => {
     await appDb.destroy();
   });
 
-  it('verifies correct credentials for a seeded user', async () => {
-    const result = await provider.verifyCredentials(seed.tenantA.slug, seed.tenantA.adminEmail, DEV_PASSWORD);
+  it('resolves a seeded user and confirms their password', async () => {
+    const result = await provider.resolveUser(seed.tenantA.slug, seed.tenantA.adminEmail);
     expect(result).toEqual({ userId: seed.tenantA.adminUserId, tenantId: seed.tenantA.tenantId, mfaEnrolled: false });
+    expect(await provider.checkPassword(result.userId, result.tenantId, DEV_PASSWORD)).toBe(true);
   });
 
   it('rejects the wrong password', async () => {
-    await expect(
-      provider.verifyCredentials(seed.tenantA.slug, seed.tenantA.adminEmail, 'wrong-password'),
-    ).rejects.toBeInstanceOf(InvalidCredentialsError);
+    const result = await provider.resolveUser(seed.tenantA.slug, seed.tenantA.adminEmail);
+    expect(await provider.checkPassword(result.userId, result.tenantId, 'wrong-password')).toBe(false);
   });
 
   it('rejects an unknown tenant slug', async () => {
     await expect(
-      provider.verifyCredentials('no-such-tenant', seed.tenantA.adminEmail, DEV_PASSWORD),
+      provider.resolveUser('no-such-tenant', seed.tenantA.adminEmail),
     ).rejects.toBeInstanceOf(InvalidCredentialsError);
   });
 
   it('rejects a real email under the wrong tenant', async () => {
     await expect(
-      provider.verifyCredentials(seed.tenantB.slug, seed.tenantA.adminEmail, DEV_PASSWORD),
+      provider.resolveUser(seed.tenantB.slug, seed.tenantA.adminEmail),
     ).rejects.toBeInstanceOf(InvalidCredentialsError);
   });
 
@@ -113,7 +113,7 @@ describe('FirstPartyIdentityProvider (integration)', () => {
     });
 
     it('walks the full enroll -> confirm -> challenge lifecycle', async () => {
-      const before = await provider.verifyCredentials(seed.tenantA.slug, seed.tenantA.staffEmail, DEV_PASSWORD);
+      const before = await provider.resolveUser(seed.tenantA.slug, seed.tenantA.staffEmail);
       expect(before.mfaEnrolled).toBe(false);
 
       const enrollment = await provider.startMfaEnrollment(seed.tenantA.staffUserId, seed.tenantA.tenantId, seed.tenantA.staffEmail);
@@ -129,7 +129,7 @@ describe('FirstPartyIdentityProvider (integration)', () => {
 
       await provider.confirmMfaEnrollment(seed.tenantA.staffUserId, seed.tenantA.tenantId, authenticator.generate(enrollment.secret));
 
-      const after = await provider.verifyCredentials(seed.tenantA.slug, seed.tenantA.staffEmail, DEV_PASSWORD);
+      const after = await provider.resolveUser(seed.tenantA.slug, seed.tenantA.staffEmail);
       expect(after.mfaEnrolled).toBe(true);
 
       expect(await provider.verifyMfaChallenge(seed.tenantA.staffUserId, seed.tenantA.tenantId, '000000')).toBe(false);
