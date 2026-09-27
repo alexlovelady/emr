@@ -61,6 +61,8 @@ export interface SignedNote {
 
 export interface DiagnosticReport {
   id: string;
+  patientId: string;
+  encounterId: string;
   displayName: string;
   issuedAt: string;
   reviewStatus: string;
@@ -77,6 +79,99 @@ export interface Appointment {
   scheduledStart: string;
   scheduledEnd: string;
   status: string;
+}
+
+export interface Encounter {
+  id: string;
+  patientId: string;
+  appointmentId: string;
+  practitionerId: string;
+  locationId: string;
+  encounterType: string;
+  chiefComplaint: string | null;
+  status: 'roomed' | 'in_progress' | 'documentation' | 'signed' | 'coding_review';
+  startedAt: string;
+  endedAt: string | null;
+}
+
+export interface Note {
+  id: string;
+  encounterId: string;
+  patientId: string;
+  templateId: string | null;
+  noteType: string;
+  content: Record<string, string>;
+  amendsNoteId: string | null;
+  signedAt: string | null;
+  signedBy: string | null;
+  voidReason: string | null;
+  status: 'draft' | 'ready_for_review' | 'signed' | 'voided' | 'entered_in_error';
+}
+
+export interface NoteTemplateSection {
+  key: string;
+  label: string;
+  defaultText: string | null;
+}
+
+export interface NoteTemplate {
+  id: string;
+  name: string;
+  sections: NoteTemplateSection[];
+}
+
+export interface Order {
+  id: string;
+  patientId: string;
+  encounterId: string;
+  orderingPractitionerId: string;
+  orderType: string;
+  displayName: string;
+  priority: 'routine' | 'urgent' | 'stat';
+  status: string;
+}
+
+export interface Prescription {
+  id: string;
+  patientId: string;
+  medicationId: string;
+  encounterId: string | null;
+  prescriberId: string;
+  medicationName?: string;
+  pharmacyName: string;
+  quantity: string;
+  daysSupply: number | null;
+  refillsAuthorized: number;
+  refillsRemaining: number;
+  directions: string;
+  isControlledSubstance: boolean;
+  deaSchedule: string | null;
+  status: string;
+}
+
+export interface RefillRequest {
+  id: string;
+  prescriptionId: string;
+  status: 'pending' | 'approved' | 'denied';
+}
+
+export interface Task {
+  id: string;
+  patientId: string | null;
+  assignedToUserId: string | null;
+  assignedToRoleId: string | null;
+  taskType: string;
+  title: string;
+  description: string | null;
+  dueAt: string | null;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  status: 'open' | 'completed' | 'cancelled';
+  relatedResourceType: string | null;
+  relatedResourceId: string | null;
+}
+
+export interface EffectivePermissions {
+  permissions: string[];
 }
 
 export interface ProblemDetails {

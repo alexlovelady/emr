@@ -1,13 +1,32 @@
+'use client';
+
+import { useTransition } from 'react';
+import { toast } from 'sonner';
 import { FlaskConical } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/chart/empty-state';
+import { usePermissions } from '@/components/providers/permissions-provider';
+import { PERMISSION_KEYS } from '@/lib/permission-keys';
+import { reviewDiagnosticReport } from '@/lib/actions/results';
 import type { DiagnosticReport } from '@/lib/types';
 
 /**
  * Staff see every review_status (including pending) — unlike the patient portal, which
  * deliberately filters to reviewed-only results (Phase 8's ADR on result release).
  */
-export function ResultsList({ reports }: { reports: DiagnosticReport[] }) {
+export function ResultsList({ reports, patientId }: { reports: DiagnosticReport[]; patientId: string }) {
+  const { has } = usePermissions();
+  const [isPending, startTransition] = useTransition();
+  const canReview = has(PERMISSION_KEYS.RESULT_REVIEW);
+
+  function onReview(id: string, reviewStatus: 'reviewed' | 'acknowledged') {
+    startTransition(async () => {
+      const result = await reviewDiagnosticReport(id, patientId, reviewStatus);
+      if (!result.ok) toast.error(result.error);
+    });
+  }
+
   if (reports.length === 0) {
     return <EmptyState icon={FlaskConical} message="No results recorded." />;
   }
@@ -28,6 +47,16 @@ export function ResultsList({ reports }: { reports: DiagnosticReport[] }) {
             {r.criticalFlag && <Badge variant="destructive">critical</Badge>}
             {r.abnormalFlag && !r.criticalFlag && <Badge variant="warning">abnormal</Badge>}
             <Badge variant={r.reviewStatus === 'reviewed' ? 'success' : 'outline'}>{r.reviewStatus}</Badge>
+            {canReview && r.reviewStatus === 'pending' && (
+              <Button size="sm" variant="outline" disabled={isPending} onClick={() => onReview(r.id, 'reviewed')}>
+                Mark reviewed
+              </Button>
+            )}
+            {canReview && r.reviewStatus === 'reviewed' && (
+              <Button size="sm" variant="ghost" disabled={isPending} onClick={() => onReview(r.id, 'acknowledged')}>
+                Acknowledge
+              </Button>
+            )}
           </div>
         </li>
       ))}

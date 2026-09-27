@@ -82,6 +82,26 @@ describe('AuditInterceptor', () => {
     expect(envelope).toMatchObject({ outcome: 'failure', resource: { type: 'Location', id: 'loc-1' } });
   });
 
+  it('rethrows the original error, not a masking one, when no transaction was ever opened', async () => {
+    // @SkipAuthz self-lookup routes (e.g. GET /auth/me, /auth/permissions) called with no/invalid
+    // token never get a transaction opened (RequestTransactionInterceptor only opens one once
+    // ehrContext.tenantId is known) — getCurrentTransaction() throws in that case, and that
+    // secondary throw must not replace the real ForbiddenError as what the caller sees.
+    getCurrentTransaction.mockImplementationOnce(() => {
+      throw new Error('getCurrentTransaction() called outside runWithRequestTransaction()');
+    });
+    const { context, reflector } = makeContext({
+      metadata: { [AUDIT_METADATA_KEY]: { action: 'auth.permissions', resourceType: 'User' } },
+      ehrContext: { tenantId: '', requestId: 'r1' },
+    });
+    const interceptor = new AuditInterceptor(reflector);
+    const forbidden = new Error('No authenticated actor on request');
+    const next: CallHandler = { handle: () => throwError(() => forbidden) };
+
+    await expect(firstValueFrom(interceptor.intercept(context, next))).rejects.toBe(forbidden);
+    expect(recordAuditEvent).not.toHaveBeenCalled();
+  });
+
   it('skips auditing entirely when @SkipAudit is set', async () => {
     const { context, reflector } = makeContext({ metadata: { [SKIP_AUDIT_METADATA_KEY]: true } });
     const interceptor = new AuditInterceptor(reflector);

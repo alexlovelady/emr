@@ -1,0 +1,21 @@
+/**
+ * Hand-mirrored string literals from `packages/db/src/seed-fixtures.ts`'s `PERMISSION_KEYS` — that
+ * package can't be imported client-side (pulls in `kysely`). Used only for UX-level hide/disable
+ * decisions via `usePermissions()`; the backend's own `@RequirePermission` is the real boundary.
+ */
+export const PERMISSION_KEYS = {
+  APPOINTMENT_MANAGE: 'appointment.manage',
+  TASK_MANAGE: 'task.manage',
+  ENCOUNTER_CREATE: 'encounter.create',
+  ENCOUNTER_SIGN: 'encounter.sign',
+  NOTE_CREATE: 'note.create',
+  NOTE_SIGN: 'note.sign',
+  PROBLEM_MANAGE: 'problem.manage',
+  ALLERGY_MANAGE: 'allergy.manage',
+  MEDICATION_MANAGE: 'medication.manage',
+  MEDICATION_PRESCRIBE: 'medication.prescribe',
+  CONTROLLED_SUBSTANCE_PRESCRIBE: 'controlled_substance.prescribe',
+  ORDER_MANAGE: 'order.manage',
+  RESULT_MANAGE: 'result.manage',
+  RESULT_REVIEW: 'result.review',
+} as const;

@@ -144,6 +144,7 @@ const document = {
     '/auth/refresh': post('Rotate a refresh token for a new access/refresh pair', 'Auth', RefreshSchema, 'Refresh'),
     '/auth/logout': post('Revoke a refresh token', 'Auth', RefreshSchema, 'Logout'),
     '/auth/me': get('Get the caller’s own user record (no permission required beyond a valid token)', 'Auth'),
+    '/auth/permissions': get('Get the caller’s own effective permission set (no permission required beyond a valid token)', 'Auth'),
     '/auth/mfa/challenge': {
       post: {
         summary: 'MFA challenge (structural stub — always 501, see ADR-0002)',

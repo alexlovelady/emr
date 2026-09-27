@@ -6,7 +6,7 @@ import { AllergiesPanel } from '@/components/chart/allergies-panel';
 import { MedicationsPanel } from '@/components/chart/medications-panel';
 import { ResultsList } from '@/components/chart/results-list';
 import { NotesList } from '@/components/chart/notes-list';
-import type { Allergy, DiagnosticReport, MedicationItem, Problem, SignedNote } from '@/lib/types';
+import type { Allergy, DiagnosticReport, MedicationItem, Prescription, Problem, SignedNote } from '@/lib/types';
 
 function StatChip({ icon: Icon, label, count, tone }: { icon: typeof Stethoscope; label: string; count: number; tone: 'default' | 'warn' }) {
   return (
@@ -21,14 +21,16 @@ function StatChip({ icon: Icon, label, count, tone }: { icon: typeof Stethoscope
 }
 
 interface ChartTabsProps {
+  patientId: string;
   problems: Problem[];
   allergies: Allergy[];
   medications: MedicationItem[];
+  prescriptions: Prescription[];
   results: DiagnosticReport[];
   notes: SignedNote[];
 }
 
-export function ChartTabs({ problems, allergies, medications, results, notes }: ChartTabsProps) {
+export function ChartTabs({ patientId, problems, allergies, medications, prescriptions, results, notes }: ChartTabsProps) {
   const activeProblems = problems.filter((p) => p.status !== 'deleted' && p.clinicalStatus === 'active').length;
   const activeAllergies = allergies.filter((a) => a.status !== 'deleted').length;
   const activeMeds = medications.filter((m) => m.status !== 'deleted' && m.status === 'active').length;
@@ -64,16 +66,16 @@ export function ChartTabs({ problems, allergies, medications, results, notes }: 
               </TabsTrigger>
             </TabsList>
             <TabsContent value="problems">
-              <ProblemsPanel problems={problems} />
+              <ProblemsPanel problems={problems} patientId={patientId} />
             </TabsContent>
             <TabsContent value="medications">
-              <MedicationsPanel medications={medications} />
+              <MedicationsPanel medications={medications} prescriptions={prescriptions} patientId={patientId} />
             </TabsContent>
             <TabsContent value="allergies">
-              <AllergiesPanel allergies={allergies} />
+              <AllergiesPanel allergies={allergies} patientId={patientId} />
             </TabsContent>
             <TabsContent value="results">
-              <ResultsList reports={results} />
+              <ResultsList reports={results} patientId={patientId} />
             </TabsContent>
             <TabsContent value="notes">
               <NotesList notes={notes} />

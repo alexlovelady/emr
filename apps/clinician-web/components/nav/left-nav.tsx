@@ -2,14 +2,18 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Activity, CalendarDays, LogOut, Users } from 'lucide-react';
+import { Activity, CalendarDays, FlaskConical, ListChecks, LogOut, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { usePermissions } from '@/components/providers/permissions-provider';
+import { PERMISSION_KEYS } from '@/lib/permission-keys';
 import type { CurrentUser } from '@/lib/types';
 
 const LINKS = [
-  { href: '/patients', label: 'Patients', icon: Users },
-  { href: '/schedule', label: 'Schedule', icon: CalendarDays },
-];
+  { href: '/patients', label: 'Patients', icon: Users, permission: null },
+  { href: '/schedule', label: 'Schedule', icon: CalendarDays, permission: null },
+  { href: '/results-inbox', label: 'Results inbox', icon: FlaskConical, permission: PERMISSION_KEYS.RESULT_REVIEW },
+  { href: '/tasks', label: 'Tasks', icon: ListChecks, permission: PERMISSION_KEYS.TASK_MANAGE },
+] as const;
 
 function initials(email: string): string {
   const name = email.split('@')[0] ?? '';
@@ -21,6 +25,8 @@ function initials(email: string): string {
 export function LeftNav({ user }: { user: CurrentUser }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { has } = usePermissions();
+  const links = LINKS.filter((link) => link.permission === null || has(link.permission));
 
   async function onLogout() {
     await fetch('/api/logout', { method: 'POST' });
@@ -41,7 +47,7 @@ export function LeftNav({ user }: { user: CurrentUser }) {
         <div className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-sidebar-muted">
           Clinical
         </div>
-        {LINKS.map((link) => {
+        {links.map((link) => {
           const Icon = link.icon;
           const active = pathname.startsWith(link.href);
           return (

@@ -86,8 +86,18 @@ export class AuditInterceptor implements NestInterceptor {
       ),
       catchError((err: unknown) => {
         const outcome = err instanceof ForbiddenError ? 'denied' : 'failure';
+        let trx;
+        try {
+          trx = getCurrentTransaction();
+        } catch {
+          // No transaction was ever opened for this request — RequestTransactionInterceptor only
+          // opens one once ehrContext.tenantId is known, so a @SkipAuthz self-lookup route
+          // (e.g. /auth/me, /auth/permissions) called with no/invalid token fails here with
+          // nothing to audit against. Don't let that secondary failure mask the real error.
+          return throwError(() => err);
+        }
         return from(
-          recordAuditEvent(getCurrentTransaction(), {
+          recordAuditEvent(trx, {
             ...base,
             resource: { type: meta.resourceType, id: extractResourceId(undefined, req.params) },
             outcome,

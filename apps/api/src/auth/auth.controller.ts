@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Body, Controller, Get, HttpCode, Inject, NotImplementedException, Post, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { Audited, SkipAudit } from '@ehr/audit';
-import { SkipAuthz } from '@ehr/authz';
+import { SkipAuthz, getEffectivePermissions } from '@ehr/authz';
 import { ForbiddenError, type RequestContext } from '@ehr/domain-common';
 import { getCurrentTransaction } from '@ehr/db';
 import type { IdentityProvider } from '@ehr/auth-adapter';
@@ -86,6 +86,23 @@ export class AuthController {
     const ctx = requireCtx(req);
     if (!ctx.actor) throw new ForbiddenError('No authenticated actor on request');
     return this.userService.getById(getCurrentTransaction(), ctx, ctx.actor.id);
+  }
+
+  /**
+   * The caller's own effective permission set — for the frontend to hide/disable actions it
+   * can't use, not a new authorization boundary (every write endpoint still enforces its own
+   * `@RequirePermission` regardless of what this returns). Self-lookup only, same reasoning as
+   * `me()`. Deliberately a fresh DB read every call, never cached/embedded in the JWT — see
+   * `getEffectivePermissions`'s doc comment.
+   */
+  @Get('permissions')
+  @SkipAuthz()
+  @Audited('auth.permissions', 'User')
+  async permissions(@Req() req: FastifyRequest): Promise<{ permissions: string[] }> {
+    const ctx = requireCtx(req);
+    if (!ctx.actor) throw new ForbiddenError('No authenticated actor on request');
+    const permissions = await getEffectivePermissions(getCurrentTransaction(), ctx.tenantId, ctx.actor.id);
+    return { permissions };
   }
 }
 

@@ -3,6 +3,7 @@ import { CalendarDays, Stethoscope } from 'lucide-react';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/chart/empty-state';
+import { AppointmentRowActions } from '@/components/schedule/appointment-row-actions';
 import type { Appointment, Patient } from '@/lib/types';
 
 function timeOfDay(iso: string): string {
@@ -31,6 +32,7 @@ export function TodayScheduleTable({ appointments, patientsById }: { appointment
           <TableHead>Type</TableHead>
           <TableHead>Practitioner</TableHead>
           <TableHead>Status</TableHead>
+          <TableHead>Actions</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -59,6 +61,9 @@ export function TodayScheduleTable({ appointments, patientsById }: { appointment
               <TableCell className="font-mono text-xs text-muted-foreground">{appt.practitionerId.slice(0, 8)}…</TableCell>
               <TableCell>
                 <Badge variant={STATUS_VARIANT[appt.status] ?? 'outline'}>{appt.status.replace(/_/g, ' ')}</Badge>
+              </TableCell>
+              <TableCell>
+                <AppointmentRowActions appointment={appt} />
               </TableCell>
             </TableRow>
           );

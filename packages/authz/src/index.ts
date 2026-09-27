@@ -4,6 +4,7 @@ export { PolicyEngine, DEFAULT_LAYERS } from './policy-engine.js';
 export { tenantMembershipLayer } from './layers/tenant-membership.layer.js';
 export { userStatusLayer } from './layers/user-status.layer.js';
 export { rolePermissionLayer, ROLE_PERMISSION_LAYER_NAME } from './layers/role-permission.layer.js';
+export { getEffectivePermissions } from './effective-permissions.js';
 export {
   resourceRelationshipLayer,
   purposeSensitivityLayer,
