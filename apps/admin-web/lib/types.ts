@@ -28,6 +28,11 @@ export interface LocationRow {
   organizationId: string;
   name: string;
   timeZone: string;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  state: string | null;
+  postalCode: string | null;
   status: string;
   createdAt: string;
 }
@@ -35,11 +40,22 @@ export interface LocationRow {
 export interface PractitionerRow {
   id: string;
   workforceIdentityId: string;
+  organizationId: string;
   displayName: string;
   npi: string | null;
   taxonomyCode: string | null;
   status: string;
   createdAt: string;
+}
+
+export interface PractitionerRoleRow {
+  id: string;
+  practitionerId: string;
+  locationId: string;
+  roleId: string;
+  effectiveStart: string;
+  effectiveEnd: string | null;
+  status: string;
 }
 
 export interface UserRow {
@@ -64,6 +80,11 @@ export interface UserRoleRow {
   roleId: string;
   grantedAt: string;
   revokedAt: string | null;
+}
+
+export interface UserRoleGrant extends UserRoleRow {
+  roleKey: string;
+  roleDisplayName: string;
 }
 
 export interface ProblemDetails {

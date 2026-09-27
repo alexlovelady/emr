@@ -3,6 +3,7 @@ import { callBackend } from '@/lib/api-proxy';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { NewOrganizationDialog } from '@/components/organizations/new-organization-dialog';
+import { OrganizationRowActions } from '@/components/organizations/organization-row-actions';
 import type { OrganizationRow } from '@/lib/types';
 
 export default async function OrganizationsPage() {
@@ -31,6 +32,7 @@ export default async function OrganizationsPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>NPI</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -39,6 +41,9 @@ export default async function OrganizationsPage() {
                     <TableCell className="font-medium">{o.name}</TableCell>
                     <TableCell>{o.npi ?? '—'}</TableCell>
                     <TableCell>{o.status}</TableCell>
+                    <TableCell>
+                      <OrganizationRowActions organization={o} />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

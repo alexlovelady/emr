@@ -3,6 +3,7 @@ import { callBackend } from '@/lib/api-proxy';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { NewLocationDialog } from '@/components/locations/new-location-dialog';
+import { LocationRowActions } from '@/components/locations/location-row-actions';
 import type { LocationRow, OrganizationRow } from '@/lib/types';
 
 export default async function LocationsPage() {
@@ -37,8 +38,10 @@ export default async function LocationsPage() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Organization</TableHead>
+                  <TableHead>Address</TableHead>
                   <TableHead>Time zone</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -46,8 +49,12 @@ export default async function LocationsPage() {
                   <TableRow key={l.id}>
                     <TableCell className="font-medium">{l.name}</TableCell>
                     <TableCell>{orgName(l.organizationId)}</TableCell>
+                    <TableCell>{l.addressLine1 ? `${l.addressLine1}, ${l.city ?? ''} ${l.state ?? ''} ${l.postalCode ?? ''}` : '—'}</TableCell>
                     <TableCell>{l.timeZone}</TableCell>
                     <TableCell>{l.status}</TableCell>
+                    <TableCell>
+                      <LocationRowActions location={l} />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

@@ -1,12 +1,15 @@
 import type { Kysely, Transaction } from 'kysely';
 import type { DB } from '@ehr/db';
-import { ConflictError, NotFoundError, type RequestContext } from '@ehr/domain-common';
+import { ConflictError, NotFoundError, ValidationError, type RequestContext } from '@ehr/domain-common';
+import { PERMISSION_KEYS } from '@ehr/authz';
 import { buildOutboxInsert } from '@ehr/outbox';
-import type { AssignRoleInput } from './role.dto.js';
-import { RoleRepository, type RoleRow, type UserRoleRow } from './role.repository.js';
+import type { AssignRoleInput, CreateRoleInput, GrantPermissionInput } from './role.dto.js';
+import { RoleRepository, type RoleRow, type UserRoleGrant, type UserRoleRow } from './role.repository.js';
 import { UserRepository } from '../user/user.repository.js';
 
 type Executor = Kysely<DB> | Transaction<DB>;
+
+const VALID_PERMISSION_KEYS = new Set<string>(Object.values(PERMISSION_KEYS));
 
 export class RoleService {
   constructor(
@@ -16,6 +19,41 @@ export class RoleService {
 
   async list(trx: Executor): Promise<RoleRow[]> {
     return this.repo.list(trx);
+  }
+
+  async createRole(trx: Executor, input: CreateRoleInput): Promise<RoleRow> {
+    const existing = await this.repo.findByKey(trx, input.key);
+    if (existing) throw new ConflictError('A role with this key already exists', { key: input.key });
+    return this.repo.createRole(trx, input);
+  }
+
+  async listPermissions(trx: Executor, roleId: string): Promise<string[]> {
+    const role = await this.repo.findById(trx, roleId);
+    if (!role) throw new NotFoundError('Role not found', { roleId });
+    return this.repo.listPermissions(trx, roleId);
+  }
+
+  async grantPermission(trx: Executor, roleId: string, input: GrantPermissionInput): Promise<string[]> {
+    const role = await this.repo.findById(trx, roleId);
+    if (!role) throw new NotFoundError('Role not found', { roleId });
+    if (!VALID_PERMISSION_KEYS.has(input.permissionKey)) {
+      throw new ValidationError('Unknown permission key', { permissionKey: input.permissionKey });
+    }
+    await this.repo.grantPermission(trx, roleId, input.permissionKey);
+    return this.repo.listPermissions(trx, roleId);
+  }
+
+  async revokePermission(trx: Executor, roleId: string, permissionKey: string): Promise<string[]> {
+    const role = await this.repo.findById(trx, roleId);
+    if (!role) throw new NotFoundError('Role not found', { roleId });
+    await this.repo.revokePermission(trx, roleId, permissionKey);
+    return this.repo.listPermissions(trx, roleId);
+  }
+
+  async listGrantsForUser(trx: Executor, ctx: RequestContext, userId: string): Promise<UserRoleGrant[]> {
+    const user = await this.userRepo.findById(trx, ctx.tenantId, userId);
+    if (!user) throw new NotFoundError('User not found', { id: userId });
+    return this.repo.listActiveGrantsForUser(trx, ctx.tenantId, userId);
   }
 
   async assignToUser(trx: Executor, ctx: RequestContext, userId: string, input: AssignRoleInput): Promise<UserRoleRow> {

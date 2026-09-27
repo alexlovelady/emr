@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Building2, LogOut, MapPin, ShieldCheck, Stethoscope, Users } from 'lucide-react';
+import { Building2, LogOut, MapPin, ShieldCheck, Stethoscope, Users, KeyRound } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/components/providers/permissions-provider';
 import { PERMISSION_KEYS } from '@/lib/permission-keys';
@@ -13,6 +13,7 @@ const LINKS = [
   { href: '/locations', label: 'Locations', icon: MapPin, permission: PERMISSION_KEYS.LOCATION_MANAGE },
   { href: '/practitioners', label: 'Practitioners', icon: Stethoscope, permission: PERMISSION_KEYS.PRACTITIONER_MANAGE },
   { href: '/users', label: 'Users', icon: Users, permission: PERMISSION_KEYS.USER_MANAGE },
+  { href: '/roles', label: 'Roles', icon: KeyRound, permission: PERMISSION_KEYS.ROLE_MANAGE },
 ] as const;
 
 function initials(email: string): string {

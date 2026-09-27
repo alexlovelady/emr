@@ -36,7 +36,7 @@ export default [
     },
   },
   {
-    files: ['apps/clinician-web/**/*.{ts,tsx}', 'apps/admin-web/**/*.{ts,tsx}'],
+    files: ['apps/clinician-web/**/*.{ts,tsx}', 'apps/admin-web/**/*.{ts,tsx}', 'apps/patient-portal/**/*.{ts,tsx}'],
     languageOptions: {
       parserOptions: {
         ecmaFeatures: { jsx: true },

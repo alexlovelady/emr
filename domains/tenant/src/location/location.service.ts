@@ -1,9 +1,9 @@
 import type { Kysely, Transaction } from 'kysely';
 import type { DB } from '@ehr/db';
-import { NotFoundError, type RequestContext } from '@ehr/domain-common';
+import { ConflictError, NotFoundError, type RequestContext } from '@ehr/domain-common';
 import { buildOutboxInsert } from '@ehr/outbox';
 import { OrganizationRepository } from '../organization/organization.repository.js';
-import type { CreateLocationInput } from './location.dto.js';
+import type { CreateLocationInput, UpdateLocationInput } from './location.dto.js';
 import { LocationRepository, type LocationRow } from './location.repository.js';
 
 type Executor = Kysely<DB> | Transaction<DB>;
@@ -24,6 +24,11 @@ export class LocationService {
       organizationId: input.organizationId,
       name: input.name,
       timeZone: input.timeZone ?? 'America/New_York',
+      addressLine1: input.addressLine1 ?? null,
+      addressLine2: input.addressLine2 ?? null,
+      city: input.city ?? null,
+      state: input.state ?? null,
+      postalCode: input.postalCode ?? null,
       createdBy: actorId ?? ctx.tenantId,
     });
 
@@ -55,5 +60,20 @@ export class LocationService {
 
   async list(trx: Executor, ctx: RequestContext): Promise<LocationRow[]> {
     return this.repo.list(trx, ctx.tenantId);
+  }
+
+  async update(trx: Executor, ctx: RequestContext, id: string, input: UpdateLocationInput): Promise<LocationRow> {
+    await this.getById(trx, ctx, id);
+    const actorId = ctx.actor?.id ?? null;
+    return this.repo.update(trx, ctx.tenantId, id, { ...input, updatedBy: actorId ?? ctx.tenantId });
+  }
+
+  async deactivate(trx: Executor, ctx: RequestContext, id: string): Promise<LocationRow> {
+    const location = await this.getById(trx, ctx, id);
+    if (location.status !== 'active') {
+      throw new ConflictError('Location is not active', { id, status: location.status });
+    }
+    const actorId = ctx.actor?.id ?? null;
+    return this.repo.setStatus(trx, ctx.tenantId, id, 'inactive', actorId ?? ctx.tenantId);
   }
 }

@@ -1,8 +1,8 @@
 import type { Kysely, Transaction } from 'kysely';
 import type { DB } from '@ehr/db';
-import { NotFoundError, type RequestContext } from '@ehr/domain-common';
+import { ConflictError, NotFoundError, type RequestContext } from '@ehr/domain-common';
 import { buildOutboxInsert } from '@ehr/outbox';
-import type { CreatePractitionerInput } from './practitioner.dto.js';
+import type { CreatePractitionerInput, UpdatePractitionerInput } from './practitioner.dto.js';
 import { PractitionerRepository, type PractitionerRow } from './practitioner.repository.js';
 
 type Executor = Kysely<DB> | Transaction<DB>;
@@ -50,5 +50,23 @@ export class PractitionerService {
 
   async list(trx: Executor, ctx: RequestContext): Promise<PractitionerRow[]> {
     return this.repo.list(trx, ctx.tenantId);
+  }
+
+  async update(trx: Executor, ctx: RequestContext, id: string, input: UpdatePractitionerInput): Promise<PractitionerRow> {
+    await this.getById(trx, ctx, id);
+    const actorId = ctx.actor?.id ?? null;
+    return this.repo.update(trx, ctx.tenantId, id, {
+      ...input,
+      updatedBy: actorId ?? ctx.tenantId,
+    });
+  }
+
+  async deactivate(trx: Executor, ctx: RequestContext, id: string): Promise<PractitionerRow> {
+    const practitioner = await this.getById(trx, ctx, id);
+    if (practitioner.status !== 'active') {
+      throw new ConflictError('Practitioner is not active', { id, status: practitioner.status });
+    }
+    const actorId = ctx.actor?.id ?? null;
+    return this.repo.setStatus(trx, ctx.tenantId, id, 'inactive', actorId ?? ctx.tenantId);
   }
 }

@@ -1,11 +1,16 @@
-import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { getCurrentTransaction } from '@ehr/db';
 import { ForbiddenError, type RequestContext } from '@ehr/domain-common';
 import { Audited } from '@ehr/audit';
 import { PERMISSION_KEYS, RequirePermission } from '@ehr/authz';
 import { ZodValidationPipe } from '@ehr/api-contracts';
-import { CreateOrganizationSchema, type CreateOrganizationInput } from './organization.dto.js';
+import {
+  CreateOrganizationSchema,
+  UpdateOrganizationSchema,
+  type CreateOrganizationInput,
+  type UpdateOrganizationInput,
+} from './organization.dto.js';
 import { OrganizationService } from './organization.service.js';
 
 @Controller('api/v1/organizations')
@@ -31,6 +36,24 @@ export class OrganizationController {
   @Audited('organization.list', 'Organization')
   async list(@Req() req: FastifyRequest) {
     return this.service.list(getCurrentTransaction(), requireCtx(req));
+  }
+
+  @Patch(':id')
+  @RequirePermission(PERMISSION_KEYS.ORGANIZATION_MANAGE)
+  @Audited('organization.update', 'Organization')
+  async update(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(UpdateOrganizationSchema)) body: UpdateOrganizationInput,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.service.update(getCurrentTransaction(), requireCtx(req), id, body);
+  }
+
+  @Post(':id/deactivate')
+  @RequirePermission(PERMISSION_KEYS.ORGANIZATION_MANAGE)
+  @Audited('organization.deactivate', 'Organization')
+  async deactivate(@Param('id') id: string, @Req() req: FastifyRequest) {
+    return this.service.deactivate(getCurrentTransaction(), requireCtx(req), id);
   }
 }
 

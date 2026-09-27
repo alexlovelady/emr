@@ -8,3 +8,10 @@ export const CreatePractitionerSchema = z.object({
   taxonomyCode: z.string().max(50).nullish(),
 });
 export type CreatePractitionerInput = z.infer<typeof CreatePractitionerSchema>;
+
+export const UpdatePractitionerSchema = z.object({
+  displayName: z.string().min(1).max(300).optional(),
+  npi: z.string().regex(/^\d{10}$/).nullish(),
+  taxonomyCode: z.string().max(50).nullish(),
+});
+export type UpdatePractitionerInput = z.infer<typeof UpdatePractitionerSchema>;

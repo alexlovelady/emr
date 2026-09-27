@@ -87,8 +87,12 @@ export async function callBackend<T>(path: string, opts: CallOptions = {}): Prom
     throw new BackendError(res.status, problem);
   }
 
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  // Not every no-content NestJS handler sets @HttpCode(204) — a Promise<void> handler with the
+  // default POST status (201) also sends an empty body, and res.json() throws "Unexpected end of
+  // JSON input" on an empty string. Check the actual body instead of trusting the status code.
+  const text = await res.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text) as T;
 }
 
 /**

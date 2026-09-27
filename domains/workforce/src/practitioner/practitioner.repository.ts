@@ -5,6 +5,7 @@ export interface PractitionerRow {
   id: string;
   tenantId: string;
   workforceIdentityId: string;
+  organizationId: string;
   displayName: string;
   npi: string | null;
   taxonomyCode: string | null;
@@ -59,35 +60,79 @@ export class PractitionerRepository {
       .returningAll()
       .executeTakeFirstOrThrow();
 
-    return toRow(row);
+    return toRow(row, input.organizationId);
   }
 
   async findById(trx: Executor, tenantId: string, id: string): Promise<PractitionerRow | null> {
     const row = await trx
       .selectFrom('practitioners')
-      .selectAll()
-      .where('tenant_id', '=', tenantId)
-      .where('id', '=', id)
+      .innerJoin('workforce_identities', 'workforce_identities.id', 'practitioners.workforce_identity_id')
+      .selectAll('practitioners')
+      .select('workforce_identities.organization_id as organization_id')
+      .where('practitioners.tenant_id', '=', tenantId)
+      .where('practitioners.id', '=', id)
       .executeTakeFirst();
-    return row ? toRow(row) : null;
+    return row ? toRow(row, row.organization_id) : null;
   }
 
   async list(trx: Executor, tenantId: string): Promise<PractitionerRow[]> {
     const rows = await trx
       .selectFrom('practitioners')
-      .selectAll()
-      .where('tenant_id', '=', tenantId)
-      .orderBy('created_at', 'asc')
+      .innerJoin('workforce_identities', 'workforce_identities.id', 'practitioners.workforce_identity_id')
+      .selectAll('practitioners')
+      .select('workforce_identities.organization_id as organization_id')
+      .where('practitioners.tenant_id', '=', tenantId)
+      .orderBy('practitioners.created_at', 'asc')
       .execute();
-    return rows.map(toRow);
+    return rows.map((row) => toRow(row, row.organization_id));
+  }
+
+  async update(
+    trx: Executor,
+    tenantId: string,
+    id: string,
+    input: {
+      displayName?: string | undefined;
+      npi?: string | null | undefined;
+      taxonomyCode?: string | null | undefined;
+      updatedBy: string;
+    },
+  ): Promise<PractitionerRow> {
+    const row = await trx
+      .updateTable('practitioners')
+      .set({
+        ...(input.displayName !== undefined ? { display_name: input.displayName } : {}),
+        ...(input.npi !== undefined ? { npi: input.npi } : {}),
+        ...(input.taxonomyCode !== undefined ? { taxonomy_code: input.taxonomyCode } : {}),
+        updated_by: input.updatedBy,
+        updated_at: new Date(),
+      })
+      .where('tenant_id', '=', tenantId)
+      .where('id', '=', id)
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    const withOrg = await this.findById(trx, tenantId, row.id);
+    return withOrg!;
+  }
+
+  async setStatus(trx: Executor, tenantId: string, id: string, status: string, updatedBy: string): Promise<PractitionerRow> {
+    await trx
+      .updateTable('practitioners')
+      .set({ status, updated_by: updatedBy, updated_at: new Date() })
+      .where('tenant_id', '=', tenantId)
+      .where('id', '=', id)
+      .execute();
+    const withOrg = await this.findById(trx, tenantId, id);
+    return withOrg!;
   }
 }
 
-function toRow(dbRow: Selectable<DB['practitioners']>): PractitionerRow {
+function toRow(dbRow: Selectable<DB['practitioners']>, organizationId: string): PractitionerRow {
   return {
     id: dbRow.id,
     tenantId: dbRow.tenant_id,
     workforceIdentityId: dbRow.workforce_identity_id,
+    organizationId,
     displayName: dbRow.display_name,
     npi: dbRow.npi,
     taxonomyCode: dbRow.taxonomy_code,

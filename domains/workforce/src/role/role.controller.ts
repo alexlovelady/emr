@@ -5,7 +5,14 @@ import { ForbiddenError, type RequestContext } from '@ehr/domain-common';
 import { Audited } from '@ehr/audit';
 import { PERMISSION_KEYS, RequirePermission } from '@ehr/authz';
 import { ZodValidationPipe } from '@ehr/api-contracts';
-import { AssignRoleSchema, type AssignRoleInput } from './role.dto.js';
+import {
+  AssignRoleSchema,
+  CreateRoleSchema,
+  GrantPermissionSchema,
+  type AssignRoleInput,
+  type CreateRoleInput,
+  type GrantPermissionInput,
+} from './role.dto.js';
 import { RoleService } from './role.service.js';
 
 @Controller('api/v1')
@@ -17,6 +24,41 @@ export class RoleController {
   @Audited('role.list', 'Role')
   async list() {
     return this.service.list(getCurrentTransaction());
+  }
+
+  @Post('roles')
+  @RequirePermission(PERMISSION_KEYS.ROLE_MANAGE)
+  @Audited('role.create', 'Role')
+  async createRole(@Body(new ZodValidationPipe(CreateRoleSchema)) body: CreateRoleInput) {
+    return this.service.createRole(getCurrentTransaction(), body);
+  }
+
+  @Get('roles/:id/permissions')
+  @RequirePermission(PERMISSION_KEYS.ROLE_MANAGE)
+  @Audited('role.permissions.list', 'Role')
+  async listPermissions(@Param('id') id: string) {
+    return this.service.listPermissions(getCurrentTransaction(), id);
+  }
+
+  @Post('roles/:id/permissions')
+  @RequirePermission(PERMISSION_KEYS.ROLE_MANAGE)
+  @Audited('role.permissions.grant', 'Role')
+  async grantPermission(@Param('id') id: string, @Body(new ZodValidationPipe(GrantPermissionSchema)) body: GrantPermissionInput) {
+    return this.service.grantPermission(getCurrentTransaction(), id, body);
+  }
+
+  @Post('roles/:id/permissions/revoke')
+  @RequirePermission(PERMISSION_KEYS.ROLE_MANAGE)
+  @Audited('role.permissions.revoke', 'Role')
+  async revokePermission(@Param('id') id: string, @Body(new ZodValidationPipe(GrantPermissionSchema)) body: GrantPermissionInput) {
+    return this.service.revokePermission(getCurrentTransaction(), id, body.permissionKey);
+  }
+
+  @Get('users/:id/roles')
+  @RequirePermission(PERMISSION_KEYS.ROLE_MANAGE)
+  @Audited('user.roles.list', 'User')
+  async listUserRoles(@Param('id') id: string, @Req() req: FastifyRequest) {
+    return this.service.listGrantsForUser(getCurrentTransaction(), requireCtx(req), id);
   }
 
   @Post('users/:id/roles')

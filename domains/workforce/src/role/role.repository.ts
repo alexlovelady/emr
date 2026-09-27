@@ -19,6 +19,13 @@ export interface UserRoleRow {
   revokedAt: Date | null;
 }
 
+/** A user's active role grant, joined with the role's own key/displayName for display — what
+ * `GET /users/:id/roles` returns (no such listing endpoint existed before this pass). */
+export interface UserRoleGrant extends UserRoleRow {
+  roleKey: string;
+  roleDisplayName: string;
+}
+
 type Executor = Kysely<DB> | Transaction<DB>;
 
 /** `roles`/`role_permissions` are global system catalogs (no tenant_id) — see migration 0005's own
@@ -34,6 +41,41 @@ export class RoleRepository {
     return row ? toRoleRow(row) : null;
   }
 
+  async findById(trx: Executor, id: string): Promise<RoleRow | null> {
+    const row = await trx.selectFrom('roles').selectAll().where('id', '=', id).executeTakeFirst();
+    return row ? toRoleRow(row) : null;
+  }
+
+  async createRole(trx: Executor, input: { key: string; displayName: string }): Promise<RoleRow> {
+    const row = await trx
+      .insertInto('roles')
+      .values({ key: input.key, display_name: input.displayName, is_system: false })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return toRoleRow(row);
+  }
+
+  async listPermissions(trx: Executor, roleId: string): Promise<string[]> {
+    const rows = await trx.selectFrom('role_permissions').select('permission_key').where('role_id', '=', roleId).execute();
+    return rows.map((r) => r.permission_key);
+  }
+
+  async grantPermission(trx: Executor, roleId: string, permissionKey: string): Promise<void> {
+    await trx
+      .insertInto('role_permissions')
+      .values({ role_id: roleId, permission_key: permissionKey })
+      .onConflict((oc) => oc.columns(['role_id', 'permission_key']).doNothing())
+      .execute();
+  }
+
+  async revokePermission(trx: Executor, roleId: string, permissionKey: string): Promise<void> {
+    await trx
+      .deleteFrom('role_permissions')
+      .where('role_id', '=', roleId)
+      .where('permission_key', '=', permissionKey)
+      .execute();
+  }
+
   async findActiveGrant(trx: Executor, tenantId: string, userId: string, roleId: string): Promise<UserRoleRow | null> {
     const row = await trx
       .selectFrom('user_roles')
@@ -44,6 +86,20 @@ export class RoleRepository {
       .where('revoked_at', 'is', null)
       .executeTakeFirst();
     return row ? toUserRoleRow(row) : null;
+  }
+
+  async listActiveGrantsForUser(trx: Executor, tenantId: string, userId: string): Promise<UserRoleGrant[]> {
+    const rows = await trx
+      .selectFrom('user_roles')
+      .innerJoin('roles', 'roles.id', 'user_roles.role_id')
+      .selectAll('user_roles')
+      .select(['roles.key as role_key', 'roles.display_name as role_display_name'])
+      .where('user_roles.tenant_id', '=', tenantId)
+      .where('user_roles.user_id', '=', userId)
+      .where('user_roles.revoked_at', 'is', null)
+      .orderBy('user_roles.granted_at', 'asc')
+      .execute();
+    return rows.map((row) => ({ ...toUserRoleRow(row), roleKey: row.role_key, roleDisplayName: row.role_display_name }));
   }
 
   async grant(

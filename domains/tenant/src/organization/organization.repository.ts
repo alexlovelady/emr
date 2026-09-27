@@ -53,6 +53,38 @@ export class OrganizationRepository {
       .execute();
     return rows.map(toRow);
   }
+
+  async update(
+    trx: Executor,
+    tenantId: string,
+    id: string,
+    input: { name?: string | undefined; npi?: string | null | undefined; updatedBy: string },
+  ): Promise<OrganizationRow> {
+    const row = await trx
+      .updateTable('organizations')
+      .set({
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.npi !== undefined ? { npi: input.npi } : {}),
+        updated_by: input.updatedBy,
+        updated_at: new Date(),
+      })
+      .where('tenant_id', '=', tenantId)
+      .where('id', '=', id)
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return toRow(row);
+  }
+
+  async setStatus(trx: Executor, tenantId: string, id: string, status: string, updatedBy: string): Promise<OrganizationRow> {
+    const row = await trx
+      .updateTable('organizations')
+      .set({ status, updated_by: updatedBy, updated_at: new Date() })
+      .where('tenant_id', '=', tenantId)
+      .where('id', '=', id)
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return toRow(row);
+  }
 }
 
 function toRow(dbRow: Selectable<DB['organizations']>): OrganizationRow {

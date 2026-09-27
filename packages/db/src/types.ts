@@ -75,6 +75,11 @@ export interface LocationsTable extends CommonColumnsTable {
   organization_id: string;
   name: string;
   time_zone: string;
+  address_line1: string | null;
+  address_line2: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
 }
 
 export interface UsersTable extends CommonColumnsTable {

@@ -1,16 +1,18 @@
 import { Users } from 'lucide-react';
 import { callBackend } from '@/lib/api-proxy';
 import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { NewUserDialog } from '@/components/users/new-user-dialog';
 import { AssignRoleDialog } from '@/components/users/assign-role-dialog';
-import type { RoleRow, UserRow } from '@/lib/types';
+import type { RoleRow, UserRoleGrant, UserRow } from '@/lib/types';
 
 export default async function UsersPage() {
   const [users, roles] = await Promise.all([
     callBackend<UserRow[]>('/api/v1/users'),
     callBackend<RoleRow[]>('/api/v1/roles'),
   ]);
+  const grantsByUser = await Promise.all(users.map((u) => callBackend<UserRoleGrant[]>(`/api/v1/users/${u.id}/roles`)));
 
   return (
     <div className="space-y-6">
@@ -33,15 +35,27 @@ export default async function UsersPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Email</TableHead>
+                  <TableHead>Roles</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>MFA</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users.map((u) => (
+                {users.map((u, i) => (
                   <TableRow key={u.id}>
                     <TableCell className="font-medium">{u.email}</TableCell>
+                    <TableCell>
+                      {grantsByUser[i]!.length === 0 ? (
+                        <span className="text-xs text-muted-foreground">none</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {grantsByUser[i]!.map((g) => (
+                            <Badge key={g.id} variant="outline">{g.roleDisplayName}</Badge>
+                          ))}
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell>{u.status}</TableCell>
                     <TableCell>{u.mfaEnrolled ? 'Enrolled' : '—'}</TableCell>
                     <TableCell className="text-right">

@@ -3,14 +3,18 @@ import { callBackend } from '@/lib/api-proxy';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { NewPractitionerDialog } from '@/components/practitioners/new-practitioner-dialog';
-import type { OrganizationRow, PractitionerRow, UserRow } from '@/lib/types';
+import { PractitionerRowActions } from '@/components/practitioners/practitioner-row-actions';
+import type { LocationRow, OrganizationRow, PractitionerRow, RoleRow, UserRow } from '@/lib/types';
 
 export default async function PractitionersPage() {
-  const [practitioners, users, organizations] = await Promise.all([
+  const [practitioners, users, organizations, locations, roles] = await Promise.all([
     callBackend<PractitionerRow[]>('/api/v1/practitioners'),
     callBackend<UserRow[]>('/api/v1/users'),
     callBackend<OrganizationRow[]>('/api/v1/organizations'),
+    callBackend<LocationRow[]>('/api/v1/locations'),
+    callBackend<RoleRow[]>('/api/v1/roles'),
   ]);
+  const orgName = (id: string) => organizations.find((o) => o.id === id)?.name ?? id;
 
   return (
     <div className="space-y-6">
@@ -36,18 +40,24 @@ export default async function PractitionersPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
+                  <TableHead>Organization</TableHead>
                   <TableHead>NPI</TableHead>
                   <TableHead>Taxonomy code</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {practitioners.map((p) => (
                   <TableRow key={p.id}>
                     <TableCell className="font-medium">{p.displayName}</TableCell>
+                    <TableCell>{orgName(p.organizationId)}</TableCell>
                     <TableCell>{p.npi ?? '—'}</TableCell>
                     <TableCell>{p.taxonomyCode ?? '—'}</TableCell>
                     <TableCell>{p.status}</TableCell>
+                    <TableCell>
+                      <PractitionerRowActions practitioner={p} locations={locations} roles={roles} />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

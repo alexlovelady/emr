@@ -177,3 +177,16 @@ run alone. Run them sequentially, or `rm -rf .next` between a `build` and a subs
   `GET /governed-queries` list endpoint doesn't expose each query's parameter shape, so
   `components/reports/governed-queries-panel.tsx` has one hardcoded form per the 3 queries that exist
   server-side today. A 4th governed query added later would need a matching new form here.
+
+**Two real, shared bugs found while building `apps/patient-portal` (Phase F) — fixed here too, since
+`lib/api-proxy.ts`/`lib/actions/action-result.ts` are the same hand-copied code in all three web
+apps:**
+1. **`callBackend()` only special-cased HTTP 204 as "empty body"** — a `Promise<void>` NestJS handler
+   with no explicit `@HttpCode(204)` sends its default status (e.g. 201) with a genuinely empty body,
+   and `res.json()` throws `SyntaxError: Unexpected end of JSON input` on empty text. Fixed by reading
+   the response as text first and only parsing it as JSON if non-empty, regardless of status code.
+2. **`runAction()`'s error fallback (`err.problem?.title ?? err.message`) let an empty string through**
+   — the backend's generic exception filter returns `title: ""` for an unhandled non-HTTP error (e.g.
+   this dev environment's documented no-MinIO `ECONNREFUSED`), and `??` only falls back on
+   null/undefined, not `""`, so the UI rendered a blank `<Alert>`. Fixed with `||` instead, plus a
+   final generic fallback string.

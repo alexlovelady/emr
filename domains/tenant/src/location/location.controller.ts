@@ -1,11 +1,11 @@
-import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { getCurrentTransaction } from '@ehr/db';
 import { ForbiddenError, type RequestContext } from '@ehr/domain-common';
 import { Audited } from '@ehr/audit';
 import { PERMISSION_KEYS, RequirePermission } from '@ehr/authz';
 import { ZodValidationPipe } from '@ehr/api-contracts';
-import { CreateLocationSchema, type CreateLocationInput } from './location.dto.js';
+import { CreateLocationSchema, UpdateLocationSchema, type CreateLocationInput, type UpdateLocationInput } from './location.dto.js';
 import { LocationService } from './location.service.js';
 
 @Controller('api/v1/locations')
@@ -31,6 +31,24 @@ export class LocationController {
   @Audited('location.list', 'Location')
   async list(@Req() req: FastifyRequest) {
     return this.service.list(getCurrentTransaction(), requireCtx(req));
+  }
+
+  @Patch(':id')
+  @RequirePermission(PERMISSION_KEYS.LOCATION_MANAGE)
+  @Audited('location.update', 'Location')
+  async update(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(UpdateLocationSchema)) body: UpdateLocationInput,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.service.update(getCurrentTransaction(), requireCtx(req), id, body);
+  }
+
+  @Post(':id/deactivate')
+  @RequirePermission(PERMISSION_KEYS.LOCATION_MANAGE)
+  @Audited('location.deactivate', 'Location')
+  async deactivate(@Param('id') id: string, @Req() req: FastifyRequest) {
+    return this.service.deactivate(getCurrentTransaction(), requireCtx(req), id);
   }
 }
 

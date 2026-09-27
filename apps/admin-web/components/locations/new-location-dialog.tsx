@@ -9,8 +9,11 @@ import { Label } from '@/components/ui/label';
 import { Alert } from '@/components/ui/alert';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
-import { createLocation } from '@/lib/actions/locations';
+import { AddressFields } from './address-fields';
+import { createLocation, type LocationAddressInput } from '@/lib/actions/locations';
 import type { OrganizationRow } from '@/lib/types';
+
+const EMPTY_ADDRESS: LocationAddressInput = { addressLine1: '', addressLine2: '', city: '', state: '', postalCode: '' };
 
 export function NewLocationDialog({ organizations }: { organizations: OrganizationRow[] }) {
   const router = useRouter();
@@ -18,6 +21,7 @@ export function NewLocationDialog({ organizations }: { organizations: Organizati
   const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? '');
   const [name, setName] = useState('');
   const [timeZone, setTimeZone] = useState('');
+  const [address, setAddress] = useState<LocationAddressInput>(EMPTY_ADDRESS);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -29,7 +33,7 @@ export function NewLocationDialog({ organizations }: { organizations: Organizati
     }
     setSubmitting(true);
     setError(null);
-    const result = await createLocation(organizationId, name, timeZone);
+    const result = await createLocation(organizationId, name, timeZone, address);
     setSubmitting(false);
     if (!result.ok) {
       setError(result.error);
@@ -38,6 +42,7 @@ export function NewLocationDialog({ organizations }: { organizations: Organizati
     setOpen(false);
     setName('');
     setTimeZone('');
+    setAddress(EMPTY_ADDRESS);
     router.refresh();
   }
 
@@ -72,6 +77,7 @@ export function NewLocationDialog({ organizations }: { organizations: Organizati
             <Label htmlFor="locationTimeZone">Time zone (optional)</Label>
             <Input id="locationTimeZone" value={timeZone} onChange={(e) => setTimeZone(e.target.value)} placeholder="America/New_York" />
           </div>
+          <AddressFields value={address} onChange={(patch) => setAddress((a) => ({ ...a, ...patch }))} />
           {error && <Alert variant="destructive">{error}</Alert>}
           <DialogFooter>
             <Button type="submit" disabled={submitting}>

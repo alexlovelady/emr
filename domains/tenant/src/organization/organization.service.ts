@@ -1,8 +1,8 @@
 import type { Kysely, Transaction } from 'kysely';
 import type { DB } from '@ehr/db';
-import { NotFoundError, type RequestContext } from '@ehr/domain-common';
+import { ConflictError, NotFoundError, type RequestContext } from '@ehr/domain-common';
 import { buildOutboxInsert } from '@ehr/outbox';
-import type { CreateOrganizationInput } from './organization.dto.js';
+import type { CreateOrganizationInput, UpdateOrganizationInput } from './organization.dto.js';
 import { OrganizationRepository, type OrganizationRow } from './organization.repository.js';
 
 type Executor = Kysely<DB> | Transaction<DB>;
@@ -47,5 +47,20 @@ export class OrganizationService {
 
   async list(trx: Executor, ctx: RequestContext): Promise<OrganizationRow[]> {
     return this.repo.list(trx, ctx.tenantId);
+  }
+
+  async update(trx: Executor, ctx: RequestContext, id: string, input: UpdateOrganizationInput): Promise<OrganizationRow> {
+    await this.getById(trx, ctx, id);
+    const actorId = ctx.actor?.id ?? null;
+    return this.repo.update(trx, ctx.tenantId, id, { ...input, updatedBy: actorId ?? ctx.tenantId });
+  }
+
+  async deactivate(trx: Executor, ctx: RequestContext, id: string): Promise<OrganizationRow> {
+    const org = await this.getById(trx, ctx, id);
+    if (org.status !== 'active') {
+      throw new ConflictError('Organization is not active', { id, status: org.status });
+    }
+    const actorId = ctx.actor?.id ?? null;
+    return this.repo.setStatus(trx, ctx.tenantId, id, 'inactive', actorId ?? ctx.tenantId);
   }
 }

@@ -1,11 +1,16 @@
-import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { getCurrentTransaction } from '@ehr/db';
 import { ForbiddenError, type RequestContext } from '@ehr/domain-common';
 import { Audited } from '@ehr/audit';
 import { PERMISSION_KEYS, RequirePermission } from '@ehr/authz';
 import { ZodValidationPipe } from '@ehr/api-contracts';
-import { CreatePractitionerSchema, type CreatePractitionerInput } from './practitioner.dto.js';
+import {
+  CreatePractitionerSchema,
+  UpdatePractitionerSchema,
+  type CreatePractitionerInput,
+  type UpdatePractitionerInput,
+} from './practitioner.dto.js';
 import { PractitionerService } from './practitioner.service.js';
 
 @Controller('api/v1/practitioners')
@@ -34,6 +39,24 @@ export class PractitionerController {
   @Audited('practitioner.list', 'Practitioner')
   async list(@Req() req: FastifyRequest) {
     return this.service.list(getCurrentTransaction(), requireCtx(req));
+  }
+
+  @Patch(':id')
+  @RequirePermission(PERMISSION_KEYS.PRACTITIONER_MANAGE)
+  @Audited('practitioner.update', 'Practitioner')
+  async update(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(UpdatePractitionerSchema)) body: UpdatePractitionerInput,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.service.update(getCurrentTransaction(), requireCtx(req), id, body);
+  }
+
+  @Post(':id/deactivate')
+  @RequirePermission(PERMISSION_KEYS.PRACTITIONER_MANAGE)
+  @Audited('practitioner.deactivate', 'Practitioner')
+  async deactivate(@Param('id') id: string, @Req() req: FastifyRequest) {
+    return this.service.deactivate(getCurrentTransaction(), requireCtx(req), id);
   }
 }
 
