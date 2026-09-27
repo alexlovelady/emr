@@ -7,7 +7,10 @@ export default async function PatientsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Patients</h1>
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Patients</h1>
+        <p className="text-sm text-muted-foreground">{patients.length} patients in this tenant</p>
+      </div>
       <PatientSearch patients={patients} />
     </div>
   );

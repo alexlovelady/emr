@@ -1,7 +1,9 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
 import { PatientListTable } from './patient-list-table';
 import type { Patient } from '@/lib/types';
 
@@ -21,13 +23,20 @@ export function PatientSearch({ patients }: { patients: Patient[] }) {
 
   return (
     <div className="space-y-4">
-      <Input
-        placeholder="Search by name or date of birth…"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        className="max-w-sm"
-      />
-      <PatientListTable patients={filtered} />
+      <div className="relative max-w-sm">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Search by name or date of birth…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+      <Card>
+        <CardContent className="pt-6">
+          <PatientListTable patients={filtered} />
+        </CardContent>
+      </Card>
     </div>
   );
 }

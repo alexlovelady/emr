@@ -15,7 +15,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex">
       <LeftNav user={user} />
-      <main className="min-h-screen flex-1 overflow-auto p-8">{children}</main>
+      <main className="h-screen flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-6xl px-8 py-8">{children}</div>
+      </main>
     </div>
   );
 }

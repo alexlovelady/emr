@@ -1,4 +1,5 @@
 import { callBackend } from '@/lib/api-proxy';
+import { Card, CardContent } from '@/components/ui/card';
 import { TodayScheduleTable } from '@/components/schedule/today-schedule-table';
 import type { Appointment, Patient } from '@/lib/types';
 
@@ -19,8 +20,18 @@ export default async function SchedulePage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Today&apos;s schedule</h1>
-      <TodayScheduleTable appointments={appointments} patientsById={patientsById} />
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Today&apos;s schedule</h1>
+        <p className="text-sm text-muted-foreground">
+          {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })} &middot;{' '}
+          {appointments.length} appointments
+        </p>
+      </div>
+      <Card>
+        <CardContent className="pt-6">
+          <TodayScheduleTable appointments={appointments} patientsById={patientsById} />
+        </CardContent>
+      </Card>
     </div>
   );
 }
