@@ -235,8 +235,8 @@ importers:
         specifier: 4.28.1
         version: 4.28.1
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -396,8 +396,8 @@ importers:
         specifier: ^5.9.6
         version: 5.10.0
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -490,8 +490,8 @@ importers:
         specifier: 4.28.1
         version: 4.28.1
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -624,8 +624,8 @@ importers:
         specifier: 4.28.1
         version: 4.28.1
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -679,8 +679,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/outbox
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       pg:
         specifier: ^8.13.1
         version: 8.23.0
@@ -755,8 +755,8 @@ importers:
         specifier: ^10.4.15
         version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -810,8 +810,8 @@ importers:
         specifier: ^10.4.15
         version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -874,8 +874,8 @@ importers:
         specifier: ^10.4.15
         version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -932,8 +932,8 @@ importers:
         specifier: ^10.4.15
         version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -984,8 +984,8 @@ importers:
         specifier: ^10.4.15
         version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -1036,8 +1036,8 @@ importers:
         specifier: ^10.4.15
         version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -1085,8 +1085,8 @@ importers:
         specifier: ^10.4.15
         version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -1143,8 +1143,8 @@ importers:
         specifier: ^10.4.15
         version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -1201,8 +1201,8 @@ importers:
         specifier: ^10.4.15
         version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -1259,8 +1259,8 @@ importers:
         specifier: ^10.4.15
         version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -1314,8 +1314,8 @@ importers:
         specifier: ^10.4.15
         version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -1372,8 +1372,8 @@ importers:
         specifier: ^10.4.15
         version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -1460,8 +1460,8 @@ importers:
         specifier: ^10.4.15
         version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -1518,8 +1518,8 @@ importers:
         specifier: ^10.4.15
         version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -1579,8 +1579,8 @@ importers:
         specifier: ^10.4.15
         version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -1631,8 +1631,8 @@ importers:
         specifier: ^10.4.15
         version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -1680,8 +1680,8 @@ importers:
         specifier: ^10.4.15
         version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -1729,8 +1729,8 @@ importers:
         specifier: ^10.4.15
         version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -1784,8 +1784,8 @@ importers:
         specifier: ^0.41.1
         version: 0.41.1
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -1855,8 +1855,8 @@ importers:
         specifier: ^10.4.15
         version: 10.4.22(@nestjs/common@10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0))(reflect-metadata@0.2.2)(rxjs@7.8.2)
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -1883,8 +1883,8 @@ importers:
         specifier: ^5.9.6
         version: 5.10.0
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       otplib:
         specifier: ^12.0.1
         version: 12.0.1
@@ -1917,8 +1917,8 @@ importers:
         specifier: ^10.4.15
         version: 10.4.22(@nestjs/common@10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0))(reflect-metadata@0.2.2)(rxjs@7.8.2)
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       rxjs:
         specifier: ^7.8.1
         version: 7.8.2
@@ -1967,8 +1967,8 @@ importers:
         specifier: ^0.41.1
         version: 0.41.1
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       pg:
         specifier: ^8.13.1
         version: 8.23.0
@@ -2125,8 +2125,8 @@ importers:
         specifier: workspace:*
         version: link:../db
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
     devDependencies:
       typescript:
         specifier: ^5.7.2
@@ -2150,8 +2150,8 @@ importers:
         specifier: workspace:*
         version: link:../db
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
     devDependencies:
       '@ehr/testing':
         specifier: workspace:*
@@ -2178,8 +2178,8 @@ importers:
         specifier: workspace:*
         version: link:../domain-common
       kysely:
-        specifier: ^0.27.4
-        version: 0.27.6
+        specifier: ^0.28.17
+        version: 0.28.17
       pg:
         specifier: ^8.13.1
         version: 8.23.0
@@ -5344,9 +5344,9 @@ packages:
     resolution: {integrity: sha512-eTIzlVOSUR+JxdDFepEYcBMtZ9Qqdef+rnzWdRZuMbOywu5tO2w2N7rqjoANZ5k9vywhL6Br1VRjUIgTQx4E8w==}
     engines: {node: '>=6'}
 
-  kysely@0.27.6:
-    resolution: {integrity: sha512-FIyV/64EkKhJmjgC0g2hygpBv5RNWVPyNCqSAD7eTCv6eFWNIi4PN1UvdSJGicN/o35bnevgis4Y0UDC0qi8jQ==}
-    engines: {node: '>=14.0.0'}
+  kysely@0.28.17:
+    resolution: {integrity: sha512-nbD8lB9EB3wNdMhOCdx5Li8DxnLbvKByylRLcJ1h+4SkrowVeECAyZlyiKMThF7xFdRz0jSQ2MoJr+wXux2y0Q==}
+    engines: {node: '>=20.0.0'}
 
   levn@0.4.1:
     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
@@ -9983,7 +9983,7 @@ snapshots:
 
   kleur@3.0.3: {}
 
-  kysely@0.27.6: {}
+  kysely@0.28.17: {}
 
   levn@0.4.1:
     dependencies:

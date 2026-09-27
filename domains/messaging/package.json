@@ -23,7 +23,7 @@
     "@ehr/outbox": "workspace:*",
     "@ehr/patient": "workspace:*",
     "@nestjs/common": "^10.4.15",
-    "kysely": "^0.27.4",
+    "kysely": "^0.28.17",
     "zod": "^3.24.1"
   },
   "devDependencies": {
