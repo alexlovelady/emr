@@ -16,6 +16,7 @@ const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'outline' | 'destru
   confirmed: 'outline',
   cancelled: 'destructive',
   no_show: 'destructive',
+  waitlisted: 'warning',
 };
 
 export function TodayScheduleTable({ appointments, patientsById }: { appointments: Appointment[]; patientsById: Map<string, Patient> }) {

@@ -139,11 +139,20 @@ export interface DiagnosticReport {
 export interface Appointment {
   id: string;
   patientId: string;
+  locationId: string;
   practitionerId: string;
   appointmentType: string;
   scheduledStart: string;
   scheduledEnd: string;
+  seriesId: string | null;
   status: string;
+}
+
+export interface Resource {
+  id: string;
+  locationId: string;
+  name: string;
+  resourceType: string;
 }
 
 export interface Encounter {

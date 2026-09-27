@@ -180,12 +180,22 @@ and [`docs/adr/0006-clinician-web-bff-auth.md`](docs/adr/0006-clinician-web-bff-
   /api/v1/patients/{id}/merge` is an explicit human action, and it's reversible via `POST
   /api/v1/patients/merges/{mergeId}/reverse` (`domains/patient`).
 - **The appointment status column is an explicit state machine**
-  (`domains/scheduling/src/appointment/appointment.service.ts`), not a free-text field — only the
-  states before an Encounter exists (Scheduled/Confirmed/CheckedIn, plus Cancelled/NoShow) are
-  implemented in Phase 2. Phase 3's `domains/clinical/src/encounter/encounter.service.ts`
+  (`domains/scheduling/src/appointment/appointment.service.ts`), not a free-text field — the
+  states before an Encounter exists were Scheduled/Confirmed/CheckedIn/Cancelled/NoShow in Phase 2,
+  with a `Waitlisted` state added in the eCW/athena parity roadmap's Phase I (reachable from
+  Scheduled/Cancelled, promotable back to Scheduled — `promote()` re-runs the same conflict check
+  before allowing it). Phase 3's `domains/clinical/src/encounter/encounter.service.ts`
   continues the same golden path (spec §11.1): an Encounter can only be created from a
   `checked_in` appointment, and its own state machine runs Roomed → InProgress → Documentation →
   Signed → CodingReview — the RCM states after that (ClaimReady, Submitted, ...) are Phase 6.
+- **Double-booking is blocked by default, with an explicit `override: true` escape hatch** (Phase
+  I) — `AppointmentService.create()` checks for overlapping appointments against the same
+  practitioner AND against any requested `resourceIds` (rooms/equipment, a new `resources` +
+  `appointment_resources` join table) before booking, throwing `ConflictError` unless the caller
+  passes `override: true`. Recurring series (`POST /appointments/series`, a simple
+  `{frequency, count, until}` shape denormalized onto every appointment row via `recurrence_rule`,
+  correlated by a shared `series_id` — not full iCal RRULE) run every occurrence through the exact
+  same conflict check, so a series booking fails atomically if any occurrence collides.
 - **A signed clinical note is never mutated, ever** (spec §5.4) —
   `domains/clinical/src/note/note.service.ts`'s lifecycle is DRAFT → READY_FOR_REVIEW → SIGNED,
   with VOIDED/ENTERED_IN_ERROR reachable only pre-sign. Correcting a signed note (`amend()`)

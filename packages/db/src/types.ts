@@ -318,6 +318,22 @@ export interface AppointmentsTable extends CommonColumnsTable {
   cancelled_at: Timestamp | null;
   cancellation_reason: string | null;
   no_show_at: Timestamp | null;
+  series_id: string | null;
+  recurrence_rule: ColumnType<Record<string, unknown> | null, string | null, string | null>;
+  waitlisted_at: Timestamp | null;
+}
+
+export interface ResourcesTable extends CommonColumnsTable {
+  location_id: string;
+  name: string;
+  resource_type: string;
+}
+
+export interface AppointmentResourcesTable {
+  tenant_id: string;
+  appointment_id: string;
+  resource_id: string;
+  created_at: GeneratedTimestamp;
 }
 
 export interface TasksTable extends CommonColumnsTable {
@@ -684,6 +700,8 @@ export interface DB {
   coverages: CoveragesTable;
   patient_merge_history: PatientMergeHistoryTable;
   appointments: AppointmentsTable;
+  resources: ResourcesTable;
+  appointment_resources: AppointmentResourcesTable;
   tasks: TasksTable;
   intake_form_templates: IntakeFormTemplatesTable;
   intake_form_responses: IntakeFormResponsesTable;

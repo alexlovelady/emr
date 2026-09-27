@@ -13,7 +13,7 @@ import {
   CreatePatientIdentifierSchema,
   CreateCoverageSchema,
 } from '@ehr/patient';
-import { CreateAppointmentSchema, CancelAppointmentSchema } from '@ehr/scheduling';
+import { CreateAppointmentSchema, CreateAppointmentSeriesSchema, CancelAppointmentSchema, CreateResourceSchema } from '@ehr/scheduling';
 import { CreateTaskSchema } from '@ehr/tasks';
 import {
   CreateIntakeFormTemplateSchema,
@@ -197,14 +197,29 @@ const document = {
       ...get('List a patient’s coverages', 'Patient', ['patientId']),
     },
     '/appointments': {
-      ...post('Book an appointment', 'Scheduling', CreateAppointmentSchema, 'CreateAppointment'),
-      ...get('List appointments in the caller’s tenant (optionally filtered by patientId/scheduledFrom/scheduledTo)', 'Scheduling'),
+      ...post('Book an appointment (optionally with resourceIds and/or an override flag)', 'Scheduling', CreateAppointmentSchema, 'CreateAppointment'),
+      ...get('List appointments in the caller’s tenant (optionally filtered by patientId/practitionerId/locationId/scheduledFrom/scheduledTo)', 'Scheduling'),
     },
+    '/appointments/series': post(
+      'Book a recurring series of appointments sharing one seriesId',
+      'Scheduling',
+      CreateAppointmentSeriesSchema,
+      'CreateAppointmentSeries',
+    ),
+    '/appointments/series/{seriesId}/cancel': post('Cancel every not-already-cancelled appointment in a series', 'Scheduling', CancelAppointmentSchema, 'CancelAppointmentSeries'),
     '/appointments/{id}': get('Get an appointment by id', 'Scheduling', ['id']),
+    '/appointments/{id}/resources': get('List the resource ids booked for an appointment', 'Scheduling', ['id']),
     '/appointments/{id}/confirm': post('Confirm a scheduled appointment', 'Scheduling'),
     '/appointments/{id}/check-in': post('Check in an appointment', 'Scheduling'),
     '/appointments/{id}/cancel': post('Cancel an appointment', 'Scheduling', CancelAppointmentSchema, 'CancelAppointment'),
     '/appointments/{id}/no-show': post('Mark an appointment as a no-show', 'Scheduling'),
+    '/appointments/{id}/waitlist': post('Move a scheduled/cancelled appointment onto the waitlist', 'Scheduling'),
+    '/appointments/{id}/promote': post('Promote a waitlisted appointment back to scheduled (re-checks for conflicts)', 'Scheduling'),
+    '/resources': {
+      ...post('Create a bookable resource (room/equipment) at a location', 'Scheduling', CreateResourceSchema, 'CreateResource'),
+      ...get('List resources in the caller’s tenant (optionally filtered by locationId)', 'Scheduling'),
+    },
+    '/resources/{id}': get('Get a resource by id', 'Scheduling', ['id']),
     '/tasks': {
       ...post('Create a task', 'Tasks', CreateTaskSchema, 'CreateTask'),
       ...get('List tasks in the caller’s tenant', 'Tasks'),

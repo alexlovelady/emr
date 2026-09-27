@@ -6,14 +6,16 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/components/providers/permissions-provider';
 import { PERMISSION_KEYS } from '@/lib/permission-keys';
-import { cancelAppointment, checkInAppointment, confirmAppointment, markNoShow } from '@/lib/actions/appointments';
+import { cancelAppointment, checkInAppointment, confirmAppointment, markNoShow, promoteAppointment, waitlistAppointment } from '@/lib/actions/appointments';
 import { createEncounter } from '@/lib/actions/encounters';
 import type { Appointment } from '@/lib/types';
 
 const LEGAL_ACTIONS: Record<string, string[]> = {
-  scheduled: ['confirm', 'check-in', 'cancel', 'no-show'],
+  scheduled: ['confirm', 'check-in', 'cancel', 'no-show', 'waitlist'],
   confirmed: ['check-in', 'cancel', 'no-show'],
   checked_in: ['start-visit'],
+  cancelled: ['waitlist'],
+  waitlisted: ['promote'],
 };
 
 export function AppointmentRowActions({ appointment }: { appointment: Appointment }) {
@@ -71,6 +73,16 @@ export function AppointmentRowActions({ appointment }: { appointment: Appointmen
       {legal.includes('no-show') && (
         <Button size="sm" variant="ghost" disabled={isPending || busy} onClick={() => run(() => markNoShow(appointment.id))}>
           No-show
+        </Button>
+      )}
+      {legal.includes('waitlist') && (
+        <Button size="sm" variant="ghost" disabled={isPending || busy} onClick={() => run(() => waitlistAppointment(appointment.id))}>
+          Waitlist
+        </Button>
+      )}
+      {legal.includes('promote') && (
+        <Button size="sm" variant="outline" disabled={isPending || busy} onClick={() => run(() => promoteAppointment(appointment.id))}>
+          Promote
         </Button>
       )}
     </div>

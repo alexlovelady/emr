@@ -1,8 +1,8 @@
-import { callBackend } from '@/lib/api-proxy';
+import { callBackend, callBackendOr } from '@/lib/api-proxy';
 import { Card, CardContent } from '@/components/ui/card';
 import { TodayScheduleTable } from '@/components/schedule/today-schedule-table';
 import { NewAppointmentDialog } from '@/components/schedule/new-appointment-dialog';
-import type { Appointment, Patient } from '@/lib/types';
+import type { Appointment, Patient, Resource } from '@/lib/types';
 
 function todayUtcRange(): { scheduledFrom: string; scheduledTo: string } {
   const now = new Date();
@@ -13,9 +13,10 @@ function todayUtcRange(): { scheduledFrom: string; scheduledTo: string } {
 
 export default async function SchedulePage() {
   const { scheduledFrom, scheduledTo } = todayUtcRange();
-  const [appointments, allPatients] = await Promise.all([
+  const [appointments, allPatients, resources] = await Promise.all([
     callBackend<Appointment[]>('/api/v1/appointments', { query: { scheduledFrom, scheduledTo } }),
     callBackend<Patient[]>('/api/v1/patients'),
+    callBackendOr<Resource[]>('/api/v1/resources', []),
   ]);
 
   const uniquePatientIds = [...new Set(appointments.map((a) => a.patientId))];
@@ -32,7 +33,7 @@ export default async function SchedulePage() {
             {appointments.length} appointments
           </p>
         </div>
-        <NewAppointmentDialog patients={allPatients} />
+        <NewAppointmentDialog patients={allPatients} resources={resources} />
       </div>
       <Card>
         <CardContent className="pt-6">

@@ -8,9 +8,11 @@ import { ZodValidationPipe } from '@ehr/api-contracts';
 import {
   CancelAppointmentSchema,
   CreateAppointmentSchema,
+  CreateAppointmentSeriesSchema,
   ListAppointmentsQuerySchema,
   type CancelAppointmentInput,
   type CreateAppointmentInput,
+  type CreateAppointmentSeriesInput,
   type ListAppointmentsQuery,
 } from './appointment.dto.js';
 import { AppointmentService } from './appointment.service.js';
@@ -26,11 +28,37 @@ export class AppointmentController {
     return this.service.create(getCurrentTransaction(), requireCtx(req), body);
   }
 
+  @Post('series')
+  @RequirePermission(PERMISSION_KEYS.APPOINTMENT_MANAGE)
+  @Audited('appointment.create_series', 'Appointment')
+  async createSeries(@Body(new ZodValidationPipe(CreateAppointmentSeriesSchema)) body: CreateAppointmentSeriesInput, @Req() req: FastifyRequest) {
+    return this.service.createSeries(getCurrentTransaction(), requireCtx(req), body);
+  }
+
+  @Post('series/:seriesId/cancel')
+  @RequirePermission(PERMISSION_KEYS.APPOINTMENT_MANAGE)
+  @Audited('appointment.cancel_series', 'Appointment')
+  async cancelSeries(
+    @Param('seriesId') seriesId: string,
+    @Body(new ZodValidationPipe(CancelAppointmentSchema)) body: CancelAppointmentInput,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.service.cancelSeries(getCurrentTransaction(), requireCtx(req), seriesId, body.reason ?? null);
+  }
+
   @Get(':id')
   @RequirePermission(PERMISSION_KEYS.APPOINTMENT_MANAGE)
   @Audited('appointment.read', 'Appointment')
   async getById(@Param('id') id: string, @Req() req: FastifyRequest) {
     return this.service.getById(getCurrentTransaction(), requireCtx(req), id);
+  }
+
+  @Get(':id/resources')
+  @RequirePermission(PERMISSION_KEYS.APPOINTMENT_MANAGE)
+  @Audited('appointment.read_resources', 'Appointment')
+  async getResources(@Param('id') id: string, @Req() req: FastifyRequest): Promise<{ resourceIds: string[] }> {
+    const resourceIds = await this.service.getResourceIds(getCurrentTransaction(), requireCtx(req), id);
+    return { resourceIds };
   }
 
   @Get()
@@ -39,6 +67,8 @@ export class AppointmentController {
   async list(@Query(new ZodValidationPipe(ListAppointmentsQuerySchema)) query: ListAppointmentsQuery, @Req() req: FastifyRequest) {
     return this.service.list(getCurrentTransaction(), requireCtx(req), {
       ...(query.patientId ? { patientId: query.patientId } : {}),
+      ...(query.practitionerId ? { practitionerId: query.practitionerId } : {}),
+      ...(query.locationId ? { locationId: query.locationId } : {}),
       ...(query.scheduledFrom ? { scheduledFrom: new Date(query.scheduledFrom) } : {}),
       ...(query.scheduledTo ? { scheduledTo: new Date(query.scheduledTo) } : {}),
     });
@@ -70,6 +100,20 @@ export class AppointmentController {
   @Audited('appointment.no_show', 'Appointment')
   async noShow(@Param('id') id: string, @Req() req: FastifyRequest) {
     return this.service.markNoShow(getCurrentTransaction(), requireCtx(req), id);
+  }
+
+  @Post(':id/waitlist')
+  @RequirePermission(PERMISSION_KEYS.APPOINTMENT_MANAGE)
+  @Audited('appointment.waitlist', 'Appointment')
+  async waitlist(@Param('id') id: string, @Req() req: FastifyRequest) {
+    return this.service.waitlist(getCurrentTransaction(), requireCtx(req), id);
+  }
+
+  @Post(':id/promote')
+  @RequirePermission(PERMISSION_KEYS.APPOINTMENT_MANAGE)
+  @Audited('appointment.promote', 'Appointment')
+  async promote(@Param('id') id: string, @Req() req: FastifyRequest) {
+    return this.service.promote(getCurrentTransaction(), requireCtx(req), id);
   }
 }
 

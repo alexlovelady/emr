@@ -201,3 +201,18 @@ apps:**
    this dev environment's documented no-MinIO `ECONNREFUSED`), and `??` only falls back on
    null/undefined, not `""`, so the UI rendered a blank `<Alert>`. Fixed with `||` instead, plus a
    final generic fallback string.
+
+## Known trims (new this pass — Phase I scheduling)
+
+- **The New Appointment dialog's resource picker is a plain checkbox list of every resource in the
+  tenant**, not filtered by the location typed into the (still raw-text-UUID) Location field — there's
+  no location picker to filter against yet, so this mirrors the existing locationId/practitionerId
+  raw-UUID-input trim rather than fixing it.
+- **No UI exists to create a `resource` (room/equipment)** — `POST /api/v1/resources` is real and
+  curl-verified, but there's no admin screen for it yet in either this app or `apps/admin-web`; for
+  now, resources have to be created via the API directly. A natural next addition to `apps/admin-web`
+  alongside its existing Locations/Practitioners CRUD.
+- **The recurring-series "until" date field isn't exposed in the dialog** — the backend
+  (`CreateAppointmentSeriesSchema`) supports stopping a series early via an optional `until` date in
+  addition to `count`, but the UI only exposes `count`; add an `until` date input if a real practice
+  needs "every Monday until end of year" instead of "N occurrences."
