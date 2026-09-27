@@ -57,8 +57,10 @@ support-operations runbooks, and an honest internal security self-assessment inc
 `EHR_REGULATORY_MANUAL.md` §29's full pre-pilot gate, with every item either backed by real evidence
 or explicitly named as a gap requiring a licensed pentest firm, healthcare counsel, clinicians, or a
 real payer/vendor relationship this engineering-only build cannot produce or fake — see "Phase 10
-scope decisions" below. No frontend has been built in any phase (`apps/patient-portal` stays
-reserved) — see the `README.md` in each reserved-but-empty folder for where later work lands.
+scope decisions" below. No frontend was built as part of any numbered phase (`apps/patient-portal`
+stays reserved) — see the `README.md` in each reserved-but-empty folder for where later work lands.
+The first frontend, `apps/clinician-web`, was built after all 10 phases as post-spec work — see
+"Repository layout" below.
 
 Read `EHR_BUILD_SPEC.md` and `EHR_REGULATORY_MANUAL.md` first — this README assumes their
 context. Four deliberate deviations from the spec's literal text are documented in
@@ -140,6 +142,12 @@ domains/        tenant (organizations/locations), workforce (users/practitioners
 docs/           adr/, api/openapi.json, deploy/railway.md
 infra/          terraform/, policies/, dashboards/ — all deferred, see their READMEs
 ```
+
+`apps/clinician-web` is not part of the spec §4 build order above — it's the first frontend, built
+after all 10 phases as the start of the post-spec "combine and improve on eClinicalWorks/
+athenahealth" product direction. See [`apps/clinician-web/README.md`](apps/clinician-web/README.md)
+and [`docs/adr/0006-clinician-web-bff-auth.md`](docs/adr/0006-clinician-web-bff-auth.md).
+`apps/admin-web` and `apps/patient-portal` stay reserved — see their own READMEs.
 
 ## Architecture notes worth knowing before touching this code
 

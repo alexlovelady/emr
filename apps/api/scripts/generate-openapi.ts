@@ -143,6 +143,7 @@ const document = {
     '/auth/login': post('Log in with tenant slug + email + password', 'Auth', LoginSchema, 'Login'),
     '/auth/refresh': post('Rotate a refresh token for a new access/refresh pair', 'Auth', RefreshSchema, 'Refresh'),
     '/auth/logout': post('Revoke a refresh token', 'Auth', RefreshSchema, 'Logout'),
+    '/auth/me': get('Get the caller’s own user record (no permission required beyond a valid token)', 'Auth'),
     '/auth/mfa/challenge': {
       post: {
         summary: 'MFA challenge (structural stub — always 501, see ADR-0002)',
@@ -196,7 +197,7 @@ const document = {
     },
     '/appointments': {
       ...post('Book an appointment', 'Scheduling', CreateAppointmentSchema, 'CreateAppointment'),
-      ...get('List appointments in the caller’s tenant', 'Scheduling'),
+      ...get('List appointments in the caller’s tenant (optionally filtered by patientId/scheduledFrom/scheduledTo)', 'Scheduling'),
     },
     '/appointments/{id}': get('Get an appointment by id', 'Scheduling', ['id']),
     '/appointments/{id}/confirm': post('Confirm a scheduled appointment', 'Scheduling'),
@@ -245,6 +246,7 @@ const document = {
     '/notes/{id}/sign': post('Sign a note (immutable once signed)', 'Clinical'),
     '/notes/{id}/void': post('Void a note (only before it is signed)', 'Clinical', VoidNoteSchema, 'VoidNote'),
     '/notes/{id}/amend': post('Create an additive amendment to a signed note', 'Clinical'),
+    '/patients/{patientId}/notes': get('List a patient’s signed notes', 'Clinical', ['patientId']),
     '/patients/{patientId}/problems': {
       ...post('Record a problem on the patient’s problem list', 'Clinical', CreateProblemSchema, 'CreateProblem'),
       ...get('List a patient’s problems', 'Clinical', ['patientId']),

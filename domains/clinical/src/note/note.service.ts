@@ -86,6 +86,11 @@ export class NoteService {
     return this.repo.listByEncounter(trx, ctx.tenantId, encounterId);
   }
 
+  /** Staff-facing counterpart to `@ehr/portal`'s chart read (Phase 8) — same underlying query, signed notes only. */
+  async listSignedByPatient(trx: Executor, ctx: RequestContext, patientId: string): Promise<NoteRow[]> {
+    return this.repo.listSignedByPatient(trx, ctx.tenantId, patientId);
+  }
+
   async updateContent(trx: Executor, ctx: RequestContext, id: string, content: Record<string, string>): Promise<NoteRow> {
     const current = await this.getById(trx, ctx, id);
     if (!EDITABLE_STATUSES.includes(current.status)) {

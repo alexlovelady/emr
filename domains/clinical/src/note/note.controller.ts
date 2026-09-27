@@ -80,6 +80,19 @@ export class NoteController {
   }
 }
 
+/** Staff-facing "this patient's signed notes" — `GET /notes` above is encounter-scoped only. */
+@Controller('api/v1/patients/:patientId/notes')
+export class PatientNoteController {
+  constructor(private readonly service: NoteService) {}
+
+  @Get()
+  @RequirePermission(PERMISSION_KEYS.PATIENT_READ_CLINICAL)
+  @Audited('note.list_by_patient', 'Note')
+  async listByPatient(@Param('patientId') patientId: string, @Req() req: FastifyRequest) {
+    return this.service.listSignedByPatient(getCurrentTransaction(), requireCtx(req), patientId);
+  }
+}
+
 function requireCtx(req: FastifyRequest): RequestContext {
   if (!req.ehrContext) throw new ForbiddenError('No authenticated actor on request');
   return req.ehrContext;

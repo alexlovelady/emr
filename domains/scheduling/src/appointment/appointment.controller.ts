@@ -8,8 +8,10 @@ import { ZodValidationPipe } from '@ehr/api-contracts';
 import {
   CancelAppointmentSchema,
   CreateAppointmentSchema,
+  ListAppointmentsQuerySchema,
   type CancelAppointmentInput,
   type CreateAppointmentInput,
+  type ListAppointmentsQuery,
 } from './appointment.dto.js';
 import { AppointmentService } from './appointment.service.js';
 
@@ -34,8 +36,12 @@ export class AppointmentController {
   @Get()
   @RequirePermission(PERMISSION_KEYS.APPOINTMENT_MANAGE)
   @Audited('appointment.list', 'Appointment')
-  async list(@Query('patientId') patientId: string | undefined, @Req() req: FastifyRequest) {
-    return this.service.list(getCurrentTransaction(), requireCtx(req), patientId ? { patientId } : {});
+  async list(@Query(new ZodValidationPipe(ListAppointmentsQuerySchema)) query: ListAppointmentsQuery, @Req() req: FastifyRequest) {
+    return this.service.list(getCurrentTransaction(), requireCtx(req), {
+      ...(query.patientId ? { patientId: query.patientId } : {}),
+      ...(query.scheduledFrom ? { scheduledFrom: new Date(query.scheduledFrom) } : {}),
+      ...(query.scheduledTo ? { scheduledTo: new Date(query.scheduledTo) } : {}),
+    });
   }
 
   @Post(':id/confirm')

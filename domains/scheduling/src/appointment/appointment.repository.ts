@@ -66,10 +66,20 @@ export class AppointmentRepository {
     return row ? toRow(row) : null;
   }
 
-  async list(trx: Executor, tenantId: string, filter: { patientId?: string } = {}): Promise<AppointmentRow[]> {
+  async list(
+    trx: Executor,
+    tenantId: string,
+    filter: { patientId?: string; scheduledFrom?: Date; scheduledTo?: Date } = {},
+  ): Promise<AppointmentRow[]> {
     let query = trx.selectFrom('appointments').selectAll().where('tenant_id', '=', tenantId);
     if (filter.patientId) {
       query = query.where('patient_id', '=', filter.patientId);
+    }
+    if (filter.scheduledFrom) {
+      query = query.where('scheduled_start', '>=', filter.scheduledFrom);
+    }
+    if (filter.scheduledTo) {
+      query = query.where('scheduled_start', '<', filter.scheduledTo);
     }
     const rows = await query.orderBy('scheduled_start', 'asc').execute();
     return rows.map(toRow);

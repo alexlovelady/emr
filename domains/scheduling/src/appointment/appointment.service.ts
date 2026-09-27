@@ -52,7 +52,11 @@ export class AppointmentService {
     return appointment;
   }
 
-  async list(trx: Executor, ctx: RequestContext, filter: { patientId?: string } = {}): Promise<AppointmentRow[]> {
+  async list(
+    trx: Executor,
+    ctx: RequestContext,
+    filter: { patientId?: string; scheduledFrom?: Date; scheduledTo?: Date } = {},
+  ): Promise<AppointmentRow[]> {
     return this.repo.list(trx, ctx.tenantId, filter);
   }
 

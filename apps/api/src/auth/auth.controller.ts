@@ -1,30 +1,38 @@
 import { randomUUID } from 'node:crypto';
-import { Body, Controller, HttpCode, Inject, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, NotImplementedException, Post, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
-import { SkipAudit } from '@ehr/audit';
+import { Audited, SkipAudit } from '@ehr/audit';
 import { SkipAuthz } from '@ehr/authz';
-import { NotImplementedException } from '@nestjs/common';
+import { ForbiddenError, type RequestContext } from '@ehr/domain-common';
+import { getCurrentTransaction } from '@ehr/db';
 import type { IdentityProvider } from '@ehr/auth-adapter';
+import { UserService } from '@ehr/workforce';
 import { IDENTITY_PROVIDER } from '../common/tokens.js';
 import { ZodValidationPipe } from '@ehr/api-contracts';
 import { LoginSchema, MfaChallengeSchema, RefreshSchema, type LoginInput, type MfaChallengeInput, type RefreshInput } from './auth.dto.js';
 import { AuthService } from './auth.service.js';
 
 /**
- * All routes here are @SkipAuthz (no tenant/permission exists yet before login succeeds) and
- * @SkipAudit (no request-scoped transaction exists yet — see AuthService's doc comment for how
- * login is audited explicitly instead).
+ * `@SkipAuthz`/`@SkipAudit` are applied per-method here, not at the class level — `me()` needs
+ * neither skipped (it's genuinely post-login, request-scoped data access that should be audited
+ * like any other read, and it deliberately bypasses the staff PolicyEngine for a different reason
+ * than "no tenant exists yet": a self-lookup needs no permission at all, the same reasoning
+ * `RequestContext.actor.type`'s doc comment gives for why portal routes skip PolicyEngine too).
+ * `Reflector.getAllAndOverride` checks the handler before the class, but falls back to the class
+ * when metadata is absent on the handler — a class-level `@SkipAudit()` would still silently apply
+ * to `me()` even with its own `@Audited()`, since there is no "un-skip" decorator.
  */
 @Controller('api/v1/auth')
-@SkipAuthz()
-@SkipAudit()
 export class AuthController {
   constructor(
     @Inject(AuthService) private readonly authService: AuthService,
     @Inject(IDENTITY_PROVIDER) private readonly identityProvider: IdentityProvider,
+    private readonly userService: UserService = new UserService(),
   ) {}
 
   @Post('login')
+  @SkipAuthz()
+  @SkipAudit()
   @HttpCode(200)
   async login(@Body(new ZodValidationPipe(LoginSchema)) body: LoginInput, @Req() req: FastifyRequest) {
     return this.authService.login(body.tenantSlug, body.email, body.password, {
@@ -39,12 +47,16 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @SkipAuthz()
+  @SkipAudit()
   @HttpCode(200)
   async refresh(@Body(new ZodValidationPipe(RefreshSchema)) body: RefreshInput) {
     return this.authService.refresh(body.refreshToken);
   }
 
   @Post('logout')
+  @SkipAuthz()
+  @SkipAudit()
   @HttpCode(204)
   async logout(@Body(new ZodValidationPipe(RefreshSchema)) body: RefreshInput): Promise<void> {
     await this.authService.logout(body.refreshToken);
@@ -55,8 +67,29 @@ export class AuthController {
    * the OpenAPI contract so the gap is visible, not silently missing.
    */
   @Post('mfa/challenge')
+  @SkipAuthz()
+  @SkipAudit()
   async mfaChallenge(@Body(new ZodValidationPipe(MfaChallengeSchema)) body: MfaChallengeInput): Promise<never> {
     await this.identityProvider.verifyMfaChallenge(body.userId, body.code);
     throw new NotImplementedException('MFA is not implemented in Phase 1 — see ADR-0002.');
   }
+
+  /**
+   * "Who am I" — the JWT deliberately carries only `{userId, tenantId}` (see
+   * `RequestContext`'s doc comment on why), so a caller needs this to resolve their own display
+   * name/email. Self-lookup only: no `USER_MANAGE` permission required, unlike `GET /users/{id}`.
+   */
+  @Get('me')
+  @SkipAuthz()
+  @Audited('auth.me', 'User')
+  async me(@Req() req: FastifyRequest) {
+    const ctx = requireCtx(req);
+    if (!ctx.actor) throw new ForbiddenError('No authenticated actor on request');
+    return this.userService.getById(getCurrentTransaction(), ctx, ctx.actor.id);
+  }
+}
+
+function requireCtx(req: FastifyRequest): RequestContext {
+  if (!req.ehrContext) throw new ForbiddenError('No authenticated actor on request');
+  return req.ehrContext;
 }
