@@ -77,6 +77,7 @@ export const PERMISSION_KEYS = {
   SEARCH_REINDEX: 'search.reindex',
   PROXY_GRANT_MANAGE: 'proxy_grant.manage',
   MESSAGE_MANAGE: 'message.manage',
+  AI_GENERATION_MANAGE: 'ai_generation.manage',
 } as const;
 
 export interface SeededTenant {

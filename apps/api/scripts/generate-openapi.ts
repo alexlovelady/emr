@@ -49,6 +49,18 @@ import { CreateEligibilityCheckSchema } from '@ehr/payments';
 import { SaveCohortSchema, ExecuteAdHocCohortSchema } from '@ehr/query';
 import { CreateProxyGrantSchema, RevokeProxyGrantSchema } from '@ehr/consent';
 import { CreateMessageThreadSchema, ReplyMessageSchema } from '@ehr/messaging';
+import {
+  AcceptAiGenerationSchema,
+  AmbientNoteDraftSchema,
+  EncounterSummarySchema,
+  ChartQaSchema,
+  MessageDraftSchema,
+  CodingSuggestionSchema,
+  DenialSummarySchema,
+  TaskSummarySchema,
+  ProposeCohortDslSchema,
+  ExecuteCohortDslSchema,
+} from '@ehr/ai';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -372,6 +384,23 @@ const document = {
       ...get('List messages in a thread', 'Messaging', ['patientId', 'threadId']),
     },
     '/patients/{patientId}/message-threads/{threadId}/read': post('Mark a thread’s messages as read (staff side)', 'Messaging'),
+    '/ai-generations/{id}': get('Get an AI generation (with its §15.4 provenance object)', 'AI', ['id']),
+    '/ai-generations/{id}/accept': post('Accept an AI generation (optionally with edited output)', 'AI', AcceptAiGenerationSchema, 'AcceptAiGeneration'),
+    '/ai-generations/{id}/reject': post('Reject an AI generation', 'AI'),
+    '/encounters/{encounterId}/ai/note-draft': post('Propose an ambient note draft for an encounter', 'AI', AmbientNoteDraftSchema, 'AmbientNoteDraft'),
+    '/encounters/{encounterId}/ai/summary': post('Propose an encounter summary draft', 'AI', EncounterSummarySchema, 'EncounterSummary'),
+    '/patients/{patientId}/ai/chart-qa': post('Ask a chart Q&A question, grounded only in retrieved chart evidence', 'AI', ChartQaSchema, 'ChartQa'),
+    '/message-threads/{threadId}/ai/draft-reply': post('Draft a staff reply to a secure message thread', 'AI', MessageDraftSchema, 'MessageDraft'),
+    '/encounters/{encounterId}/ai/coding-suggestions': post('Propose coding suggestions for an encounter', 'AI', CodingSuggestionSchema, 'CodingSuggestion'),
+    '/denials/{denialId}/ai/summary': post('Summarize a denial in plain language', 'AI', DenialSummarySchema, 'DenialSummary'),
+    '/ai/task-summary': post('Summarize open tasks (assignedToUserId or patientId scoped)', 'AI', TaskSummarySchema, 'TaskSummary'),
+    '/ai/cohort-dsl': post('Propose a candidate cohort DSL from a natural-language question', 'AI', ProposeCohortDslSchema, 'ProposeCohortDsl'),
+    '/ai-generations/{id}/execute-cohort': post(
+      'Validate and execute a proposed (or edited) cohort DSL candidate',
+      'AI',
+      ExecuteCohortDslSchema,
+      'ExecuteCohortDsl',
+    ),
   },
   components: {
     schemas: { ProblemDetail: problemDetail },

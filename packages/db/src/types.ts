@@ -593,6 +593,27 @@ export interface ExportRequestsTable extends CommonColumnsTable {
   storage_key: string | null;
 }
 
+export interface AiGenerationsTable extends CommonColumnsTable {
+  feature: string;
+  patient_id: string | null;
+  subject_type: string | null;
+  subject_id: string | null;
+  input_text: string;
+  context_refs: GeneratedJsonColumn<unknown[]>;
+  model_provider: string;
+  model_id: string;
+  model_version: string;
+  prompt_template_version: string;
+  output_text: string;
+  output_json: JsonColumn<Record<string, unknown>> | null;
+  output_hash: string;
+  generated_at: Timestamp;
+  reviewed_at: Timestamp | null;
+  reviewed_by: string | null;
+  edited_output_text: string | null;
+  linked_cohort_execution_id: string | null;
+}
+
 export interface IdempotencyKeysTable {
   tenant_id: string;
   key: string;
@@ -693,6 +714,7 @@ export interface DB {
   message_threads: MessageThreadsTable;
   messages: MessagesTable;
   export_requests: ExportRequestsTable;
+  ai_generations: AiGenerationsTable;
   idempotency_keys: IdempotencyKeysTable;
   outbox_events: OutboxEventsTable;
   audit_events: AuditEventsTable;

@@ -1,7 +1,7 @@
-# EHR Platform — Phase 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 (Platform Foundation; Patient/Scheduling/Intake; Clinical Chart; Orders/Results + Interop; eRx; RCM; Query Platform; Patient Portal)
+# EHR Platform — Phase 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 (Platform Foundation; Patient/Scheduling/Intake; Clinical Chart; Orders/Results + Interop; eRx; RCM; Query Platform; Patient Portal; AI Features)
 
 Cloud-native ambulatory EHR + practice-management + revenue-cycle platform. This repository
-currently implements **Phases 1–8** of `EHR_BUILD_SPEC.md`'s build order (§26). Phase 1: the
+currently implements **Phases 1–9** of `EHR_BUILD_SPEC.md`'s build order (§26). Phase 1: the
 monorepo skeleton, tenant/workforce identity, the layered authorization model, audit +
 transactional outbox, a first-party auth adapter, a thin documents flow, and the platform's
 testing/CI/CD/observability scaffolding. Phase 2: the patient registry (with a per-organization
@@ -40,9 +40,16 @@ staff-only `PolicyEngine`, secure messaging (`domains/messaging`) with one staff
 portal controller over the same tables, read-only portal chart access reusing the *existing*
 release-status columns (no new "patient visibility" flag), a `PaymentGateway` vendor adapter
 posting real `patient_payment` ledger entries, a synchronous JSON records-export, and portal
-session management — see "Phase 8 scope decisions" below. No frontend has been built in any phase
-(`apps/patient-portal` stays reserved); AI (Phase 9+) is not built yet — see the `README.md` in
-each reserved-but-empty folder for where it lands.
+session management — see "Phase 8 scope decisions" below. Phase 9: AI features — a real internal
+`AiGateway` (spec §15.1: prompt-template versioning, minimum-necessary context assembly, redaction,
+a real per-tenant rate cap, model/version capture, the exact §15.4 provenance object) fronting all
+8 spec §15.2 features (ambient note draft, encounter summary, chart Q&A grounded only in retrieved
+chart evidence, patient-message drafting, coding suggestions, denial explanation summarization,
+task summarization, NL-to-cohort-DSL) as real propose→human-review flows (`domains/ai`), backed by
+a `NoopAiGateway` since no LLM vendor BAA exists (regulatory manual §16.1) — see "Phase 9 scope
+decisions" below and `docs/adr/0004-deferred-ai-vendor.md`. No frontend has been built in any phase
+(`apps/patient-portal` stays reserved) — see the `README.md` in each reserved-but-empty folder for
+where later work lands.
 
 Read `EHR_BUILD_SPEC.md` and `EHR_REGULATORY_MANUAL.md` first — this README assumes their
 context. Four deliberate deviations from the spec's literal text are documented in
@@ -411,6 +418,53 @@ infra/          terraform/, policies/, dashboards/ — all deferred, see their R
   `AuthController` already used for its own non-class token dependency; domain-package controllers
   (real `tsc` output, not `tsx`/esbuild) were unaffected.
 
+### Phase 9 scope decisions
+
+- **No LLM vendor BAA exists in this environment** (`EHR_REGULATORY_MANUAL.md` §16.1) — the same
+  category of prerequisite ADR-0002 already named for an external identity provider. A real
+  `AiGateway` interface (`packages/ai-adapter`) is built covering every §15.1 responsibility as a
+  genuine, checkable contract, backed by exactly one implementation, `NoopAiGateway` — a
+  deterministic stub with no network call. `isApprovedForPhi()` returns `false` unconditionally, a
+  real statement rather than a placeholder — see `docs/adr/0004-deferred-ai-vendor.md`.
+- **One shared `ai_generations` table and `AiGenerationService` back all 8 features**
+  (`domains/ai`), adapted directly from Phase 4's `ExternalCandidateService`
+  (`pending → accepted / accepted_with_edits / rejected`, the same double-resolution
+  `ConflictError` guard, one outbox event per transition). What differs per feature is only the
+  context each one assembles — eight thin controllers front the one shared core, the same
+  "one service behind several thin front doors" shape Phase 8 used for messaging.
+- **Every proposal requires at least one grounding context reference, or it is rejected** — spec
+  §15.3's "no unsourced clinical facts" enforced structurally, not just by policy or prompt
+  wording. Confirmed live: chart Q&A against a patient with no active problems/allergies/
+  medications/signed notes/results, and a task summary with no open tasks, both correctly return a
+  real 422 rather than a hallucinated answer.
+- **Accepting a generation never mutates another domain's data, for 7 of the 8 features** — the
+  most literal reading of §15.3's "never auto-applying" / "silent chart mutation": a human takes
+  the accepted (possibly edited) output and uses the existing, already-audited domain-write
+  endpoint themselves (`domains/ai` never calls `NoteService.create()`, `ChargeService.create()`,
+  `MessageThreadService.reply()`, etc.). Confirmed live: accepting an ambient note draft and a
+  coding suggestion created zero new `Note`/`Charge` rows. **NL-to-cohort-DSL is the one deliberate
+  exception** — "accept" and "execute" are the same action per spec §8.4's own flow, and executing
+  an already-permission-gated, already-capped, read-only population query is categorically
+  different from mutating clinical/financial state.
+- **NL-to-cohort-DSL reuses `@ehr/query`'s existing, unmodified `CohortDslSchema` validator and
+  `CohortService.execute()` compiler** (Phase 7) rather than building a second one — this *is*
+  spec §8.4's "deterministic validator." `domains/ai` never touches SQL and the (Noop) LLM never
+  receives a database handle, satisfying §8.4's "never receives a raw database credential"
+  structurally, not just by convention.
+- **Rate limiting is real** (an in-memory per-tenant daily cap in `NoopAiGateway`, throwing a real
+  `RateLimitExceededError` past the cap) since it needs no vendor relationship to build — but it is
+  in-memory/single-process only, not persisted, a documented limitation to revisit before any
+  multi-instance deployment.
+- **Evaluation telemetry and hallucination-rate metrics are not implemented** — an explicit gap,
+  the same treatment ADR-0002 gave MFA. `EHR_REGULATORY_MANUAL.md` §16.2 requires an evaluation
+  dataset and a hallucination/unsupported-fact metric per feature; the `ai_generations` table is
+  real substrate a future evaluation pipeline could query (every generation and every
+  accept/reject/edit decision is durably recorded), but no eval harness exists yet.
+- **All 8 features are staff-only** (permission-gated, `actor.type === 'user'`) — spec's own
+  phrasing ("ambient scribe," "coding suggestions," "denial summaries") and the Phase 9 build-order
+  bullet list are clinician/coder/biller tools. "Patient-message drafting" means staff drafting a
+  reply to a portal message, not a patient-facing generative feature.
+
 ## Verification status
 
 Docker Desktop's backend would not start in the environment this was built in (its WSL2
@@ -578,3 +632,33 @@ genuinely new bug this pass's manual walkthrough caught that no automated test h
 parameter (a `TypeError: Cannot read properties of undefined` at request time, not a bootstrap
 error) because it was the first `apps/api`-local controller with a single, purely type-inferred
 constructor dependency — see "Phase 8 scope decisions" above for the fix.
+
+**Phase 9** was verified the same way: migration `0032` applies cleanly on top of Phase 8's, the
+full `test`/`test:integration`/`test:tenant-isolation` suite is green across the new
+`@ehr/ai-adapter` and `@ehr/ai` (200/200 Turborepo tasks, including a tenant-isolation spec that
+exercises the full NL-to-cohort-DSL execute path — an invalid candidate rejected before
+`CohortService.execute()` ever runs, a valid one producing a real `cohort_executions` row — against
+a live Postgres, not a mock), and a full HTTP walkthrough against `apps/api`: proposing an ambient
+note draft for a real encounter → its persisted provenance object matches spec §15.4's exact shape
+field-for-field → accepting it with edits sets `status: accepted_with_edits` and records the
+reviewer, and a database check confirms zero `Note` rows were created by that accept → a second
+resolve attempt on the same generation is a real 409, not a silent no-op → asking a chart-Q&A
+question against a patient with no chart data yet returns a real 422 (the zero-context guard) →
+adding a real Problem and asking again succeeds, citing that exact `Problem/{id}` as its only
+source ref → rejecting it leaves the chart provably unchanged → coding suggestions grounded on the
+same problem are proposed and accepted with zero `Charge` rows created → task summarization
+correctly 422s with no open tasks and succeeds once one exists → the NL-to-cohort-DSL flow runs
+end to end: propose a candidate → attempt to execute a deliberately invalid edited DSL and get a
+real 422 with the underlying Zod issues, no `cohort_executions` row created → execute the original
+valid candidate and get back a real, live-compiled `cohort_executions` row, with the generation
+correctly resolved to `accepted` and linked to it → a second execute attempt on the same
+(now-resolved) generation is a real 409 → denial summarization and patient-message drafting both
+ground correctly on real `Denial`/`Claim` and `Message` rows from earlier phases' data → throughout,
+a cross-tenant token gets a real 404 (never a 403, never a leak) reading, accepting, rejecting, or
+executing another tenant's generation → every propose/accept/reject/execute call lands in
+`audit_events` with `actor_type: 'user'`, and the matching `outbox_events` rows
+(`ai_generation.proposed.v1`/`.accepted.v1`/`.rejected.v1`, plus the pre-existing
+`cohort.executed.v1` from the reused, unmodified `CohortService.execute()`) appear alongside them.
+No new bugs surfaced this pass beyond confirming the `@Inject()` DI pattern from Phase 8's fix
+continues to be unnecessary for `domains/ai`'s controllers (all `tsc`-compiled domain-package code,
+not `apps/api`'s `tsx`-transformed dev build).

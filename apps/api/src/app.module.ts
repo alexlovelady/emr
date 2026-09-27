@@ -20,6 +20,7 @@ import { QueryModule } from '@ehr/query';
 import { ConsentModule } from '@ehr/consent';
 import { MessagingModule } from '@ehr/messaging';
 import { PortalModule } from '@ehr/portal';
+import { AiModule } from '@ehr/ai';
 import { CoreModule } from './core/core.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { PortalAuthModule } from './portal-auth/portal-auth.module.js';
@@ -58,6 +59,7 @@ import { ProblemDetailsFilter } from './common/problem-details.filter.js';
     ClaimsModule,
     PaymentsModule,
     QueryModule,
+    AiModule,
   ],
   controllers: [HealthController],
   providers: [

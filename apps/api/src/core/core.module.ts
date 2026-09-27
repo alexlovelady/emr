@@ -19,6 +19,8 @@ import { NoopNotificationGateway } from '@ehr/notification-adapter';
 import { NOTIFICATION_GATEWAY } from '@ehr/messaging';
 import { NoopPaymentGateway } from '@ehr/payment-adapter';
 import { PAYMENT_GATEWAY } from '@ehr/portal';
+import { NoopAiGateway } from '@ehr/ai-adapter';
+import { AI_GATEWAY } from '@ehr/ai';
 import { DB_CONNECTION, KEY_MATERIAL, IDENTITY_PROVIDER, ENV_CONFIG } from '../common/tokens.js';
 
 const env = getConfig();
@@ -72,6 +74,7 @@ const db = createDb({ connectionString: env.APP_DATABASE_URL });
     { provide: SEARCH_INDEX_GATEWAY, useValue: new PostgresSearchIndexGateway() },
     { provide: NOTIFICATION_GATEWAY, useValue: new NoopNotificationGateway() },
     { provide: PAYMENT_GATEWAY, useValue: new NoopPaymentGateway() },
+    { provide: AI_GATEWAY, useValue: new NoopAiGateway() },
     { provide: PolicyEngine, useValue: new PolicyEngine() },
     Reflector,
   ],
@@ -87,6 +90,7 @@ const db = createDb({ connectionString: env.APP_DATABASE_URL });
     SEARCH_INDEX_GATEWAY,
     NOTIFICATION_GATEWAY,
     PAYMENT_GATEWAY,
+    AI_GATEWAY,
     PolicyEngine,
     Reflector,
   ],
