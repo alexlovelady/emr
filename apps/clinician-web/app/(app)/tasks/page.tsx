@@ -3,6 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { TasksTable } from '@/components/tasks/tasks-table';
 import { NewTaskDialog } from '@/components/tasks/new-task-dialog';
 import { TaskStatusFilter } from '@/components/tasks/task-status-filter';
+import { AiTaskSummaryTrigger } from '@/components/tasks/ai-task-summary-trigger';
 import type { CurrentUser, Task } from '@/lib/types';
 
 export default async function TasksPage({ searchParams }: { searchParams: Promise<{ status?: string; mine?: string }> }) {
@@ -27,6 +28,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
         <NewTaskDialog />
       </div>
       <TaskStatusFilter status={status ?? 'open'} mine={showMineOnly} />
+      <AiTaskSummaryTrigger assignedToUserId={user.id} />
       <Card>
         <CardContent className="pt-6">
           <TasksTable tasks={tasks} />

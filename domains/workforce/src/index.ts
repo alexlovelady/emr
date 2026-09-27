@@ -5,3 +5,6 @@ export { CreateUserSchema, type CreateUserInput } from './user/user.dto.js';
 export { PractitionerService } from './practitioner/practitioner.service.js';
 export { PractitionerRepository, type PractitionerRow } from './practitioner/practitioner.repository.js';
 export { CreatePractitionerSchema, type CreatePractitionerInput } from './practitioner/practitioner.dto.js';
+export { RoleService } from './role/role.service.js';
+export { RoleRepository, type RoleRow, type UserRoleRow } from './role/role.repository.js';
+export { AssignRoleSchema, type AssignRoleInput } from './role/role.dto.js';

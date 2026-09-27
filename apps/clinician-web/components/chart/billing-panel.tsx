@@ -6,6 +6,8 @@ import { EmptyState } from '@/components/chart/empty-state';
 import { RunEligibilityDialog } from '@/components/chart/run-eligibility-dialog';
 import { ResolveDenialDialog } from '@/components/chart/resolve-denial-dialog';
 import { ClaimRow } from '@/components/chart/claim-row';
+import { AiProposeTrigger } from '@/components/ai/ai-propose-trigger';
+import { proposeDenialSummary } from '@/lib/actions/ai-generations';
 import { usePermissions } from '@/components/providers/permissions-provider';
 import { PERMISSION_KEYS } from '@/lib/permission-keys';
 import type { Charge, Claim, Coverage, Denial, EligibilityCheck, PatientLedger } from '@/lib/types';
@@ -93,13 +95,18 @@ export function BillingPanel({
         ) : (
           <ul className="divide-y divide-border">
             {denials.map((d) => (
-              <li key={d.id} className="flex items-center gap-3 py-2.5 text-sm">
-                <FileWarning className={`h-4 w-4 shrink-0 ${d.status === 'open' ? 'text-destructive' : 'text-muted-foreground'}`} />
-                <span className="flex-1">
-                  {d.denialReasonCode} — {d.denialReasonText}
-                </span>
-                <Badge variant={d.status === 'open' ? 'destructive' : 'success'}>{d.status}</Badge>
-                {d.status === 'open' && has(PERMISSION_KEYS.DENIAL_MANAGE) && <ResolveDenialDialog denialId={d.id} patientId={patientId} />}
+              <li key={d.id} className="space-y-2 py-2.5">
+                <div className="flex items-center gap-3 text-sm">
+                  <FileWarning className={`h-4 w-4 shrink-0 ${d.status === 'open' ? 'text-destructive' : 'text-muted-foreground'}`} />
+                  <span className="flex-1">
+                    {d.denialReasonCode} — {d.denialReasonText}
+                  </span>
+                  <Badge variant={d.status === 'open' ? 'destructive' : 'success'}>{d.status}</Badge>
+                  {d.status === 'open' && has(PERMISSION_KEYS.DENIAL_MANAGE) && <ResolveDenialDialog denialId={d.id} patientId={patientId} />}
+                </div>
+                {d.status === 'open' && has(PERMISSION_KEYS.DENIAL_MANAGE) && (
+                  <AiProposeTrigger label="Explain with AI" proposeFn={() => proposeDenialSummary(d.id)} />
+                )}
               </li>
             ))}
           </ul>

@@ -10,6 +10,8 @@ import { Badge } from '@/components/ui/badge';
 import { usePermissions } from '@/components/providers/permissions-provider';
 import { PERMISSION_KEYS } from '@/lib/permission-keys';
 import { amendNote, signNote, submitNoteForReview, updateNoteContent, voidNote } from '@/lib/actions/notes';
+import { proposeNoteDraft } from '@/lib/actions/ai-generations';
+import { AiProposeTrigger } from '@/components/ai/ai-propose-trigger';
 import type { Note } from '@/lib/types';
 
 const EDITABLE_STATUSES: Note['status'][] = ['draft', 'ready_for_review'];
@@ -39,6 +41,17 @@ export function NoteEditor({ note, encounterId }: { note: Note; encounterId: str
         </Badge>
         {note.amendsNoteId && <span className="text-xs text-muted-foreground">Amends a prior signed note</span>}
       </div>
+
+      {editable && note.status === 'draft' && (
+        <AiProposeTrigger
+          label="Draft with AI"
+          proposeFn={() => proposeNoteDraft(encounterId)}
+          onAccept={(text) => {
+            const firstSection = Object.keys(content)[0];
+            if (firstSection) setContent((c) => ({ ...c, [firstSection]: text }));
+          }}
+        />
+      )}
 
       {Object.entries(content).map(([section, text]) => (
         <div key={section} className="space-y-1.5">

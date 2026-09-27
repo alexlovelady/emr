@@ -9,6 +9,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/chart/empty-state';
 import { NewThreadDialog } from '@/components/chart/new-thread-dialog';
+import { AiProposeTrigger } from '@/components/ai/ai-propose-trigger';
+import { proposeMessageDraftReply } from '@/lib/actions/ai-generations';
 import { usePermissions } from '@/components/providers/permissions-provider';
 import { PERMISSION_KEYS } from '@/lib/permission-keys';
 import { markThreadRead, replyToThread } from '@/lib/actions/messages';
@@ -16,6 +18,7 @@ import type { Message, MessageThread } from '@/lib/types';
 
 function ThreadView({ patientId, thread }: { patientId: string; thread: MessageThread }) {
   const router = useRouter();
+  const { has } = usePermissions();
   const [messages, setMessages] = useState<Message[] | null>(null);
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
@@ -62,6 +65,13 @@ function ThreadView({ patientId, thread }: { patientId: string; thread: MessageT
             </div>
           ))}
         </div>
+      )}
+      {has(PERMISSION_KEYS.MESSAGE_MANAGE) && (
+        <AiProposeTrigger
+          label="Draft reply with AI"
+          proposeFn={() => proposeMessageDraftReply(thread.id)}
+          onAccept={(text) => setReply(text)}
+        />
       )}
       <div className="flex gap-2">
         <Textarea value={reply} onChange={(e) => setReply(e.target.value)} rows={2} placeholder="Reply…" className="flex-1" />

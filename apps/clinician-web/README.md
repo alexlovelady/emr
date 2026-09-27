@@ -2,7 +2,7 @@
 
 Staff-facing clinical + front-office workflow app — the first browser-hosted application in this
 monorepo. Started as a thin read-only golden path, then expanded into a real daily-use tool across
-three passes:
+five passes:
 
 - **Phase A**: scheduling (book/confirm/check-in/cancel), encounter + note authoring with sign-off,
   problem/allergy/medication management, orders + results review, e-prescribing (incl. controlled
@@ -12,10 +12,18 @@ three passes:
   document upload/download.
 - **Phase C**: billing/RCM — charge capture + a tenant-wide coding queue, claims (create/submit/
   timeline), denial resolution, eligibility checks, patient ledger.
+- **Phase D**: `domains/ai`'s propose→human-review AI features surfaced in the UI — ambient note
+  draft, encounter summary, chart Q&A, patient-message draft-reply, coding suggestions, denial
+  explanation, task summarization — all through one generic review component
+  (`components/ai/ai-generation-review.tsx`).
+- **Phase E (reporting half)**: a cohort builder (manual condition-row builder + an "ask in plain
+  English" AI-assisted mode), saved-cohort execution history + CSV export, governed queries, and a
+  global search box. The admin half of Phase E (organizations/locations/practitioners/users) lives
+  in the new `apps/admin-web`, not here — see its own README.
 
 See the plan history for the full multi-phase roadmap toward eClinicalWorks/athenahealth feature
-parity — this app now covers Phases A–C. The patient chart has 10 tabs: Problems, Medications,
-Allergies, Results, Notes, Coverage, Intake, Messages, Documents, Billing.
+parity — this app now covers Phases A–D plus Phase E's reporting half. The patient chart has 10 tabs:
+Problems, Medications, Allergies, Results, Notes, Coverage, Intake, Messages, Documents, Billing.
 
 Next.js 15 (App Router) + React 19 + TypeScript, shadcn/Radix UI primitives (hand-copied into
 `components/ui`, not an installed package) + Tailwind CSS, per `EHR_BUILD_SPEC.md` §2.1.
@@ -140,3 +148,32 @@ run alone. Run them sequentially, or `rm -rf .next` between a `build` and a subs
   `ConflictError` — fixed with an explicit pre-check; (2) a chart-tab `ClaimRow` nested a real
   `<button>` (Submit) inside its own toggle `<button>`, invalid HTML that caused a React hydration
   error — fixed by making the row's toggle target a `div[role=button]` instead.
+
+## Known trims (new this pass — Phase D & Phase E's reporting half)
+
+- **One generic AI review component for all 7 features used here** (`components/ai/
+  ai-generation-review.tsx` + `ai-propose-trigger.tsx`) — `NoopAiGateway` always returns a single
+  plain `outputText` string regardless of feature, so there's no per-feature structured UI (e.g. no
+  coding-suggestion list widget with individual accept/reject per code). If a real LLM vendor is ever
+  connected and starts returning structured `outputJson` per feature, this UI would need per-feature
+  rendering to take advantage of it.
+- **Accepting an AI draft never auto-fills the target field except where explicitly wired** — note
+  draft (into the first content section of the open note) and message draft-reply (into the reply
+  box) prefill client-side; chart Q&A, coding suggestions, denial summaries, and task summaries are
+  reference-only text a human reads and acts on manually, matching the "accept never mutates another
+  domain" rule in `docs/adr/0004-deferred-ai-vendor.md`.
+- **The NL-to-cohort-DSL feature always returns the same canned DSL** (a 45–75 age range + active
+  E11 diabetes condition) regardless of the question asked, since `NoopAiGateway` doesn't do any real
+  NL parsing — the UI discloses this directly rather than presenting it as a working assistant.
+- **The cohort builder is a small, closed vocabulary, not a general query tool** — only `age` (a
+  field), `condition`/`allergy`/`medication` (concepts), and `latest_hba1c`/
+  `days_since_completed_encounter` (measures), combined with implicit AND only (no OR, no nesting) —
+  this mirrors `@ehr/query`'s actual `CohortDslSchema` exactly, not a UI limitation layered on top of
+  a richer backend.
+- **Global search covers only 3 of the spec's 7 resource types** (Patient, Document, Claim) — the
+  only ones `domains/query/src/search`'s reindexer actually populates today; encounter notes,
+  labs/results, tasks/referrals, and providers/locations aren't searchable yet.
+- **Governed queries' param forms are hand-coded per query name**, not generated from a schema — the
+  `GET /governed-queries` list endpoint doesn't expose each query's parameter shape, so
+  `components/reports/governed-queries-panel.tsx` has one hardcoded form per the 3 queries that exist
+  server-side today. A 4th governed query added later would need a matching new form here.

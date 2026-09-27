@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Activity, CalendarDays, ClipboardList, DollarSign, FlaskConical, ListChecks, LogOut, Users } from 'lucide-react';
+import { Activity, BarChart3, CalendarDays, ClipboardList, DollarSign, FlaskConical, ListChecks, LogOut, Table2, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/components/providers/permissions-provider';
 import { PERMISSION_KEYS } from '@/lib/permission-keys';
@@ -18,6 +18,11 @@ const CLINICAL_LINKS = [
 const ADMIN_LINKS = [
   { href: '/intake-templates', label: 'Intake templates', icon: ClipboardList, permission: PERMISSION_KEYS.INTAKE_FORM_MANAGE },
   { href: '/coding-queue', label: 'Coding queue', icon: DollarSign, permission: PERMISSION_KEYS.CODING_REVIEW },
+] as const;
+
+const REPORT_LINKS = [
+  { href: '/reports/cohorts', label: 'Cohorts', icon: BarChart3, permission: PERMISSION_KEYS.COHORT_MANAGE },
+  { href: '/reports/queries', label: 'Governed queries', icon: Table2, permission: PERMISSION_KEYS.REPORT_QUERY_POPULATION },
 ] as const;
 
 function NavLink({ href, label, icon: Icon, active }: { href: string; label: string; icon: typeof Users; active: boolean }) {
@@ -48,6 +53,7 @@ export function LeftNav({ user }: { user: CurrentUser }) {
   const { has } = usePermissions();
   const clinicalLinks = CLINICAL_LINKS.filter((link) => link.permission === null || has(link.permission));
   const adminLinks = ADMIN_LINKS.filter((link) => has(link.permission));
+  const reportLinks = REPORT_LINKS.filter((link) => has(link.permission));
 
   async function onLogout() {
     await fetch('/api/logout', { method: 'POST' });
@@ -79,6 +85,16 @@ export function LeftNav({ user }: { user: CurrentUser }) {
               Administration
             </div>
             {adminLinks.map((link) => (
+              <NavLink key={link.href} href={link.href} label={link.label} icon={link.icon} active={pathname.startsWith(link.href)} />
+            ))}
+          </div>
+        )}
+        {reportLinks.length > 0 && (
+          <div className="space-y-0.5">
+            <div className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-sidebar-muted">
+              Reports
+            </div>
+            {reportLinks.map((link) => (
               <NavLink key={link.href} href={link.href} label={link.label} icon={link.icon} active={pathname.startsWith(link.href)} />
             ))}
           </div>

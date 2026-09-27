@@ -19,6 +19,7 @@ export const PERMISSION_KEYS = {
   RESULT_MANAGE: 'result.manage',
   RESULT_REVIEW: 'result.review',
   PATIENT_READ_DEMOGRAPHICS: 'patient.read.demographics',
+  PATIENT_READ_CLINICAL: 'patient.read.clinical',
   PATIENT_WRITE_DEMOGRAPHICS: 'patient.write.demographics',
   PATIENT_MERGE: 'patient.merge',
   COVERAGE_MANAGE: 'coverage.manage',
@@ -34,4 +35,7 @@ export const PERMISSION_KEYS = {
   DENIAL_MANAGE: 'denial.manage',
   LEDGER_READ: 'ledger.read',
   ELIGIBILITY_CHECK: 'eligibility.check',
+  AI_GENERATION_MANAGE: 'ai_generation.manage',
+  COHORT_MANAGE: 'cohort.manage',
+  REPORT_QUERY_POPULATION: 'report.query.population',
 } as const;

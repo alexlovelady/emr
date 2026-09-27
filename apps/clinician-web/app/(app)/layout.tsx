@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { Toaster } from 'sonner';
 import { callBackend, SessionExpiredError } from '@/lib/api-proxy';
 import { LeftNav } from '@/components/nav/left-nav';
+import { GlobalSearch } from '@/components/nav/global-search';
 import { PermissionsProvider } from '@/components/providers/permissions-provider';
 import type { CurrentUser, EffectivePermissions } from '@/lib/types';
 
@@ -23,7 +24,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <div className="flex">
         <LeftNav user={user} />
         <main className="h-screen flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-6xl px-8 py-8">{children}</div>
+          <div className="mx-auto max-w-6xl px-8 py-8">
+            <div className="mb-6 flex justify-end">
+              <GlobalSearch />
+            </div>
+            {children}
+          </div>
         </main>
       </div>
       <Toaster position="top-right" richColors />

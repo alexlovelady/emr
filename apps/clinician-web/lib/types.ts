@@ -396,3 +396,83 @@ export interface ProblemDetails {
   instance?: string;
   request_id?: string;
 }
+
+export interface AiProvenance {
+  model_provider: string;
+  model_id: string;
+  model_version: string;
+  prompt_template_version: string;
+  source_refs: string[];
+  generated_at: string;
+  output_hash: string;
+  reviewer_id: string | null;
+  decision: 'pending' | 'accepted' | 'accepted_with_edits' | 'rejected';
+}
+
+export interface AiGeneration {
+  id: string;
+  feature: string;
+  patientId: string | null;
+  subjectType: string | null;
+  subjectId: string | null;
+  outputText: string;
+  outputJson: Record<string, unknown> | null;
+  status: 'pending' | 'accepted' | 'accepted_with_edits' | 'rejected';
+  generatedAt: string;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  editedOutputText: string | null;
+  provenance: AiProvenance;
+}
+
+/** The `where.all` array is an implicit-AND list — no OR/nesting exists in this DSL. */
+export type CohortCondition =
+  | { field: 'age'; op: 'eq' | 'gt' | 'gte' | 'lt' | 'lte' | 'between'; value: number | [number, number] }
+  | { concept: 'condition' | 'allergy' | 'medication'; system: string; op: 'active' | 'resolved' | 'has_code'; value: string }
+  | {
+      measure: 'latest_hba1c' | 'days_since_completed_encounter';
+      op: '>' | '<' | '>=' | '<=' | '=';
+      value: number;
+    };
+
+export interface CohortDsl {
+  version: 1;
+  entity: 'patient';
+  where: { all: CohortCondition[] };
+}
+
+export interface CohortRow {
+  id: string;
+  name: string;
+  description: string | null;
+  dslPayload: CohortDsl;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CohortExecutionRow {
+  id: string;
+  cohortId: string | null;
+  dslPayload: CohortDsl;
+  estimatedRows: number | null;
+  resultPatientIds: string[];
+  resultCount: number;
+  executedAt: string;
+  exportStorageKey: string | null;
+  status: string;
+}
+
+export interface GovernedQuery {
+  name: string;
+  description: string;
+}
+
+export interface SearchResult {
+  resourceType: string;
+  resourceId: string;
+  patientId: string | null;
+  title: string;
+  rank: number;
+  indexedAt: string;
+}

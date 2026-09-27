@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/chart/empty-state';
 import { CaptureChargeDialog } from '@/components/encounters/capture-charge-dialog';
 import { CreateClaimDialog } from '@/components/encounters/create-claim-dialog';
+import { CodingSuggestionsTrigger } from '@/components/encounters/coding-suggestions-trigger';
 import type { Charge } from '@/lib/types';
 
 export function ChargesPanel({ charges, patientId, encounterId }: { charges: Charge[]; patientId: string; encounterId: string }) {
@@ -18,7 +19,8 @@ export function ChargesPanel({ charges, patientId, encounterId }: { charges: Cha
           <CreateClaimDialog patientId={patientId} encounterId={encounterId} codedCharges={codedCharges} />
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        <CodingSuggestionsTrigger encounterId={encounterId} />
         {charges.length === 0 ? (
           <EmptyState icon={DollarSign} message="No charges captured for this visit." />
         ) : (
