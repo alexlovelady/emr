@@ -1,7 +1,7 @@
-# EHR Platform — Phase 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 (Platform Foundation; Patient/Scheduling/Intake; Clinical Chart; Orders/Results + Interop; eRx; RCM; Query Platform; Patient Portal; AI Features)
+# EHR Platform — Phase 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10 (Platform Foundation; Patient/Scheduling/Intake; Clinical Chart; Orders/Results + Interop; eRx; RCM; Query Platform; Patient Portal; AI Features; Pilot Readiness)
 
 Cloud-native ambulatory EHR + practice-management + revenue-cycle platform. This repository
-currently implements **Phases 1–9** of `EHR_BUILD_SPEC.md`'s build order (§26). Phase 1: the
+currently implements **Phases 1–10** of `EHR_BUILD_SPEC.md`'s build order (§26) — all ten. Phase 1: the
 monorepo skeleton, tenant/workforce identity, the layered authorization model, audit +
 transactional outbox, a first-party auth adapter, a thin documents flow, and the platform's
 testing/CI/CD/observability scaffolding. Phase 2: the patient registry (with a per-organization
@@ -47,9 +47,18 @@ a real per-tenant rate cap, model/version capture, the exact §15.4 provenance o
 chart evidence, patient-message drafting, coding suggestions, denial explanation summarization,
 task summarization, NL-to-cohort-DSL) as real propose→human-review flows (`domains/ai`), backed by
 a `NoopAiGateway` since no LLM vendor BAA exists (regulatory manual §16.1) — see "Phase 9 scope
-decisions" below and `docs/adr/0004-deferred-ai-vendor.md`. No frontend has been built in any phase
-(`apps/patient-portal` stays reserved) — see the `README.md` in each reserved-but-empty folder for
-where later work lands.
+decisions" below and `docs/adr/0004-deferred-ai-vendor.md`. Phase 10: pilot readiness — the buildable
+half of it, at least: a golden-path end-to-end test suite covering real-but-previously-untested
+safety behaviors (duplicate-patient merge/reverse-merge, signed-note immutability and amendment,
+diagnostic-report amendment, the critical-result → Task wiring, and the AI-generation zero-context
+guard), an actually-executed backup/restore drill (`docs/runbooks/backup-restore.md`), downtime and
+support-operations runbooks, and an honest internal security self-assessment including a real
+`pnpm audit` run — plus a master `docs/pilot-readiness-checklist.md` mirroring
+`EHR_REGULATORY_MANUAL.md` §29's full pre-pilot gate, with every item either backed by real evidence
+or explicitly named as a gap requiring a licensed pentest firm, healthcare counsel, clinicians, or a
+real payer/vendor relationship this engineering-only build cannot produce or fake — see "Phase 10
+scope decisions" below. No frontend has been built in any phase (`apps/patient-portal` stays
+reserved) — see the `README.md` in each reserved-but-empty folder for where later work lands.
 
 Read `EHR_BUILD_SPEC.md` and `EHR_REGULATORY_MANUAL.md` first — this README assumes their
 context. Four deliberate deviations from the spec's literal text are documented in
@@ -465,6 +474,55 @@ infra/          terraform/, policies/, dashboards/ — all deferred, see their R
   bullet list are clinician/coder/biller tools. "Patient-message drafting" means staff drafting a
   reply to a portal message, not a patient-facing generative feature.
 
+### Phase 10 scope decisions
+
+- **Only the buildable half of Phase 10 was built, on purpose.** `EHR_BUILD_SPEC.md` §26's Phase 10
+  bullet list mixes real engineering work (E2E tests, a restore drill, runbooks, a security
+  self-review) with things that require a licensed pentest firm, clinicians, healthcare counsel, and
+  real payer/vendor relationships — an independent penetration test, a clinical hazard-register
+  sign-off, a launch-state legal review, and payer/vendor enrollments cannot be performed or
+  meaningfully approximated by an engineering pass, and claiming otherwise would be a real
+  misrepresentation, not a thin-but-honest stub like the vendor adapters in earlier phases. The user
+  confirmed this split explicitly before any of this phase's work started.
+- **The golden-path E2E suite targets genuinely untested-but-real safety behavior, not everything.**
+  Of `EHR_REGULATORY_MANUAL.md` §24's 17 clinical hazards, only 3 had any test coverage before this
+  phase (all inside one HL7 integration test), several have a real application-level control that
+  had simply never been exercised end to end (patient merge/reverse-merge, note/diagnostic-report
+  amendment immutability, the AI generation zero-context guard), and several have **no control
+  implemented at all** (medication/allergy interaction checking, dose/unit validation, unit
+  conversion, stale copied-forward note tracking). Building those missing controls would be new
+  clinical-safety *features*, not "pilot readiness" testing of what already exists — the checklist
+  and self-assessment name them as real gaps instead of inventing shallow versions to claim coverage.
+- **The E2E suite follows the existing integration-test convention exactly** — direct, in-process
+  service calls against a shared Kysely handle (`apps/api/src/e2e/golden-path.integration.test.ts`,
+  picked up automatically by the pre-existing `vitest.integration.config.ts` glob, no new Turbo task
+  needed) — rather than introducing `@nestjs/testing`/`supertest` HTTP-level scaffolding that no
+  other integration test in the repo uses (`supertest` has been an installed-but-unused `apps/api`
+  devDependency since Phase 1). See `docs/adr/0005-golden-path-testing-and-backup-restore-approach.md`.
+- **The backup/restore drill was actually run, not just written down** — `EHR_REGULATORY_MANUAL.md`
+  §25's own words: "a green backup dashboard is not evidence that restoration works." A canary patient
+  row was inserted, the embedded-Postgres data directory was stopped and physically copied, and a
+  second, independent Postgres instance was started against that copy on a different port to verify
+  the canary row and full table counts were genuinely present — see `docs/runbooks/backup-restore.md`'s
+  "Last tested" section for the real, logged result (2026-09-26).
+- **The drill uses a physical (data-directory copy) backup, not `pg_dump`/`pg_restore`** — the
+  `embedded-postgres` distribution used for Docker-free local dev bundles `postgres`/`pg_ctl`/`initdb`
+  but not the logical-dump tools a standard Postgres install would have. Production (Railway-hosted
+  Postgres, ADR-0001) would use its own snapshot/PITR mechanism instead — this drill validates the
+  underlying property ("a backup restores with the data intact"), not the exact production mechanism.
+- **The security self-assessment includes a real, current `pnpm audit` run** (32 findings: 2
+  critical, 16 high, 13 moderate, 1 low as of 2026-09-26), triaged by actual production-reachability
+  rather than raw severity — e.g. confirming via a repo-wide grep that `kysely`'s two SQL-injection
+  advisories (`sql.lit()`, `JSONPathBuilder`) reference APIs never actually called anywhere in this
+  codebase, so the finding is a real, worth-fixing dependency-currency item but not an active
+  exploit path today. This is explicitly documented as an internal engineering self-assessment, not
+  a substitute for `EHR_REGULATORY_MANUAL.md` §29's "independent penetration test" requirement.
+- **The master checklist (`docs/pilot-readiness-checklist.md`) mirrors §29's exact structure and
+  item text**, with every single box individually marked — `[x]` only where real evidence exists
+  (pointing at a specific test file, this session's commits, or a runbook), `[ ]` with a one-line
+  note on exactly what's missing and who owns closing it. Nothing is checked off without something
+  real behind it, and nothing is silently dropped from the manual's own list.
+
 ## Verification status
 
 Docker Desktop's backend would not start in the environment this was built in (its WSL2
@@ -662,3 +720,31 @@ executing another tenant's generation → every propose/accept/reject/execute ca
 No new bugs surfaced this pass beyond confirming the `@Inject()` DI pattern from Phase 8's fix
 continues to be unnecessary for `domains/ai`'s controllers (all `tsc`-compiled domain-package code,
 not `apps/api`'s `tsx`-transformed dev build).
+
+**Phase 10** was verified differently from every prior phase, deliberately: there's no new domain
+or migration to apply, so verification is the new golden-path E2E suite plus a genuinely-executed
+operational drill rather than a manual HTTP walkthrough. `pnpm turbo run lint typecheck test
+test:integration test:tenant-isolation` stayed green across the whole repo (200/200 Turborepo
+tasks) with the new `apps/api/src/e2e/golden-path.integration.test.ts` passing 7/7 fresh (not
+cached) alongside it — no other package's code changed this phase besides the small set of docs and
+one new test file. Concretely, that suite proved live against the dev Postgres: merging a duplicate
+patient reassigns identifiers and marks the source `merged`, reversing the merge restores it to
+`active`, and a self-merge plus a double-reversal both correctly throw `ConflictError` rather than
+silently no-op-ing → signing a note and then attempting to edit its content directly is rejected
+with a real `ConflictError`, and `amend()` leaves the original's content byte-for-byte unchanged
+while the amendment correctly references it → amending a diagnostic report never mutates the
+original row, only adds a new linked one → a `criticalFlag: true` diagnostic report genuinely opens
+an `open`, `urgent`, `critical_result_review` `Task` — not just a flag on the report, an actual
+queryable Task row → an AI generation proposed with zero grounding context is refused with a real
+`ValidationError`, one grounded on a real `Problem` row correctly cites it, accepting it changes
+nothing in the patient's problem list, and a second resolve attempt is a real `ConflictError` → and
+Tenant B gets a real `NotFoundError` (never a 403, never a leak) reading Tenant A's encounter, note,
+diagnostic report, or patient by their real ids, confirmed across the full multi-domain object graph
+this suite built, not just single-resource-type checks. Separately and manually, the backup/restore
+drill described above was actually executed once against the dev Postgres (not simulated, not
+merely documented) with a real, logged pass — see `docs/runbooks/backup-restore.md`. The security
+self-assessment's `pnpm audit` run is likewise real, current output, not a placeholder — see
+`docs/security/pre-pilot-self-assessment.md`. `docs/pilot-readiness-checklist.md` was cross-checked
+line by line against `EHR_REGULATORY_MANUAL.md` §29 to confirm every listed item is present and
+honestly marked. Dev Postgres and the API dev server were both shut down cleanly at the end of this
+pass, the same as every prior phase.
