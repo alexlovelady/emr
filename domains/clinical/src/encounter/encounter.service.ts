@@ -36,6 +36,18 @@ export class EncounterService {
       });
     }
 
+    // Pre-check rather than letting `encounters_appointment_unique` reject the insert — an
+    // unhandled unique-violation would otherwise surface as a raw Postgres error message to the
+    // caller instead of a clean, expected ConflictError (an appointment can only ever have one
+    // encounter; a double "Start visit" click/retry is the realistic way to hit this).
+    const existing = await this.repo.findByAppointmentId(trx, ctx.tenantId, appointment.id);
+    if (existing) {
+      throw new ConflictError('An encounter already exists for this appointment', {
+        appointmentId: appointment.id,
+        encounterId: existing.id,
+      });
+    }
+
     const actorId = ctx.actor?.id ?? null;
     const encounter = await this.repo.create(trx, {
       tenantId: ctx.tenantId,

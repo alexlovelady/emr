@@ -1,4 +1,15 @@
-import { AlertTriangle, FileText, FlaskConical, Pill, Stethoscope } from 'lucide-react';
+import {
+  AlertTriangle,
+  ClipboardList,
+  CreditCard,
+  DollarSign,
+  FileText,
+  FlaskConical,
+  MessageSquare,
+  Pill,
+  Stethoscope,
+  Upload,
+} from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { ProblemsPanel } from '@/components/chart/problems-panel';
@@ -6,7 +17,30 @@ import { AllergiesPanel } from '@/components/chart/allergies-panel';
 import { MedicationsPanel } from '@/components/chart/medications-panel';
 import { ResultsList } from '@/components/chart/results-list';
 import { NotesList } from '@/components/chart/notes-list';
-import type { Allergy, DiagnosticReport, MedicationItem, Prescription, Problem, SignedNote } from '@/lib/types';
+import { CoveragePanel } from '@/components/chart/coverage-panel';
+import { IntakePanel } from '@/components/chart/intake-panel';
+import { MessagesPanel } from '@/components/chart/messages-panel';
+import { DocumentsPanel } from '@/components/chart/documents-panel';
+import { BillingPanel } from '@/components/chart/billing-panel';
+import type {
+  Allergy,
+  Charge,
+  Claim,
+  Coverage,
+  Denial,
+  DiagnosticReport,
+  DocumentItem,
+  EligibilityCheck,
+  IntakeFormResponse,
+  IntakeFormTemplate,
+  MedicationItem,
+  MessageThread,
+  PatientIdentifier,
+  PatientLedger,
+  Prescription,
+  Problem,
+  SignedNote,
+} from '@/lib/types';
 
 function StatChip({ icon: Icon, label, count, tone }: { icon: typeof Stethoscope; label: string; count: number; tone: 'default' | 'warn' }) {
   return (
@@ -28,9 +62,39 @@ interface ChartTabsProps {
   prescriptions: Prescription[];
   results: DiagnosticReport[];
   notes: SignedNote[];
+  coverages: Coverage[];
+  identifiers: PatientIdentifier[];
+  intakeResponses: IntakeFormResponse[];
+  intakeTemplates: IntakeFormTemplate[];
+  messageThreads: MessageThread[];
+  documents: DocumentItem[];
+  charges: Charge[];
+  claims: Claim[];
+  denials: Denial[];
+  eligibilityChecks: EligibilityCheck[];
+  ledger: PatientLedger | null;
 }
 
-export function ChartTabs({ patientId, problems, allergies, medications, prescriptions, results, notes }: ChartTabsProps) {
+export function ChartTabs({
+  patientId,
+  problems,
+  allergies,
+  medications,
+  prescriptions,
+  results,
+  notes,
+  coverages,
+  identifiers,
+  intakeResponses,
+  intakeTemplates,
+  messageThreads,
+  documents,
+  charges,
+  claims,
+  denials,
+  eligibilityChecks,
+  ledger,
+}: ChartTabsProps) {
   const activeProblems = problems.filter((p) => p.status !== 'deleted' && p.clinicalStatus === 'active').length;
   const activeAllergies = allergies.filter((a) => a.status !== 'deleted').length;
   const activeMeds = medications.filter((m) => m.status !== 'deleted' && m.status === 'active').length;
@@ -48,7 +112,7 @@ export function ChartTabs({ patientId, problems, allergies, medications, prescri
       <Card>
         <CardContent className="pt-6">
           <Tabs defaultValue="problems">
-            <TabsList>
+            <TabsList className="flex-wrap">
               <TabsTrigger value="problems">
                 <Stethoscope className="mr-1.5 h-3.5 w-3.5" /> Problems
               </TabsTrigger>
@@ -63,6 +127,21 @@ export function ChartTabs({ patientId, problems, allergies, medications, prescri
               </TabsTrigger>
               <TabsTrigger value="notes">
                 <FileText className="mr-1.5 h-3.5 w-3.5" /> Notes
+              </TabsTrigger>
+              <TabsTrigger value="coverage">
+                <CreditCard className="mr-1.5 h-3.5 w-3.5" /> Coverage
+              </TabsTrigger>
+              <TabsTrigger value="intake">
+                <ClipboardList className="mr-1.5 h-3.5 w-3.5" /> Intake
+              </TabsTrigger>
+              <TabsTrigger value="messages">
+                <MessageSquare className="mr-1.5 h-3.5 w-3.5" /> Messages
+              </TabsTrigger>
+              <TabsTrigger value="documents">
+                <Upload className="mr-1.5 h-3.5 w-3.5" /> Documents
+              </TabsTrigger>
+              <TabsTrigger value="billing">
+                <DollarSign className="mr-1.5 h-3.5 w-3.5" /> Billing
               </TabsTrigger>
             </TabsList>
             <TabsContent value="problems">
@@ -79,6 +158,29 @@ export function ChartTabs({ patientId, problems, allergies, medications, prescri
             </TabsContent>
             <TabsContent value="notes">
               <NotesList notes={notes} />
+            </TabsContent>
+            <TabsContent value="coverage">
+              <CoveragePanel coverages={coverages} identifiers={identifiers} patientId={patientId} />
+            </TabsContent>
+            <TabsContent value="intake">
+              <IntakePanel responses={intakeResponses} templates={intakeTemplates} patientId={patientId} />
+            </TabsContent>
+            <TabsContent value="messages">
+              <MessagesPanel threads={messageThreads} patientId={patientId} />
+            </TabsContent>
+            <TabsContent value="documents">
+              <DocumentsPanel documents={documents} patientId={patientId} />
+            </TabsContent>
+            <TabsContent value="billing">
+              <BillingPanel
+                patientId={patientId}
+                coverages={coverages}
+                charges={charges}
+                claims={claims}
+                denials={denials}
+                eligibilityChecks={eligibilityChecks}
+                ledger={ledger}
+              />
             </TabsContent>
           </Tabs>
         </CardContent>

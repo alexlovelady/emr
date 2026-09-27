@@ -63,6 +63,17 @@ export class EncounterRepository {
     return row ? toRow(row) : null;
   }
 
+  /** Backs the `create()` pre-check against `encounters_appointment_unique` — see that call site's comment. */
+  async findByAppointmentId(trx: Executor, tenantId: string, appointmentId: string): Promise<EncounterRow | null> {
+    const row = await trx
+      .selectFrom('encounters')
+      .selectAll()
+      .where('tenant_id', '=', tenantId)
+      .where('appointment_id', '=', appointmentId)
+      .executeTakeFirst();
+    return row ? toRow(row) : null;
+  }
+
   async list(trx: Executor, tenantId: string, filter: { patientId?: string } = {}): Promise<EncounterRow[]> {
     let query = trx.selectFrom('encounters').selectAll().where('tenant_id', '=', tenantId);
     if (filter.patientId) query = query.where('patient_id', '=', filter.patientId);

@@ -1,5 +1,6 @@
 import { callBackend } from '@/lib/api-proxy';
 import { PatientSearch } from '@/components/patients/patient-search';
+import { NewPatientDialog } from '@/components/patients/new-patient-dialog';
 import type { Patient } from '@/lib/types';
 
 export default async function PatientsPage() {
@@ -7,9 +8,12 @@ export default async function PatientsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Patients</h1>
-        <p className="text-sm text-muted-foreground">{patients.length} patients in this tenant</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Patients</h1>
+          <p className="text-sm text-muted-foreground">{patients.length} patients in this tenant</p>
+        </div>
+        <NewPatientDialog />
       </div>
       <PatientSearch patients={patients} />
     </div>

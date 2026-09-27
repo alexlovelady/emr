@@ -16,10 +16,69 @@ export interface Patient {
   id: string;
   givenName: string;
   familyName: string;
+  middleName?: string | null;
   dateOfBirth: string;
   sexAtBirth: string | null;
+  genderIdentity?: string | null;
   phone: string | null;
   email: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
+  preferredLanguage?: string | null;
+  status: string;
+}
+
+export interface DuplicateCandidate extends Patient {
+  score: number;
+}
+
+export interface PatientMergeHistory {
+  id: string;
+  sourcePatientId: string;
+  targetPatientId: string;
+  mergedBy: string;
+  mergeReason: string | null;
+  reversedAt: string | null;
+  reversedBy: string | null;
+}
+
+export interface TimelineEntry {
+  type: 'appointment' | 'task';
+  occurredAt: string;
+  summary: string;
+  resourceId: string;
+  status: string;
+}
+
+export interface PatientTimeline {
+  patient: Patient;
+  entries: TimelineEntry[];
+}
+
+export interface Coverage {
+  id: string;
+  patientId: string;
+  payerName: string;
+  memberId: string;
+  groupNumber: string | null;
+  planName: string | null;
+  coverageType: string;
+  effectiveStart: string;
+  effectiveEnd: string | null;
+  status: string;
+}
+
+export interface PatientIdentifier {
+  id: string;
+  patientId: string;
+  organizationId: string | null;
+  identifierSystem: string;
+  value: string;
+  isPrimary: boolean;
   status: string;
 }
 
@@ -172,6 +231,161 @@ export interface Task {
 
 export interface EffectivePermissions {
   permissions: string[];
+}
+
+export interface IntakeFormField {
+  key: string;
+  label: string;
+  type: 'text' | 'textarea' | 'number' | 'boolean' | 'date' | 'select';
+  required: boolean;
+  options: string[] | null;
+}
+
+export interface IntakeFormTemplate {
+  id: string;
+  name: string;
+  schemaVersion: number;
+  schema: IntakeFormField[];
+  status: string;
+}
+
+export interface IntakeFormResponse {
+  id: string;
+  templateId: string;
+  patientId: string;
+  appointmentId: string | null;
+  answers: Record<string, unknown>;
+  submittedAt: string | null;
+  status: 'draft' | 'submitted';
+}
+
+export interface MessageThread {
+  id: string;
+  patientId: string;
+  subject: string;
+  createdByType: 'staff' | 'portal';
+  lastMessageAt: string | null;
+  status: string;
+}
+
+export interface Message {
+  id: string;
+  threadId: string;
+  senderType: 'staff' | 'portal';
+  senderId: string;
+  body: string;
+  readAt: string | null;
+  status: string;
+  createdAt: string;
+}
+
+export interface DocumentItem {
+  id: string;
+  filename: string;
+  contentType: string;
+  sizeBytes: number | null;
+  patientId: string | null;
+  encounterId: string | null;
+  documentCategory: string | null;
+  status: 'pending_upload' | 'stored';
+  createdAt: string;
+}
+
+export interface Charge {
+  id: string;
+  patientId: string;
+  encounterId: string;
+  billingPractitionerId: string;
+  codeSystem: string;
+  code: string;
+  description: string;
+  units: number;
+  unitPrice: string;
+  diagnosisCodes: string[];
+  claimId: string | null;
+  status: 'draft' | 'coded' | 'billed' | 'void';
+  createdAt: string;
+}
+
+export interface Claim {
+  id: string;
+  patientId: string;
+  encounterId: string;
+  coverageId: string | null;
+  billingPractitionerId: string;
+  totalChargeAmount: string;
+  currentVersion: number;
+  clearinghouseTransactionId: string | null;
+  status: 'draft' | 'submitted' | 'accepted' | 'rejected' | 'adjudicated' | 'paid' | 'denied';
+  createdAt: string;
+}
+
+export interface ClaimVersion {
+  id: string;
+  claimId: string;
+  versionNumber: number;
+  versionStatus: string;
+  payload: Record<string, unknown>;
+  clearinghouseTransactionId: string | null;
+  submittedAt: string | null;
+  createdAt: string;
+}
+
+export interface Denial {
+  id: string;
+  claimId: string;
+  denialReasonCode: string;
+  denialReasonText: string;
+  deniedAt: string;
+  resolvedAt: string | null;
+  resolutionNotes: string | null;
+  taskId: string | null;
+  status: 'open' | 'resolved';
+}
+
+export interface Remittance {
+  id: string;
+  claimId: string;
+  claimVersionId: string;
+  payerPaidAmount: string;
+  adjustmentAmount: string;
+  patientResponsibilityAmount: string;
+  remittanceAdviceNumber: string | null;
+  postedAt: string;
+}
+
+export interface FullClaimTimeline {
+  claim: Claim;
+  versions: ClaimVersion[];
+  denials: Denial[];
+  remittances: Remittance[];
+}
+
+export interface EligibilityCheck {
+  id: string;
+  patientId: string;
+  coverageId: string;
+  isEligible: boolean;
+  copayAmount: string | null;
+  deductibleRemaining: string | null;
+  checkedAt: string;
+  status: string;
+}
+
+export interface LedgerEntry {
+  id: string;
+  patientId: string;
+  claimId: string | null;
+  entryType: string;
+  amount: string;
+  description: string;
+  occurredAt: string;
+  status: string;
+}
+
+export interface PatientLedger {
+  entries: LedgerEntry[];
+  balance: string;
 }
 
 export interface ProblemDetails {

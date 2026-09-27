@@ -1,5 +1,6 @@
 import { AlertTriangle, Cake, Phone, VenusAndMars } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { FindDuplicatesDialog } from '@/components/chart/find-duplicates-dialog';
 import type { Allergy, Patient } from '@/lib/types';
 
 function age(dateOfBirth: string): number {
@@ -45,6 +46,7 @@ export function PatientBanner({ patient, allergies }: { patient: Patient; allerg
             )}
           </div>
         </div>
+        <FindDuplicatesDialog patient={patient} />
       </div>
 
       {activeAllergies.length > 0 && (

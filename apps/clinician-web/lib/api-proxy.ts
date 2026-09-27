@@ -90,3 +90,18 @@ export async function callBackend<T>(path: string, opts: CallOptions = {}): Prom
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
+
+/**
+ * Like callBackend(), but returns `fallback` instead of throwing on a 403 — for chart tabs/sections
+ * whose read permission (e.g. LEDGER_READ, MESSAGE_MANAGE) a given staff role may not hold. A
+ * missing-permission section degrades to its empty state rather than crashing the whole page;
+ * real errors (network, 5xx, expired session) still propagate normally.
+ */
+export async function callBackendOr<T>(path: string, fallback: T, opts: CallOptions = {}): Promise<T> {
+  try {
+    return await callBackend<T>(path, opts);
+  } catch (err) {
+    if (err instanceof BackendError && err.status === 403) return fallback;
+    throw err;
+  }
+}

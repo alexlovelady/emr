@@ -2,18 +2,38 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Activity, CalendarDays, FlaskConical, ListChecks, LogOut, Users } from 'lucide-react';
+import { Activity, CalendarDays, ClipboardList, DollarSign, FlaskConical, ListChecks, LogOut, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/components/providers/permissions-provider';
 import { PERMISSION_KEYS } from '@/lib/permission-keys';
 import type { CurrentUser } from '@/lib/types';
 
-const LINKS = [
+const CLINICAL_LINKS = [
   { href: '/patients', label: 'Patients', icon: Users, permission: null },
   { href: '/schedule', label: 'Schedule', icon: CalendarDays, permission: null },
   { href: '/results-inbox', label: 'Results inbox', icon: FlaskConical, permission: PERMISSION_KEYS.RESULT_REVIEW },
   { href: '/tasks', label: 'Tasks', icon: ListChecks, permission: PERMISSION_KEYS.TASK_MANAGE },
 ] as const;
+
+const ADMIN_LINKS = [
+  { href: '/intake-templates', label: 'Intake templates', icon: ClipboardList, permission: PERMISSION_KEYS.INTAKE_FORM_MANAGE },
+  { href: '/coding-queue', label: 'Coding queue', icon: DollarSign, permission: PERMISSION_KEYS.CODING_REVIEW },
+] as const;
+
+function NavLink({ href, label, icon: Icon, active }: { href: string; label: string; icon: typeof Users; active: boolean }) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+        active ? 'bg-sidebar-active text-white' : 'text-sidebar-foreground/80 hover:bg-white/5 hover:text-white',
+      )}
+    >
+      <Icon className="h-4 w-4" strokeWidth={2} />
+      {label}
+    </Link>
+  );
+}
 
 function initials(email: string): string {
   const name = email.split('@')[0] ?? '';
@@ -26,7 +46,8 @@ export function LeftNav({ user }: { user: CurrentUser }) {
   const pathname = usePathname();
   const router = useRouter();
   const { has } = usePermissions();
-  const links = LINKS.filter((link) => link.permission === null || has(link.permission));
+  const clinicalLinks = CLINICAL_LINKS.filter((link) => link.permission === null || has(link.permission));
+  const adminLinks = ADMIN_LINKS.filter((link) => has(link.permission));
 
   async function onLogout() {
     await fetch('/api/logout', { method: 'POST' });
@@ -43,27 +64,25 @@ export function LeftNav({ user }: { user: CurrentUser }) {
         <span className="text-base font-semibold tracking-tight text-white">Meridian</span>
       </div>
 
-      <div className="flex-1 space-y-0.5 px-3">
-        <div className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-sidebar-muted">
-          Clinical
+      <div className="flex-1 space-y-4 px-3">
+        <div className="space-y-0.5">
+          <div className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-sidebar-muted">
+            Clinical
+          </div>
+          {clinicalLinks.map((link) => (
+            <NavLink key={link.href} href={link.href} label={link.label} icon={link.icon} active={pathname.startsWith(link.href)} />
+          ))}
         </div>
-        {links.map((link) => {
-          const Icon = link.icon;
-          const active = pathname.startsWith(link.href);
-          return (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={cn(
-                'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                active ? 'bg-sidebar-active text-white' : 'text-sidebar-foreground/80 hover:bg-white/5 hover:text-white',
-              )}
-            >
-              <Icon className="h-4 w-4" strokeWidth={2} />
-              {link.label}
-            </Link>
-          );
-        })}
+        {adminLinks.length > 0 && (
+          <div className="space-y-0.5">
+            <div className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-sidebar-muted">
+              Administration
+            </div>
+            {adminLinks.map((link) => (
+              <NavLink key={link.href} href={link.href} label={link.label} icon={link.icon} active={pathname.startsWith(link.href)} />
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="border-t border-sidebar-border p-3">

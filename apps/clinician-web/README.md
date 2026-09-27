@@ -1,11 +1,21 @@
 # clinician-web
 
-Staff-facing clinical workflow app — the first browser-hosted application in this monorepo. Started
-as a thin read-only golden path, then expanded ("Phase A") into a real daily-use tool: patient
-registry, scheduling (book/confirm/check-in/cancel), encounter + note authoring with sign-off,
-problem/allergy/medication management, orders + results review, e-prescribing (incl. controlled
-substances + refills), and a "My Tasks" inbox. See the plan history for the full multi-phase
-roadmap toward eClinicalWorks/athenahealth feature parity — this app covers Phase A.
+Staff-facing clinical + front-office workflow app — the first browser-hosted application in this
+monorepo. Started as a thin read-only golden path, then expanded into a real daily-use tool across
+three passes:
+
+- **Phase A**: scheduling (book/confirm/check-in/cancel), encounter + note authoring with sign-off,
+  problem/allergy/medication management, orders + results review, e-prescribing (incl. controlled
+  substances + refills), a "My Tasks" inbox.
+- **Phase B**: patient registration (with a live duplicate-check + merge), insurance coverage +
+  external identifiers, intake form templates + patient-assigned responses, staff↔patient messaging,
+  document upload/download.
+- **Phase C**: billing/RCM — charge capture + a tenant-wide coding queue, claims (create/submit/
+  timeline), denial resolution, eligibility checks, patient ledger.
+
+See the plan history for the full multi-phase roadmap toward eClinicalWorks/athenahealth feature
+parity — this app now covers Phases A–C. The patient chart has 10 tabs: Problems, Medications,
+Allergies, Results, Notes, Coverage, Intake, Messages, Documents, Billing.
 
 Next.js 15 (App Router) + React 19 + TypeScript, shadcn/Radix UI primitives (hand-copied into
 `components/ui`, not an installed package) + Tailwind CSS, per `EHR_BUILD_SPEC.md` §2.1.
@@ -97,3 +107,36 @@ run alone. Run them sequentially, or `rm -rf .next` between a `build` and a subs
   `callBackend()` calls; writes are Server Actions with `revalidatePath()`. No optimistic UI/
   client-side cache exists yet — every mutation waits for the server round-trip before the UI
   updates.
+
+## Known trims (new this pass — Phases B & C)
+
+- **Phase C (billing/RCM) stays inside this app, not a separate `apps/admin-web`** — a deliberate
+  scope decision, not a gap; see the plan history for the reasoning. Every billing screen is
+  permission-gated the same way as everything else in this app.
+- **No "list denials by patient" endpoint exists** — the patient chart's Billing tab derives its
+  denial list by fetching every one of the patient's claims' timelines (`GET /claims/:id/timeline`)
+  and flattening their `denials` arrays, since there's no direct patient-scoped denials endpoint.
+- **Eligibility checks and claim submission hit a fixed stub** (`NoopClearinghouseGateway`) — the
+  "Run eligibility check" dialog says so explicitly in its own copy; a real payer/clearinghouse
+  connection would replace this without any UI change.
+- **The patient ledger only ever decreases** — `LedgerService.postEntry()` is only ever called from
+  remittance posting (an async, webhook-gateway-only path not reachable from this UI in the current
+  dev environment); nothing in this pass's write paths posts a positive `charge`-type ledger entry.
+  Real charge amounts are visible in the Charges section; the Ledger section reflects only posted
+  payments/adjustments.
+- **Document upload/download was not live-tested end-to-end** — this dev environment has no running
+  MinIO/S3 instance (a pre-existing, already-documented constraint of this whole project — see the
+  root README). The presigned-URL request against `apps/api` was verified live (`POST /documents`
+  returns a real, correctly-shaped presigned PUT URL); the actual PUT to storage was verified to fail
+  cleanly with a clear error (`app/api/documents/route.ts` catches the network failure and returns a
+  502 with a readable message) rather than crashing, but a real upload→confirm→download round trip
+  needs a running object-storage backend to test.
+- **No reassign-refill-approver UI, no reverse-merge UI** — same "no endpoint reachable" reasoning as
+  other trims above; both exist as real backend actions (`POST .../merges/:id/reverse`) but weren't
+  wired into this pass's screens.
+- Building this pass surfaced and fixed two real, pre-existing gaps as they were hit live: (1)
+  `EncounterService.create()` let a Postgres unique-constraint violation (double-creating an
+  encounter for an already-started appointment) leak as a raw, unhandled 500 instead of a clean
+  `ConflictError` — fixed with an explicit pre-check; (2) a chart-tab `ClaimRow` nested a real
+  `<button>` (Submit) inside its own toggle `<button>`, invalid HTML that caused a React hydration
+  error — fixed by making the row's toggle target a `div[role=button]` instead.
