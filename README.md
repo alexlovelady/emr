@@ -612,6 +612,18 @@ and [`docs/adr/0006-clinician-web-bff-auth.md`](docs/adr/0006-clinician-web-bff-
   CRUD round trip through the full guard/interceptor chain, RFC 7807 error formatting, JSON body
   parsing, and `interop-hl7`'s custom `text/plain` HL7 body parsing) — the DI regression above only
   ever showed up at runtime, so static checks alone would have missed it.
+- **`@opentelemetry/*` bumped to current majors** (`api` 1.9.0→1.9.1, `auto-instrumentations-node`
+  0.53→0.80, `exporter-{trace,metrics}-otlp-http` 0.57→0.222, `resources`/`sdk-metrics` 1.30→2.11,
+  `sdk-node` 0.57→0.222, `semantic-conventions` 1.28→1.43) — `pnpm audit`'s OTel advisories are now
+  gone. **One real breaking change**: `@opentelemetry/resources`'s `Resource` class became a
+  type-only export in the 2.x line; `packages/observability/src/tracing.ts`'s
+  `new Resource({ [ATTR_SERVICE_NAME]: ... })` no longer compiled (`'Resource' only refers to a
+  type, but is being used as a value`) and was replaced with the new factory function,
+  `resourceFromAttributes({ [ATTR_SERVICE_NAME]: ... })`. Verified via the full repo-wide static
+  checks + test suite (both green) and a live restart of all 4 apps that call `startTracing()` —
+  each boots cleanly with tracing/metrics initialized before Nest's own startup log, and an
+  authenticated end-to-end request (login → `GET /patients`) still round-trips through the full
+  guard/interceptor chain with fastify auto-instrumentation active.
 - **IdentityProvider is not yet refactored for SSO-readiness** — ADR-0002's own stated intent
   (splitting "resolve which user this is" from "check this password" so a future federated
   implementation doesn't need to accept a password at all) remains a real, tracked gap; no SSO

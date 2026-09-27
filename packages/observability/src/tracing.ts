@@ -3,7 +3,7 @@ import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentation
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { PeriodicExportingMetricReader, ConsoleMetricExporter } from '@opentelemetry/sdk-metrics';
-import { Resource } from '@opentelemetry/resources';
+import { resourceFromAttributes } from '@opentelemetry/resources';
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 
 export interface TracingConfig {
@@ -17,7 +17,7 @@ export interface TracingConfig {
  * Redis/Valkey instrumentation is added once a Redis client is actually wired into an app.
  */
 export function startTracing(config: TracingConfig): NodeSDK {
-  const resource = new Resource({ [ATTR_SERVICE_NAME]: config.serviceName });
+  const resource = resourceFromAttributes({ [ATTR_SERVICE_NAME]: config.serviceName });
 
   const metricReader = new PeriodicExportingMetricReader({
     exporter: config.otlpEndpoint
