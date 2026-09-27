@@ -13,11 +13,11 @@
   },
   "dependencies": {
     "@ehr/domain-common": "workspace:*",
-    "@nestjs/common": "^10.4.15",
+    "@nestjs/common": "^12.1.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
-    "fastify": "4.28.1",
+    "fastify": "^5.12.5",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }

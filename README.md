@@ -579,6 +579,45 @@ and [`docs/adr/0006-clinician-web-bff-auth.md`](docs/adr/0006-clinician-web-bff-
   note on exactly what's missing and who owns closing it. Nothing is checked off without something
   real behind it, and nothing is silently dropped from the manual's own list.
 
+### eCW/athena parity roadmap — Phase L scope decisions
+
+- **`kysely` upgraded `^0.27.4` → `^0.28.17`** (all 31 workspace packages that depend on it) —
+  fixes two real, high-severity SQL-injection advisories (JSON-path traversal in
+  `JSONPathBuilder.key()`/`.at()`, insufficient backslash escaping in `sql.lit()`), confirmed
+  non-reachable in this codebase's actual query usage today but core to the data layer. A clean
+  upgrade — no code changes needed, full repo-wide lint/typecheck/build/test suite green
+  unchanged.
+- **NestJS `^10.4.15` → `^12.1.0` and `fastify` `4.28.1` → `^5.12.5`, across every workspace
+  package that touches either** (not just the 4 apps that boot a server — every `domains/*` and
+  several `packages/*` also declare these as dependencies, since their controllers/interceptors
+  reference `FastifyRequest`/`Reflector`/etc. directly). Fastify's own security patches were never
+  backported to the 4.x line — every CVE fix (Content-Type header validation bypass, the
+  `@fastify/middie` middleware-bypass family, request spoofing, schema-coercion bypass) only
+  exists on 5.x, which in turn requires NestJS 11+ (`@nestjs/platform-fastify` only supports
+  Fastify 5 from that point on) — landed on 12.1.0 since 11.x itself had several of its own
+  still-open security advisories that only 12.x closes. **Two real breaking changes found and
+  fixed**: (1) `packages/api-contracts`'s `declare module 'fastify' { interface FastifyRequest {
+  ehrContext... } }` ambient augmentation stopped merging once `apps/api` resolved a *different*
+  `FastifyRequest` type identity than the augmentation's own `fastify` import — every package with
+  its own separately-versioned `fastify` devDependency needed bumping in lockstep, not just the
+  4 apps that boot a server. (2) Several `domains/*` packages (found via actually failing at
+  runtime, not typecheck) still declared `@nestjs/common`/`@nestjs/core` `^10.4.15` as their own
+  dependency; a mixed-version NestJS DI graph silently broke constructor-parameter-type injection
+  for undecorated dependencies (`AuthzInterceptor`'s `Reflector` parameter resolved to a *different
+  class reference* than the one `apps/api`'s container recognized, throwing `Nest can't resolve
+  dependencies` only at boot, never at compile time) — every package declaring `@nestjs/common`/
+  `@nestjs/core` needed the same version, not just the packages that literally call
+  `NestFactory.create()`. Verified via the full repo-wide static-check + test suite (both green)
+  **and** live smoke tests against all 4 running apps post-upgrade (health checks, an authenticated
+  CRUD round trip through the full guard/interceptor chain, RFC 7807 error formatting, JSON body
+  parsing, and `interop-hl7`'s custom `text/plain` HL7 body parsing) — the DI regression above only
+  ever showed up at runtime, so static checks alone would have missed it.
+- **IdentityProvider is not yet refactored for SSO-readiness** — ADR-0002's own stated intent
+  (splitting "resolve which user this is" from "check this password" so a future federated
+  implementation doesn't need to accept a password at all) remains a real, tracked gap; no SSO
+  vendor is contracted (see `docs/ecw-athena-parity-manual-action-items.md`), and this specific
+  refactor wasn't reached this pass — a candidate for a future Phase L follow-up.
+
 ## Verification status
 
 Docker Desktop's backend would not start in the environment this was built in (its WSL2

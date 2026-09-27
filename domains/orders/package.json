@@ -22,13 +22,13 @@
     "@ehr/lab-adapter": "workspace:*",
     "@ehr/outbox": "workspace:*",
     "@ehr/patient": "workspace:*",
-    "@nestjs/common": "^10.4.15",
+    "@nestjs/common": "^12.1.0",
     "kysely": "^0.28.17",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@ehr/testing": "workspace:*",
-    "fastify": "4.28.1",
+    "fastify": "^5.12.5",
     "pg": "^8.13.1",
     "@types/pg": "^8.11.10",
     "typescript": "^5.7.2",
