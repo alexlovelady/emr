@@ -202,6 +202,15 @@ apps:**
    null/undefined, not `""`, so the UI rendered a blank `<Alert>`. Fixed with `||` instead, plus a
    final generic fallback string.
 
+## Known trims (new this pass — Phase K clinical-safety plumbing)
+
+- **The prescribe dialog always shows "Interaction check: not available"** — this is intentional,
+  not a trim to fix. `NoopInteractionCheckGateway` always returns no findings; the notice exists
+  precisely so an empty result never reads as "checked, and it's clear." If `state.data.
+  interactionFindings` is ever non-empty (only possible once a real gateway is wired in), the
+  dialog stops auto-closing on success so the clinician actually sees them — currently unreachable
+  with the Noop gateway, but wired for when that changes.
+
 ## Known trims (new this pass — Phase I scheduling)
 
 - **The New Appointment dialog's resource picker is a plain checkbox list of every resource in the

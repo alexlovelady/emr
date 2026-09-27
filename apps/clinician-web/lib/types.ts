@@ -223,6 +223,17 @@ export interface Prescription {
   status: string;
 }
 
+export interface InteractionFinding {
+  severity: string;
+  description: string;
+  involvedCodes: string[];
+}
+
+export interface PrescriptionCreateResult {
+  prescription: Prescription;
+  interactionFindings: InteractionFinding[];
+}
+
 export interface RefillRequest {
   id: string;
   prescriptionId: string;

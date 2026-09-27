@@ -269,6 +269,21 @@ and [`docs/adr/0006-clinician-web-bff-auth.md`](docs/adr/0006-clinician-web-bff-
   interface (the 6 methods spec §14 names) + a `NoopPrescribingGateway` stub backed by a small
   embedded synthetic medication/pharmacy dataset — "do not build pharmacy-network connectivity
   from scratch for v1," same adapter-interface-now pattern as ADR-0002 and the Phase 4 lab adapter.
+- **Clinical-safety interaction checking is real plumbing, honestly stubbed** (the eCW/athena
+  parity roadmap's Phase K) — `packages/interaction-adapter` mirrors every other vendor-boundary
+  adapter here (`LabOrderGateway`, `PrescribingGateway`, ...): an `InteractionCheckGateway`
+  interface + `NoopInteractionCheckGateway`, the only implementation, which always returns no
+  findings because no licensed drug-interaction/drug-allergy database (First Databank, Medi-Span,
+  ...) is connected in this environment and none can be without a real commercial license.
+  `PrescriptionService.create()` really calls it — gathering the patient's active-medication
+  RxNorm codes plus the new one, and active-allergy codes (allergies gained optional, nullable
+  `codeSystem`/`code` columns for this — still pure free text otherwise) — and returns the findings
+  alongside the created prescription (`{prescription, interactionFindings}`, not bolted onto
+  `PrescriptionRow` itself, since nothing is persisted). `apps/clinician-web`'s prescribe dialog
+  shows a persistent, unconditional notice ("not available — no drug-database vendor connected")
+  precisely so an empty findings list reads as "no check happened," never as "checked, and it's
+  clear" — removing or softening that notice without first replacing the Noop gateway would turn
+  honest plumbing into a fake safety feature.
 - **Controlled substances are gated by route, not by an in-service second permission check** —
   `POST /patients/{id}/prescriptions` requires `medication.prescribe` and rejects a
   controlled-substance payload; `POST /patients/{id}/prescriptions/controlled` requires the

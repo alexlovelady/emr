@@ -10,7 +10,8 @@ import { OBJECT_STORAGE_GATEWAY } from '@ehr/documents';
 import { NoopLabOrderGateway } from '@ehr/lab-adapter';
 import { LAB_ORDER_GATEWAY } from '@ehr/orders';
 import { NoopPrescribingGateway } from '@ehr/erx-adapter';
-import { ERX_GATEWAY } from '@ehr/medication';
+import { NoopInteractionCheckGateway } from '@ehr/interaction-adapter';
+import { ERX_GATEWAY, INTERACTION_CHECK_GATEWAY } from '@ehr/medication';
 import { NoopClearinghouseGateway } from '@ehr/clearinghouse-adapter';
 import { CLEARINGHOUSE_GATEWAY } from '@ehr/claims';
 import { PostgresSearchIndexGateway } from '@ehr/search-adapter';
@@ -70,6 +71,7 @@ const db = createDb({ connectionString: env.APP_DATABASE_URL });
     },
     { provide: LAB_ORDER_GATEWAY, useValue: new NoopLabOrderGateway() },
     { provide: ERX_GATEWAY, useValue: new NoopPrescribingGateway() },
+    { provide: INTERACTION_CHECK_GATEWAY, useValue: new NoopInteractionCheckGateway() },
     { provide: CLEARINGHOUSE_GATEWAY, useValue: new NoopClearinghouseGateway() },
     { provide: SEARCH_INDEX_GATEWAY, useValue: new PostgresSearchIndexGateway() },
     { provide: NOTIFICATION_GATEWAY, useValue: new NoopNotificationGateway() },
@@ -86,6 +88,7 @@ const db = createDb({ connectionString: env.APP_DATABASE_URL });
     OBJECT_STORAGE_GATEWAY,
     LAB_ORDER_GATEWAY,
     ERX_GATEWAY,
+    INTERACTION_CHECK_GATEWAY,
     CLEARINGHOUSE_GATEWAY,
     SEARCH_INDEX_GATEWAY,
     NOTIFICATION_GATEWAY,

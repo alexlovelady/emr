@@ -3,13 +3,13 @@
 import { revalidatePath } from 'next/cache';
 import { callBackend } from '@/lib/api-proxy';
 import { runAction, type ActionResult } from './action-result';
-import type { Prescription } from '@/lib/types';
+import type { Prescription, PrescriptionCreateResult } from '@/lib/types';
 
 export async function createPrescription(
   patientId: string,
-  _prevState: ActionResult<Prescription> | null,
+  _prevState: ActionResult<PrescriptionCreateResult> | null,
   formData: FormData,
-): Promise<ActionResult<Prescription>> {
+): Promise<ActionResult<PrescriptionCreateResult>> {
   const isControlledSubstance = formData.get('isControlledSubstance') === 'on';
   const deaSchedule = String(formData.get('deaSchedule') ?? '');
   const dose = String(formData.get('dose') ?? '');
@@ -39,7 +39,7 @@ export async function createPrescription(
     ? `/api/v1/patients/${patientId}/prescriptions/controlled`
     : `/api/v1/patients/${patientId}/prescriptions`;
 
-  const result = await runAction(() => callBackend<Prescription>(path, { method: 'POST', body }));
+  const result = await runAction(() => callBackend<PrescriptionCreateResult>(path, { method: 'POST', body }));
   if (result.ok) revalidatePath(`/patients/${patientId}`);
   return result;
 }

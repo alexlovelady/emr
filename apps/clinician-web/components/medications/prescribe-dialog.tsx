@@ -76,7 +76,12 @@ export function PrescribeDialog({ patientId }: { patientId: string }) {
   const action = createPrescription.bind(null, patientId);
   const [state, formAction, isPending] = useActionState(action, null);
 
-  useCloseOnSuccess(state, () => setOpen(false));
+  // Doesn't auto-close when the (currently always-empty, see NoopInteractionCheckGateway)
+  // interaction check ever does return findings — the clinician should see them, not have the
+  // dialog vanish out from under a warning.
+  useCloseOnSuccess(state, () => {
+    if (state?.ok && state.data.interactionFindings.length === 0) setOpen(false);
+  });
 
   const canPrescribeControlled = has(PERMISSION_KEYS.CONTROLLED_SUBSTANCE_PRESCRIBE);
 
@@ -202,6 +207,17 @@ export function PrescribeDialog({ patientId }: { patientId: string }) {
             </div>
           )}
 
+          <Alert>
+            Interaction check: not available — no drug-database vendor is connected. This is not a
+            real safety check.
+          </Alert>
+          {state && state.ok && state.data.interactionFindings.length > 0 && (
+            <Alert variant="destructive">
+              {state.data.interactionFindings.map((f, i) => (
+                <div key={i}>{f.description}</div>
+              ))}
+            </Alert>
+          )}
           {state && !state.ok && <Alert variant="destructive">{state.error}</Alert>}
           <DialogFooter>
             <Button type="submit" disabled={isPending}>

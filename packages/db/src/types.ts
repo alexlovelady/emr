@@ -207,6 +207,8 @@ export interface AllergiesTable extends CommonColumnsTable {
   patient_id: string;
   encounter_id: string | null;
   substance: string;
+  code_system: string | null;
+  code: string | null;
   reaction: string | null;
   severity: string | null;
   onset_date: Timestamp | null;

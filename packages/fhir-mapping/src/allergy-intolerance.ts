@@ -14,9 +14,11 @@ const SEVERITY_MAP: Record<string, string> = {
 
 /**
  * EHR_BUILD_SPEC.md §8.1/§12: `/fhir/r4/AllergyIntolerance?patient={id}`. `domains/clinical`'s
- * Allergy is pure free text today (`substance: string`, no `codeSystem`/`code` columns) — `code`
- * is therefore `{text: row.substance}` only, with no `coding[]` array, honestly reflecting that no
- * coded allergy data exists yet rather than fabricating a system/code.
+ * Allergy was pure free text (`substance: string`) until Phase K added optional, nullable
+ * `codeSystem`/`code` columns for the clinical-safety interaction-check plumbing — most existing
+ * and new allergy entries still won't have them, so `code` only gets a real `coding[]` entry when
+ * both are actually present; otherwise it stays `{text: row.substance}` only, honestly reflecting
+ * that this particular entry has no coded value rather than fabricating a system/code.
  */
 export function toFhirAllergyIntolerance(row: AllergyRow): Record<string, unknown> {
   return {
@@ -31,7 +33,10 @@ export function toFhirAllergyIntolerance(row: AllergyRow): Record<string, unknow
         },
       ],
     },
-    code: { text: row.substance },
+    code: {
+      ...(row.codeSystem && row.code ? { coding: [{ system: row.codeSystem, code: row.code }] } : {}),
+      text: row.substance,
+    },
     patient: { reference: `Patient/${row.patientId}` },
     ...(row.encounterId ? { encounter: { reference: `Encounter/${row.encounterId}` } } : {}),
     ...(row.onsetDate ? { onsetDateTime: row.onsetDate } : {}),

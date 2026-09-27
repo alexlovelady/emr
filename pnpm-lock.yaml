@@ -159,6 +159,9 @@ importers:
       '@ehr/intake':
         specifier: workspace:*
         version: link:../../domains/intake
+      '@ehr/interaction-adapter':
+        specifier: workspace:*
+        version: link:../../packages/interaction-adapter
       '@ehr/lab-adapter':
         specifier: workspace:*
         version: link:../../packages/lab-adapter
@@ -1127,6 +1130,9 @@ importers:
       '@ehr/erx-adapter':
         specifier: workspace:*
         version: link:../../packages/erx-adapter
+      '@ehr/interaction-adapter':
+        specifier: workspace:*
+        version: link:../../packages/interaction-adapter
       '@ehr/outbox':
         specifier: workspace:*
         version: link:../../packages/outbox
@@ -2025,6 +2031,15 @@ importers:
         version: 2.1.9(@types/node@26.6.2)(supports-color@7.2.0)
 
   packages/hl7:
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@26.6.2)(supports-color@7.2.0)
+
+  packages/interaction-adapter:
     devDependencies:
       typescript:
         specifier: ^5.7.2

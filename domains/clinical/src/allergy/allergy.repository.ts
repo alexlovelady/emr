@@ -7,6 +7,8 @@ export interface AllergyRow {
   patientId: string;
   encounterId: string | null;
   substance: string;
+  codeSystem: string | null;
+  code: string | null;
   reaction: string | null;
   severity: string | null;
   onsetDate: string | null;
@@ -27,6 +29,8 @@ export class AllergyRepository {
       patientId: string;
       encounterId: string | null;
       substance: string;
+      codeSystem: string | null;
+      code: string | null;
       reaction: string | null;
       severity: string | null;
       onsetDate: string | null;
@@ -41,6 +45,8 @@ export class AllergyRepository {
         patient_id: input.patientId,
         encounter_id: input.encounterId,
         substance: input.substance,
+        code_system: input.codeSystem,
+        code: input.code,
         reaction: input.reaction,
         severity: input.severity,
         onset_date: input.onsetDate,
@@ -95,6 +101,8 @@ function toRow(dbRow: Selectable<DB['allergies']>): AllergyRow {
     patientId: dbRow.patient_id,
     encounterId: dbRow.encounter_id,
     substance: dbRow.substance,
+    codeSystem: dbRow.code_system,
+    code: dbRow.code,
     reaction: dbRow.reaction,
     severity: dbRow.severity,
     onsetDate: formatDate(dbRow.onset_date),

@@ -6,16 +6,21 @@ import { Audited } from '@ehr/audit';
 import { PERMISSION_KEYS, RequirePermission } from '@ehr/authz';
 import { ZodValidationPipe } from '@ehr/api-contracts';
 import type { PrescribingGateway } from '@ehr/erx-adapter';
+import type { InteractionCheckGateway } from '@ehr/interaction-adapter';
 import { CreatePrescriptionSchema, DenyRefillSchema, type CreatePrescriptionInput, type DenyRefillInput } from './prescription.dto.js';
 import { PrescriptionService } from './prescription.service.js';
 import { ERX_GATEWAY } from '../erx-gateway.token.js';
+import { INTERACTION_CHECK_GATEWAY } from '../interaction-check-gateway.token.js';
 
 @Controller('api/v1/patients/:patientId/prescriptions')
 export class PrescriptionController {
   private readonly service: PrescriptionService;
 
-  constructor(@Inject(ERX_GATEWAY) gateway: PrescribingGateway) {
-    this.service = new PrescriptionService(gateway);
+  constructor(
+    @Inject(ERX_GATEWAY) gateway: PrescribingGateway,
+    @Inject(INTERACTION_CHECK_GATEWAY) interactionGateway: InteractionCheckGateway,
+  ) {
+    this.service = new PrescriptionService(gateway, interactionGateway);
   }
 
   @Post()
@@ -52,8 +57,11 @@ export class PrescriptionController {
 export class PrescriptionDetailController {
   private readonly service: PrescriptionService;
 
-  constructor(@Inject(ERX_GATEWAY) gateway: PrescribingGateway) {
-    this.service = new PrescriptionService(gateway);
+  constructor(
+    @Inject(ERX_GATEWAY) gateway: PrescribingGateway,
+    @Inject(INTERACTION_CHECK_GATEWAY) interactionGateway: InteractionCheckGateway,
+  ) {
+    this.service = new PrescriptionService(gateway, interactionGateway);
   }
 
   @Get(':id')
@@ -82,8 +90,11 @@ export class PrescriptionDetailController {
 export class RefillRequestController {
   private readonly service: PrescriptionService;
 
-  constructor(@Inject(ERX_GATEWAY) gateway: PrescribingGateway) {
-    this.service = new PrescriptionService(gateway);
+  constructor(
+    @Inject(ERX_GATEWAY) gateway: PrescribingGateway,
+    @Inject(INTERACTION_CHECK_GATEWAY) interactionGateway: InteractionCheckGateway,
+  ) {
+    this.service = new PrescriptionService(gateway, interactionGateway);
   }
 
   @Post(':id/approve')

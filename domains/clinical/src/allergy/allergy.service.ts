@@ -24,6 +24,8 @@ export class AllergyService {
       patientId,
       encounterId: input.encounterId ?? null,
       substance: input.substance,
+      codeSystem: input.codeSystem ?? null,
+      code: input.code ?? null,
       reaction: input.reaction ?? null,
       severity: input.severity ?? null,
       onsetDate: input.onsetDate ?? null,

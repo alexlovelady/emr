@@ -14,6 +14,7 @@ export {
 } from './reconciliation/reconciliation.repository.js';
 export { RecordReconciliationSchema, type RecordReconciliationInput } from './reconciliation/reconciliation.dto.js';
 export { ERX_GATEWAY } from './erx-gateway.token.js';
+export { INTERACTION_CHECK_GATEWAY } from './interaction-check-gateway.token.js';
 export { PrescriptionService } from './prescription/prescription.service.js';
 export {
   PrescriptionRepository,

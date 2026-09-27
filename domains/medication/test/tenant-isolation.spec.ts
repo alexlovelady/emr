@@ -3,6 +3,7 @@ import { withTenantContext } from '@ehr/db';
 import { ConflictError, NotFoundError, ValidationError } from '@ehr/domain-common';
 import { setupTestDb, requestContextFor, type TestDbHandle } from '@ehr/testing';
 import { NoopPrescribingGateway } from '@ehr/erx-adapter';
+import { NoopInteractionCheckGateway } from '@ehr/interaction-adapter';
 import { MedicationService } from '../src/medication/medication.service.js';
 import { MedicationReconciliationService } from '../src/reconciliation/reconciliation.service.js';
 import { PrescriptionService } from '../src/prescription/prescription.service.js';
@@ -13,7 +14,7 @@ describe('tenant isolation — medications', () => {
   let handle: TestDbHandle;
   const medicationService = new MedicationService();
   const reconciliationService = new MedicationReconciliationService();
-  const prescriptionService = new PrescriptionService(new NoopPrescribingGateway());
+  const prescriptionService = new PrescriptionService(new NoopPrescribingGateway(), new NoopInteractionCheckGateway());
   let tenantAPatientId: string;
   let tenantAEncounterId: string;
   let tenantAPractitionerId: string;
@@ -164,12 +165,16 @@ describe('tenant isolation — medications', () => {
 
   it('Phase 5: creates an ordinary prescription, creating the underlying medication row too', async () => {
     const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
-    const prescription = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+    const { prescription, interactionFindings } = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
       prescriptionService.create(trx, ctxA, tenantAPatientId, ordinaryRxInput(), false),
     );
     expect(prescription.status).toBe('active');
     expect(prescription.refillsRemaining).toBe(1);
     expect(prescription.gatewayReferenceId).toMatch(/^noop-rx-/);
+    // Phase K: the interaction-check gateway is real plumbing, but NoopInteractionCheckGateway
+    // always returns no findings — see its own doc comment for why that must never be read as
+    // "checked, and it's clear."
+    expect(interactionFindings).toEqual([]);
 
     const medications = await withTenantContext(handle.db, ctxA.tenantId, (trx) => medicationService.list(trx, ctxA, tenantAPatientId));
     expect(medications.some((m) => m.id === prescription.medicationId)).toBe(true);
@@ -195,7 +200,7 @@ describe('tenant isolation — medications', () => {
       deaSchedule: 'IV' as const,
       refillsAuthorized: 0,
     });
-    const prescription = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+    const { prescription } = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
       prescriptionService.create(trx, ctxA, tenantAPatientId, controlledInput, true),
     );
     expect(prescription.isControlledSubstance).toBe(true);
@@ -211,7 +216,7 @@ describe('tenant isolation — medications', () => {
 
   it('Phase 5: cross-tenant 404 on a prescription, and RLS blocks a raw cross-tenant query', async () => {
     const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
-    const prescription = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+    const { prescription } = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
       prescriptionService.create(trx, ctxA, tenantAPatientId, ordinaryRxInput(), false),
     );
 
@@ -228,7 +233,7 @@ describe('tenant isolation — medications', () => {
 
   it('Phase 5: full refill request -> approve cycle resets refillsRemaining', async () => {
     const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
-    const prescription = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+    const { prescription } = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
       prescriptionService.create(trx, ctxA, tenantAPatientId, ordinaryRxInput({ refillsAuthorized: 2 }), false),
     );
 
@@ -248,7 +253,7 @@ describe('tenant isolation — medications', () => {
 
   it('Phase 5: refill request -> deny cycle records a reason', async () => {
     const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
-    const prescription = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+    const { prescription } = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
       prescriptionService.create(trx, ctxA, tenantAPatientId, ordinaryRxInput(), false),
     );
     const refillRequest = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
@@ -263,7 +268,7 @@ describe('tenant isolation — medications', () => {
 
   it('Phase 5: cancelling an already-cancelled prescription is a real 409', async () => {
     const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
-    const prescription = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+    const { prescription } = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
       prescriptionService.create(trx, ctxA, tenantAPatientId, ordinaryRxInput(), false),
     );
     await withTenantContext(handle.db, ctxA.tenantId, (trx) => prescriptionService.cancel(trx, ctxA, prescription.id));

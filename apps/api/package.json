@@ -32,6 +32,7 @@
     "@ehr/documents": "workspace:*",
     "@ehr/erx-adapter": "workspace:*",
     "@ehr/intake": "workspace:*",
+    "@ehr/interaction-adapter": "workspace:*",
     "@ehr/lab-adapter": "workspace:*",
     "@ehr/medication": "workspace:*",
     "@ehr/messaging": "workspace:*",

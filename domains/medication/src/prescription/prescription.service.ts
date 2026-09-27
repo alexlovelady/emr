@@ -4,7 +4,9 @@ import { ConflictError, NotFoundError, ValidationError, type RequestContext } fr
 import { buildOutboxInsert } from '@ehr/outbox';
 import { PatientRepository } from '@ehr/patient';
 import type { PrescribingGateway } from '@ehr/erx-adapter';
+import type { InteractionCheckGateway, InteractionFinding } from '@ehr/interaction-adapter';
 import { MedicationService } from '../medication/medication.service.js';
+import { MedicationRepository } from '../medication/medication.repository.js';
 import type { CreatePrescriptionInput } from './prescription.dto.js';
 import {
   PrescriptionRepository,
@@ -29,9 +31,11 @@ const TERMINAL_STATUSES = ['cancelled', 'completed', 'entered_in_error', 'reject
 export class PrescriptionService {
   constructor(
     private readonly gateway: PrescribingGateway,
+    private readonly interactionGateway: InteractionCheckGateway,
     private readonly repo: PrescriptionRepository = new PrescriptionRepository(),
     private readonly patientRepo: PatientRepository = new PatientRepository(),
     private readonly medicationService: MedicationService = new MedicationService(),
+    private readonly medicationRepo: MedicationRepository = new MedicationRepository(),
   ) {}
 
   async create(
@@ -40,7 +44,7 @@ export class PrescriptionService {
     patientId: string,
     input: CreatePrescriptionInput,
     expectedControlled: boolean,
-  ): Promise<PrescriptionRow> {
+  ): Promise<{ prescription: PrescriptionRow; interactionFindings: InteractionFinding[] }> {
     if (input.isControlledSubstance !== expectedControlled) {
       throw new ValidationError(
         expectedControlled
@@ -67,6 +71,8 @@ export class PrescriptionService {
       prescriberId: input.prescriberId,
       notes: null,
     });
+
+    const interactionFindings = await this.checkInteractions(trx, ctx, patientId, medication.rxnormCode);
 
     const receipt = await this.gateway.sendPrescription({
       prescriptionId: medication.id,
@@ -107,7 +113,40 @@ export class PrescriptionService {
       gatewayStatus: receipt.status,
     });
 
-    return prescription;
+    return { prescription, interactionFindings };
+  }
+
+  /**
+   * Real plumbing, honestly stubbed: gathers the patient's active-medication RxNorm codes (plus
+   * the newly-prescribed one) and active-allergy codes, then calls the injected
+   * `InteractionCheckGateway`. With the only implementation that exists today
+   * (`NoopInteractionCheckGateway`) this always returns `[]` — see that class's doc comment for
+   * why that must never be read as "checked, and it's clear." Queries `allergies` directly with
+   * Kysely rather than going through `@ehr/clinical`'s `AllergyRepository`, since `@ehr/clinical`
+   * already depends on `@ehr/medication` (for `MedicationService`) — importing it back here would
+   * create a package cycle.
+   */
+  private async checkInteractions(
+    trx: Executor,
+    ctx: RequestContext,
+    patientId: string,
+    newMedicationRxnormCode: string | null,
+  ): Promise<InteractionFinding[]> {
+    const activeMedications = await this.medicationRepo.listActiveByPatient(trx, ctx.tenantId, patientId);
+    const rxnormCodes = [...new Set([newMedicationRxnormCode, ...activeMedications.map((m) => m.rxnormCode)])].filter(
+      (code): code is string => code !== null,
+    );
+
+    const activeAllergies = await trx
+      .selectFrom('allergies')
+      .select('code')
+      .where('tenant_id', '=', ctx.tenantId)
+      .where('patient_id', '=', patientId)
+      .where('status', '=', 'active')
+      .execute();
+    const allergyCodes = activeAllergies.map((a) => a.code).filter((code): code is string => code !== null);
+
+    return this.interactionGateway.checkInteractions({ rxnormCodes, allergyCodes });
   }
 
   async getById(trx: Executor, ctx: RequestContext, id: string): Promise<PrescriptionRow> {
