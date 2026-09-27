@@ -15,7 +15,15 @@ import type { DB } from './types.js';
 
 export const DEV_PASSWORD = 'Dev-Passw0rd!';
 export const DEV_SMART_CLIENT_SECRET = 'Dev-Smart-Client-Secr3t!';
-export const DEV_SMART_CLIENT_SCOPES = ['patient/Patient.read', 'patient/Observation.read', 'patient/Encounter.read'];
+export const DEV_SMART_CLIENT_SCOPES = [
+  'patient/Patient.read',
+  'patient/Observation.read',
+  'patient/Encounter.read',
+  'patient/Condition.read',
+  'patient/AllergyIntolerance.read',
+  'patient/MedicationRequest.read',
+  'patient/DocumentReference.read',
+];
 
 export const SYSTEM_ROLE_KEYS = {
   PLATFORM_ADMIN: 'platform_admin',
@@ -215,7 +223,9 @@ async function seedTenant(
       allowed_scopes: DEV_SMART_CLIENT_SCOPES,
       status: 'active',
     })
-    .onConflict((oc) => oc.column('client_id').doUpdateSet({ client_secret_hash: opts.smartClientSecretHash }))
+    .onConflict((oc) =>
+      oc.column('client_id').doUpdateSet({ client_secret_hash: opts.smartClientSecretHash, allowed_scopes: DEV_SMART_CLIENT_SCOPES }),
+    )
     .execute();
 
   return {

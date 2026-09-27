@@ -8,6 +8,8 @@ export {
   type CreateAppointmentSeriesInput,
   CancelAppointmentSchema,
   type CancelAppointmentInput,
+  RescheduleAppointmentSchema,
+  type RescheduleAppointmentInput,
   type RecurrenceInput,
 } from './appointment/appointment.dto.js';
 export { ResourceService } from './resource/resource.service.js';

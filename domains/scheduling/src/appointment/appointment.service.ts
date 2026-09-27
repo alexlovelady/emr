@@ -4,7 +4,7 @@ import type { DB } from '@ehr/db';
 import { ConflictError, NotFoundError, type RequestContext } from '@ehr/domain-common';
 import { buildOutboxInsert } from '@ehr/outbox';
 import { ResourceRepository } from '../resource/resource.repository.js';
-import type { CreateAppointmentInput, CreateAppointmentSeriesInput, RecurrenceInput } from './appointment.dto.js';
+import type { CreateAppointmentInput, CreateAppointmentSeriesInput, RecurrenceInput, RescheduleAppointmentInput } from './appointment.dto.js';
 import { AppointmentRepository, type AppointmentRow } from './appointment.repository.js';
 
 type Executor = Kysely<DB> | Transaction<DB>;
@@ -146,6 +146,37 @@ export class AppointmentService {
         });
       }
     }
+  }
+
+  /**
+   * Changes an appointment's time without touching its status — re-runs the same conflict check
+   * used at create time (excluding this appointment itself from the overlap search) so a
+   * reschedule can't silently create a double-booking. Used by `apps/interop-hl7`'s SIU^S14
+   * handler; also a real, small, standalone capability (`POST /appointments/:id/reschedule`).
+   */
+  async reschedule(trx: Executor, ctx: RequestContext, id: string, patch: RescheduleAppointmentInput): Promise<AppointmentRow> {
+    const current = await this.getById(trx, ctx, id);
+    if (!['scheduled', 'confirmed'].includes(current.status)) {
+      throw new ConflictError(`Cannot reschedule an appointment with status '${current.status}'`, { status: current.status });
+    }
+    if (patch.scheduledEnd <= patch.scheduledStart) {
+      throw new ConflictError('scheduledEnd must be after scheduledStart');
+    }
+    const resourceIds = await this.repo.listResourceIdsForAppointment(trx, ctx.tenantId, id);
+    await this.assertNoConflicts(trx, ctx.tenantId, {
+      practitionerId: current.practitionerId,
+      resourceIds,
+      scheduledStart: patch.scheduledStart,
+      scheduledEnd: patch.scheduledEnd,
+      excludeAppointmentId: current.id,
+    });
+    const actorId = ctx.actor?.id ?? null;
+    const updated = await this.repo.reschedule(trx, ctx.tenantId, id, patch, actorId ?? ctx.tenantId);
+    await this.emit(trx, ctx, updated, 'appointment.rescheduled.v1', updated.version, {
+      scheduledStart: updated.scheduledStart.toISOString(),
+      scheduledEnd: updated.scheduledEnd.toISOString(),
+    });
+    return updated;
   }
 
   async getById(trx: Executor, ctx: RequestContext, id: string): Promise<AppointmentRow> {

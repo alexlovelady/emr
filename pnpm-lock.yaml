@@ -356,12 +356,18 @@ importers:
       '@ehr/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@ehr/documents':
+        specifier: workspace:*
+        version: link:../../domains/documents
       '@ehr/domain-common':
         specifier: workspace:*
         version: link:../../packages/domain-common
       '@ehr/fhir-mapping':
         specifier: workspace:*
         version: link:../../packages/fhir-mapping
+      '@ehr/medication':
+        specifier: workspace:*
+        version: link:../../domains/medication
       '@ehr/observability':
         specifier: workspace:*
         version: link:../../packages/observability
@@ -435,6 +441,9 @@ importers:
       '@ehr/authz':
         specifier: workspace:*
         version: link:../../packages/authz
+      '@ehr/clinical':
+        specifier: workspace:*
+        version: link:../../domains/clinical
       '@ehr/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -447,15 +456,24 @@ importers:
       '@ehr/hl7':
         specifier: workspace:*
         version: link:../../packages/hl7
+      '@ehr/lab-adapter':
+        specifier: workspace:*
+        version: link:../../packages/lab-adapter
       '@ehr/observability':
         specifier: workspace:*
         version: link:../../packages/observability
       '@ehr/orders':
         specifier: workspace:*
         version: link:../../domains/orders
+      '@ehr/patient':
+        specifier: workspace:*
+        version: link:../../domains/patient
       '@ehr/results':
         specifier: workspace:*
         version: link:../../domains/results
+      '@ehr/scheduling':
+        specifier: workspace:*
+        version: link:../../domains/scheduling
       '@nestjs/common':
         specifier: ^10.4.15
         version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
@@ -481,9 +499,6 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
     devDependencies:
-      '@ehr/lab-adapter':
-        specifier: workspace:*
-        version: link:../../packages/lab-adapter
       '@ehr/testing':
         specifier: workspace:*
         version: link:../../packages/testing
@@ -1992,6 +2007,12 @@ importers:
       '@ehr/clinical':
         specifier: workspace:*
         version: link:../../domains/clinical
+      '@ehr/documents':
+        specifier: workspace:*
+        version: link:../../domains/documents
+      '@ehr/medication':
+        specifier: workspace:*
+        version: link:../../domains/medication
       '@ehr/patient':
         specifier: workspace:*
         version: link:../../domains/patient

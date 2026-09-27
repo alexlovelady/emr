@@ -216,18 +216,33 @@ and [`docs/adr/0006-clinician-web-bff-auth.md`](docs/adr/0006-clinician-web-bff-
 - **Critical results are durable workflow tasks, not UI toasts** (spec §5.6) — creating a
   `diagnostic_reports` row with `criticalFlag: true` automatically creates a `Task` via the
   existing `@ehr/tasks` package (`domains/results/src/diagnostic-report/diagnostic-report.service.ts`).
-- **HL7 v2 support is real but narrow**: `packages/hl7` parses only `ORU^R01` (result) messages;
-  ADT/SIU/ORM/MDM are explicitly deferred per the spec's own "as needed" license. `apps/interop-hl7`
-  exposes an authenticated HTTP endpoint (not a real MLLP listener — documented simplification)
-  that always stores the raw message first, is idempotent on `(tenant_id, message_control_id)`
-  redelivery, and NACKs without crashing when an order can't be correlated.
+- **HL7 v2 support covers ORU/ADT/SIU/ORM** (the eCW/athena parity roadmap's Phase J added
+  ADT/SIU/ORM on top of Phase 4's original ORU^R01-only support; MDM remains deferred per the
+  spec's own "as needed" license). `apps/interop-hl7` exposes an authenticated HTTP endpoint (not a
+  real MLLP listener — documented simplification) that always stores the raw message first, is
+  idempotent on `(tenant_id, message_control_id)` redelivery, and NACKs without crashing when a
+  message can't be correlated to an order/patient/appointment/encounter. Every parser in
+  `packages/hl7` is real-but-minimal, not full HL7 v2.5.1 conformance — see its own doc comments
+  (`adt.ts`, `siu.ts`, `orm.ts`) for exactly which segments/fields are read and which real-world
+  complexity (inpatient/bed management, TQ1 timing quantities, MRN crosswalks) is deliberately not
+  modeled. All ADT/SIU/ORM correlation fields (patient/practitioner/location/appointment/encounter
+  identifiers) carry this system's own UUIDs by convention — the same posture ORU's placer-order-
+  number correlation already used, since no real external interface partner exists to test a
+  genuine external-identifier crosswalk against.
 - **C-CDA reconciliation accepts pre-structured JSON**, not real C-CDA XML — the actual product
   requirement (spec §11.3's accept/reject/mark-duplicate/replace workflow) is fully real in
   `domains/clinical`'s `external-candidate` sub-module; only the XML-parsing front door is deferred.
 - **FHIR R4 is a thin read-only Lane A facade** (`apps/interop-fhir`): `/fhir/r4/metadata`,
-  `Patient/{id}`, `Observation?patient=&category=`, `Encounter?patient=` only —
-  `$everything`/bulk `$export` need a job queue this repo doesn't have yet and are a documented
-  gap, not a silent one.
+  `Patient/{id}`, `Observation?patient=&category=`, `Encounter?patient=`, plus (Phase J)
+  `Condition`, `AllergyIntolerance`, `MedicationRequest`, and `DocumentReference` (each a
+  `GET .../{id}` + a `patient`-scoped search) — `$everything`/bulk `$export` need a job queue this
+  repo doesn't have yet and are a documented gap, not a silent one. `AllergyIntolerance.code` is
+  `{text: ...}` only, no `coding[]` — `domains/clinical`'s Allergy is genuinely pure free text
+  today, so a fabricated coding system would be dishonest. `DocumentReference.content[].attachment.url`
+  points at this app's own download route rather than a real presigned object-storage URL, keeping
+  every `toFhir*` mapping function in `packages/fhir-mapping` a pure synchronous function (the only
+  alternative would need the async, gateway-backed `DocumentService.getDownloadUrl()`, which this
+  read-only app doesn't wire up).
 - **SMART auth is client-credentials only** — a seeded `smart_clients` row, no interactive
   authorization-code/launch/patient-picker flow (needs a consent UI this API-only build doesn't
   have). Scope enforcement (`SmartScopeGuard` + `@RequireScope`) is a separate mechanism from

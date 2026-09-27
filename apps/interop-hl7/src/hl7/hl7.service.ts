@@ -2,9 +2,13 @@ import { createHash } from 'node:crypto';
 import type { Kysely, Transaction } from 'kysely';
 import type { DB } from '@ehr/db';
 import type { RequestContext } from '@ehr/domain-common';
-import { parseOruR01, Hl7ParseError, type ParsedOruObservation } from '@ehr/hl7';
-import { OrderRepository } from '@ehr/orders';
+import { peekMessageType, parseOruR01, parseAdtMessage, parseSiuMessage, parseOrmMessage, Hl7ParseError } from '@ehr/hl7';
+import { OrderRepository, OrderService } from '@ehr/orders';
+import { NoopLabOrderGateway } from '@ehr/lab-adapter';
 import { DiagnosticReportService, type CreateDiagnosticReportInput } from '@ehr/results';
+import { PatientRepository, PatientService } from '@ehr/patient';
+import { AppointmentRepository, AppointmentService } from '@ehr/scheduling';
+import { EncounterRepository } from '@ehr/clinical';
 import { Hl7MessageRepository } from './hl7-message.repository.js';
 
 type Executor = Kysely<DB> | Transaction<DB>;
@@ -21,51 +25,55 @@ const NORMAL_FLAGS = new Set(['N', '']);
 /**
  * EHR_BUILD_SPEC.md §12.1's pipeline: "Listener -> raw immutable message store -> parse ->
  * validate -> route -> transform -> canonical staging -> reconciliation/idempotency -> commit ->
- * ACK/NACK -> event." The "route" step correlates a result back to the order that produced it via
- * OBR-2 (placer order number) — our `NoopLabOrderGateway` (packages/lab-adapter) always sets the
- * placer order number to our own order id, exactly so this correlation is a normal id lookup, not
- * a fuzzy match. A message that can't be correlated (unknown/missing placer order number) is a
- * legitimate NACK, not a crash.
+ * ACK/NACK -> event." Phase 4 only implemented ORU^R01; the eCW/athena parity roadmap's Phase J
+ * added ADT (A01/A02/A03/A08), SIU (S12/S14/S15), and ORM (O01) dispatch — `ingest()` peeks the
+ * message type first (cheap, doesn't validate type-specific content), checks idempotency using the
+ * REAL message control id as soon as it's known (not a content hash — that fallback is now only
+ * for messages with no usable MSH at all), then dispatches to one `process*` method per type. Every
+ * `process*` method throws a plain `Error` (or a domain error) on any failure — a single catch
+ * around the dispatch marks the already-created message row failed and returns a clean NACK,
+ * instead of each branch duplicating that logic.
+ *
+ * Every new-domain-object correlation below (ADT's patient identifier, SIU's practitioner/location/
+ * placer-appointment id, ORM's encounter/ordering-practitioner id) is a raw UUID from THIS system,
+ * not an external identifier — see `@ehr/hl7`'s `adt.ts`/`siu.ts`/`orm.ts` doc comments for why:
+ * the same convention `oru-r01.ts` already established for its placer-order-number correlation
+ * (no real external interface partner exists to test a genuine MRN/id crosswalk against).
  */
 export class Hl7IngestionService {
   constructor(
     private readonly messageRepo: Hl7MessageRepository = new Hl7MessageRepository(),
     private readonly orderRepo: OrderRepository = new OrderRepository(),
     private readonly reportService: DiagnosticReportService = new DiagnosticReportService(),
+    private readonly patientRepo: PatientRepository = new PatientRepository(),
+    private readonly patientService: PatientService = new PatientService(),
+    private readonly appointmentRepo: AppointmentRepository = new AppointmentRepository(),
+    private readonly appointmentService: AppointmentService = new AppointmentService(),
+    private readonly encounterRepo: EncounterRepository = new EncounterRepository(),
+    private readonly orderService: OrderService = new OrderService(new NoopLabOrderGateway()),
   ) {}
 
   async ingest(trx: Executor, ctx: RequestContext, rawMessage: string): Promise<Hl7IngestResult> {
     const actorId = ctx.actor?.id ?? ctx.tenantId;
 
-    let messageControlId: string;
-    let messageType = 'UNKNOWN';
-    let observations: ParsedOruObservation[] = [];
-    let placerOrderNumber: string | null = null;
-    let reportCode: string | null = null;
-    let reportDisplay: string | null = null;
-    let reportCodeSystem: string | null = null;
-
+    let peeked: { messageType: string; triggerEvent: string; messageControlId: string };
     try {
-      const parsed = parseOruR01(rawMessage);
-      messageControlId = parsed.messageControlId;
-      messageType = parsed.messageType;
-      observations = parsed.observations;
-      placerOrderNumber = parsed.placerOrderNumber;
-      reportCode = parsed.reportCode;
-      reportDisplay = parsed.reportDisplay;
-      reportCodeSystem = parsed.reportCodeSystem;
+      peeked = peekMessageType(rawMessage);
     } catch (err) {
-      // Genuinely unparseable — no MSH-10 to key on, so fall back to a content hash. The raw
-      // message is still stored, never discarded, per spec §12.1.
-      messageControlId = `unparseable-${createHash('sha256').update(rawMessage).digest('hex').slice(0, 16)}`;
+      // No usable MSH at all — nothing real to key idempotency on, fall back to a content hash.
+      // The raw message is still stored, never discarded, per spec §12.1.
+      const messageControlId = `unparseable-${createHash('sha256').update(rawMessage).digest('hex').slice(0, 16)}`;
       const existing = await this.messageRepo.findByControlId(trx, ctx.tenantId, messageControlId);
       if (existing) return { ackCode: 'AE', messageId: existing.id, ...(existing.parseError ? { detail: existing.parseError } : {}) };
 
-      const detail = err instanceof Hl7ParseError ? err.message : err instanceof Error ? err.message : String(err);
-      const stored = await this.messageRepo.create(trx, { tenantId: ctx.tenantId, messageControlId, messageType, rawMessage, createdBy: actorId });
+      const detail = err instanceof Error ? err.message : String(err);
+      const stored = await this.messageRepo.create(trx, { tenantId: ctx.tenantId, messageControlId, messageType: 'UNKNOWN', rawMessage, createdBy: actorId });
       await this.messageRepo.markFailed(trx, ctx.tenantId, stored.id, detail, actorId);
       return { ackCode: 'AE', messageId: stored.id, detail };
     }
+
+    const { messageControlId } = peeked;
+    const messageTypeKey = `${peeked.messageType}^${peeked.triggerEvent}`;
 
     const existing = await this.messageRepo.findByControlId(trx, ctx.tenantId, messageControlId);
     if (existing) {
@@ -77,22 +85,54 @@ export class Hl7IngestionService {
       };
     }
 
-    const stored = await this.messageRepo.create(trx, { tenantId: ctx.tenantId, messageControlId, messageType, rawMessage, createdBy: actorId });
+    const stored = await this.messageRepo.create(trx, { tenantId: ctx.tenantId, messageControlId, messageType: messageTypeKey, rawMessage, createdBy: actorId });
 
-    if (!placerOrderNumber) {
-      const detail = 'Missing OBR-2 (placer order number) — cannot correlate this result to an order';
+    try {
+      switch (messageTypeKey) {
+        case 'ORU^R01':
+          await this.processOru(trx, ctx, rawMessage);
+          break;
+        case 'ADT^A01':
+        case 'ADT^A02':
+        case 'ADT^A03':
+        case 'ADT^A08':
+          await this.processAdt(trx, ctx, rawMessage);
+          break;
+        case 'SIU^S12':
+          await this.processSiuNew(trx, ctx, rawMessage);
+          break;
+        case 'SIU^S14':
+          await this.processSiuUpdate(trx, ctx, rawMessage);
+          break;
+        case 'SIU^S15':
+          await this.processSiuCancel(trx, ctx, rawMessage);
+          break;
+        case 'ORM^O01':
+          await this.processOrm(trx, ctx, rawMessage);
+          break;
+        default:
+          throw new Hl7ParseError(`Unsupported message type: ${messageTypeKey}`);
+      }
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
       await this.messageRepo.markFailed(trx, ctx.tenantId, stored.id, detail, actorId);
       return { ackCode: 'AE', messageId: stored.id, detail };
     }
 
-    const order = await this.orderRepo.findById(trx, ctx.tenantId, placerOrderNumber);
-    if (!order) {
-      const detail = `No order found matching placer order number ${placerOrderNumber}`;
-      await this.messageRepo.markFailed(trx, ctx.tenantId, stored.id, detail, actorId);
-      return { ackCode: 'AE', messageId: stored.id, detail };
-    }
+    await this.messageRepo.markProcessed(trx, ctx.tenantId, stored.id, actorId);
+    return { ackCode: 'AA', messageId: stored.id };
+  }
 
-    const results: CreateDiagnosticReportInput['results'] = observations.map((obs) => {
+  private async processOru(trx: Executor, ctx: RequestContext, rawMessage: string): Promise<void> {
+    const parsed = parseOruR01(rawMessage);
+
+    if (!parsed.placerOrderNumber) {
+      throw new Error('Missing OBR-2 (placer order number) — cannot correlate this result to an order');
+    }
+    const order = await this.orderRepo.findById(trx, ctx.tenantId, parsed.placerOrderNumber);
+    if (!order) throw new Error(`No order found matching placer order number ${parsed.placerOrderNumber}`);
+
+    const results: CreateDiagnosticReportInput['results'] = parsed.observations.map((obs) => {
       const numeric = obs.value !== null && obs.value !== '' && !Number.isNaN(Number(obs.value));
       return {
         code: obs.code ?? 'unknown',
@@ -102,20 +142,100 @@ export class Hl7IngestionService {
         unit: obs.unit,
       };
     });
-    const abnormalFlags = observations.map((o) => (o.abnormalFlag ?? '').toUpperCase());
+    const abnormalFlags = parsed.observations.map((o) => (o.abnormalFlag ?? '').toUpperCase());
 
     await this.reportService.create(trx, ctx, order.patientId, {
       encounterId: order.encounterId,
       orderId: order.id,
-      codeSystem: reportCodeSystem,
-      code: reportCode,
-      displayName: reportDisplay ?? reportCode ?? 'Lab Result',
+      codeSystem: parsed.reportCodeSystem,
+      code: parsed.reportCode,
+      displayName: parsed.reportDisplay ?? parsed.reportCode ?? 'Lab Result',
       criticalFlag: abnormalFlags.some((f) => CRITICAL_FLAGS.has(f)),
       abnormalFlag: abnormalFlags.some((f) => !NORMAL_FLAGS.has(f)),
       results,
     });
+  }
 
-    await this.messageRepo.markProcessed(trx, ctx.tenantId, stored.id, actorId);
-    return { ackCode: 'AA', messageId: stored.id };
+  private async processAdt(trx: Executor, ctx: RequestContext, rawMessage: string): Promise<void> {
+    const parsed = parseAdtMessage(rawMessage);
+    if (!parsed.patientIdentifier) throw new Error('Missing PID-3 (patient identifier)');
+
+    const patient = await this.patientRepo.findById(trx, ctx.tenantId, parsed.patientIdentifier);
+    if (!patient) throw new Error(`No patient found matching identifier ${parsed.patientIdentifier}`);
+
+    await this.patientService.updateDemographics(trx, ctx, patient.id, {
+      ...(parsed.givenName ? { givenName: parsed.givenName } : {}),
+      ...(parsed.familyName ? { familyName: parsed.familyName } : {}),
+      ...(parsed.middleName !== null ? { middleName: parsed.middleName } : {}),
+      ...(parsed.dateOfBirth ? { dateOfBirth: parsed.dateOfBirth } : {}),
+      ...(parsed.sexAtBirth !== null ? { sexAtBirth: parsed.sexAtBirth } : {}),
+    });
+  }
+
+  private async processSiuNew(trx: Executor, ctx: RequestContext, rawMessage: string): Promise<void> {
+    const parsed = parseSiuMessage(rawMessage);
+    if (!parsed.patientIdentifier) throw new Error('Missing PID-3 (patient identifier)');
+    if (!parsed.practitionerId) throw new Error('Missing AIP-3 (practitioner resource id)');
+    if (!parsed.locationId) throw new Error('Missing AIL-3 (location resource id)');
+    if (!parsed.scheduledStart || !parsed.scheduledEnd) throw new Error('Missing or invalid SCH-11 (appointment timing)');
+
+    const patient = await this.patientRepo.findById(trx, ctx.tenantId, parsed.patientIdentifier);
+    if (!patient) throw new Error(`No patient found matching identifier ${parsed.patientIdentifier}`);
+
+    await this.appointmentService.create(trx, ctx, {
+      patientId: patient.id,
+      locationId: parsed.locationId,
+      practitionerId: parsed.practitionerId,
+      appointmentType: parsed.appointmentType ?? 'office_visit',
+      scheduledStart: parsed.scheduledStart,
+      scheduledEnd: parsed.scheduledEnd,
+    });
+  }
+
+  private async processSiuUpdate(trx: Executor, ctx: RequestContext, rawMessage: string): Promise<void> {
+    const parsed = parseSiuMessage(rawMessage);
+    if (!parsed.placerAppointmentId) {
+      throw new Error('Missing SCH-1 (placer appointment id) — cannot correlate this update to an appointment');
+    }
+    if (!parsed.scheduledStart || !parsed.scheduledEnd) throw new Error('Missing or invalid SCH-11 (appointment timing)');
+
+    const appointment = await this.appointmentRepo.findById(trx, ctx.tenantId, parsed.placerAppointmentId);
+    if (!appointment) throw new Error(`No appointment found matching placer appointment id ${parsed.placerAppointmentId}`);
+
+    await this.appointmentService.reschedule(trx, ctx, appointment.id, {
+      scheduledStart: parsed.scheduledStart,
+      scheduledEnd: parsed.scheduledEnd,
+    });
+  }
+
+  private async processSiuCancel(trx: Executor, ctx: RequestContext, rawMessage: string): Promise<void> {
+    const parsed = parseSiuMessage(rawMessage);
+    if (!parsed.placerAppointmentId) {
+      throw new Error('Missing SCH-1 (placer appointment id) — cannot correlate this cancellation to an appointment');
+    }
+
+    const appointment = await this.appointmentRepo.findById(trx, ctx.tenantId, parsed.placerAppointmentId);
+    if (!appointment) throw new Error(`No appointment found matching placer appointment id ${parsed.placerAppointmentId}`);
+
+    await this.appointmentService.cancel(trx, ctx, appointment.id, 'Cancelled via HL7 SIU message');
+  }
+
+  private async processOrm(trx: Executor, ctx: RequestContext, rawMessage: string): Promise<void> {
+    const parsed = parseOrmMessage(rawMessage);
+    if (!parsed.encounterId) throw new Error('Missing PV1-19 (visit number) — cannot correlate this order to an encounter');
+    if (!parsed.orderingPractitionerId) throw new Error('Missing OBR-16 (ordering provider)');
+
+    const encounter = await this.encounterRepo.findById(trx, ctx.tenantId, parsed.encounterId);
+    if (!encounter) throw new Error(`No encounter found matching visit number ${parsed.encounterId}`);
+
+    await this.orderService.create(trx, ctx, {
+      encounterId: encounter.id,
+      orderingPractitionerId: parsed.orderingPractitionerId,
+      orderType: 'lab',
+      codeSystem: parsed.codeSystem,
+      code: parsed.code,
+      displayName: parsed.displayName ?? parsed.code ?? 'Order',
+      priority: 'routine',
+    });
   }
 }

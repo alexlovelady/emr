@@ -29,6 +29,12 @@ export const CreateAppointmentSeriesSchema = CreateAppointmentSchema.extend({
 });
 export type CreateAppointmentSeriesInput = z.infer<typeof CreateAppointmentSeriesSchema>;
 
+export const RescheduleAppointmentSchema = z.object({
+  scheduledStart: z.coerce.date(),
+  scheduledEnd: z.coerce.date(),
+});
+export type RescheduleAppointmentInput = z.infer<typeof RescheduleAppointmentSchema>;
+
 export const CancelAppointmentSchema = z.object({
   reason: z.string().min(1).max(500).nullish(),
 });

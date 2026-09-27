@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@ehr/clinical": "workspace:*",
+    "@ehr/documents": "workspace:*",
+    "@ehr/medication": "workspace:*",
     "@ehr/patient": "workspace:*"
   },
   "devDependencies": {

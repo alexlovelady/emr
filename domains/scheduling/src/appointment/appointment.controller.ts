@@ -10,10 +10,12 @@ import {
   CreateAppointmentSchema,
   CreateAppointmentSeriesSchema,
   ListAppointmentsQuerySchema,
+  RescheduleAppointmentSchema,
   type CancelAppointmentInput,
   type CreateAppointmentInput,
   type CreateAppointmentSeriesInput,
   type ListAppointmentsQuery,
+  type RescheduleAppointmentInput,
 } from './appointment.dto.js';
 import { AppointmentService } from './appointment.service.js';
 
@@ -72,6 +74,17 @@ export class AppointmentController {
       ...(query.scheduledFrom ? { scheduledFrom: new Date(query.scheduledFrom) } : {}),
       ...(query.scheduledTo ? { scheduledTo: new Date(query.scheduledTo) } : {}),
     });
+  }
+
+  @Post(':id/reschedule')
+  @RequirePermission(PERMISSION_KEYS.APPOINTMENT_MANAGE)
+  @Audited('appointment.reschedule', 'Appointment')
+  async reschedule(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(RescheduleAppointmentSchema)) body: RescheduleAppointmentInput,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.service.reschedule(getCurrentTransaction(), requireCtx(req), id, body);
   }
 
   @Post(':id/confirm')

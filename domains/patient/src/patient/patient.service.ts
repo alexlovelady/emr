@@ -82,6 +82,25 @@ export class PatientService {
   }
 
   /**
+   * Name/DOB/sex/gender — unlike `updateContactInfo`, this DOES touch identity fields. Exists for
+   * `apps/interop-hl7`'s ADT^A01/A02/A03/A08 handler: an inbound ADT feed is a legitimate source of
+   * demographic corrections from an upstream registration system, unlike the patient-portal's own
+   * self-service profile edit (which deliberately stays contact-fields-only). Applies directly, no
+   * separate staff-review queue — same posture as `updateContactInfo`.
+   */
+  async updateDemographics(
+    trx: Executor,
+    ctx: RequestContext,
+    id: string,
+    patch: Parameters<PatientRepository['updateDemographics']>[3],
+  ): Promise<PatientRow> {
+    const patient = await this.repo.findById(trx, ctx.tenantId, id);
+    if (!patient) throw new NotFoundError('Patient not found', { id });
+    const actorId = ctx.actor?.id ?? null;
+    return this.repo.updateDemographics(trx, ctx.tenantId, id, patch, actorId ?? ctx.tenantId);
+  }
+
+  /**
    * Deterministic scoring only — spec §5.3: "no automatic patient merge without configurable
    * high-confidence rules and review." This never merges anything; it only surfaces candidates
    * for a human to review via the separate `merge()` call.

@@ -141,6 +141,41 @@ export class PatientRepository {
     return toRow(row);
   }
 
+  /** Name/DOB/sex/gender — unlike `updateContactInfo`, this DOES touch identity fields. See
+   * `PatientService.updateDemographics()`'s doc comment for why that's a deliberate difference. */
+  async updateDemographics(
+    trx: Executor,
+    tenantId: string,
+    id: string,
+    patch: {
+      givenName?: string | undefined;
+      familyName?: string | undefined;
+      middleName?: string | null | undefined;
+      dateOfBirth?: string | undefined;
+      sexAtBirth?: string | null | undefined;
+      genderIdentity?: string | null | undefined;
+    },
+    updatedBy: string,
+  ): Promise<PatientRow> {
+    const row = await trx
+      .updateTable('patients')
+      .set({
+        ...(patch.givenName !== undefined ? { given_name: patch.givenName } : {}),
+        ...(patch.familyName !== undefined ? { family_name: patch.familyName } : {}),
+        ...(patch.middleName !== undefined ? { middle_name: patch.middleName } : {}),
+        ...(patch.dateOfBirth !== undefined ? { date_of_birth: patch.dateOfBirth } : {}),
+        ...(patch.sexAtBirth !== undefined ? { sex_at_birth: patch.sexAtBirth } : {}),
+        ...(patch.genderIdentity !== undefined ? { gender_identity: patch.genderIdentity } : {}),
+        updated_by: updatedBy,
+        updated_at: new Date(),
+      })
+      .where('tenant_id', '=', tenantId)
+      .where('id', '=', id)
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return toRow(row);
+  }
+
   async setStatus(trx: Executor, tenantId: string, id: string, status: string, metadataPatch: Record<string, unknown>, updatedBy: string): Promise<PatientRow> {
     const row = await trx
       .updateTable('patients')

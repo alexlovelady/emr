@@ -175,6 +175,29 @@ export class AppointmentRepository {
     return rows.map((r) => r.resource_id);
   }
 
+  /** Patches the scheduled window without touching status — used for a reschedule, not a transition. */
+  async reschedule(
+    trx: Executor,
+    tenantId: string,
+    id: string,
+    patch: { scheduledStart: Date; scheduledEnd: Date },
+    updatedBy: string,
+  ): Promise<AppointmentRow> {
+    const row = await trx
+      .updateTable('appointments')
+      .set({
+        scheduled_start: patch.scheduledStart,
+        scheduled_end: patch.scheduledEnd,
+        updated_by: updatedBy,
+        updated_at: new Date(),
+      })
+      .where('tenant_id', '=', tenantId)
+      .where('id', '=', id)
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return toRow(row);
+  }
+
   /** Applies a state transition, checking `expectedStatuses` optimistically against the row already read. */
   async transition(
     trx: Executor,
