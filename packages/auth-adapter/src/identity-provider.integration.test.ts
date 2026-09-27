@@ -4,7 +4,8 @@ import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { seedSyntheticFixtures, DEV_PASSWORD, type DB, type SeedResult } from '@ehr/db';
 import { JWT_ALG, type KeyMaterial } from './keys.js';
-import { FirstPartyIdentityProvider, InvalidCredentialsError } from './identity-provider.js';
+import { authenticator } from 'otplib';
+import { FirstPartyIdentityProvider, InvalidCredentialsError, InvalidMfaCodeError } from './identity-provider.js';
 import { InvalidRefreshTokenError, verifyAccessToken } from './tokens.js';
 
 /** Requires a live Postgres with migrations applied — run via `pnpm test:integration`. */
@@ -47,7 +48,7 @@ describe('FirstPartyIdentityProvider (integration)', () => {
 
   it('verifies correct credentials for a seeded user', async () => {
     const result = await provider.verifyCredentials(seed.tenantA.slug, seed.tenantA.adminEmail, DEV_PASSWORD);
-    expect(result).toEqual({ userId: seed.tenantA.adminUserId, tenantId: seed.tenantA.tenantId });
+    expect(result).toEqual({ userId: seed.tenantA.adminUserId, tenantId: seed.tenantA.tenantId, mfaEnrolled: false });
   });
 
   it('rejects the wrong password', async () => {
@@ -97,5 +98,50 @@ describe('FirstPartyIdentityProvider (integration)', () => {
     const jwks = await provider.getJWKS();
     expect(jwks.keys).toHaveLength(1);
     expect(jwks.keys[0]).toMatchObject({ kid: keys.kid, use: 'sig', alg: 'ES256' });
+  });
+
+  describe('MFA enrollment and challenge', () => {
+    // upsertUser() (packages/db's seed-fixtures.ts) only overwrites password_hash on conflict, so
+    // the mfa_* columns this test flips on the seeded staff user would otherwise persist across
+    // runs against the same dev database — reset them so the test is repeatable, not just once-green.
+    afterAll(async () => {
+      await ownerDb
+        .updateTable('users')
+        .set({ mfa_enrolled: false, mfa_method: 'none', mfa_secret: null })
+        .where('id', '=', seed.tenantA.staffUserId)
+        .execute();
+    });
+
+    it('walks the full enroll -> confirm -> challenge lifecycle', async () => {
+      const before = await provider.verifyCredentials(seed.tenantA.slug, seed.tenantA.staffEmail, DEV_PASSWORD);
+      expect(before.mfaEnrolled).toBe(false);
+
+      const enrollment = await provider.startMfaEnrollment(seed.tenantA.staffUserId, seed.tenantA.tenantId, seed.tenantA.staffEmail);
+      expect(enrollment.otpauthUrl).toContain(enrollment.secret);
+
+      // Not yet confirmed — verifyMfaChallenge must not accept a correct code before confirmation.
+      const codeBeforeConfirm = authenticator.generate(enrollment.secret);
+      expect(await provider.verifyMfaChallenge(seed.tenantA.staffUserId, seed.tenantA.tenantId, codeBeforeConfirm)).toBe(false);
+
+      await expect(
+        provider.confirmMfaEnrollment(seed.tenantA.staffUserId, seed.tenantA.tenantId, '000000'),
+      ).rejects.toBeInstanceOf(InvalidMfaCodeError);
+
+      await provider.confirmMfaEnrollment(seed.tenantA.staffUserId, seed.tenantA.tenantId, authenticator.generate(enrollment.secret));
+
+      const after = await provider.verifyCredentials(seed.tenantA.slug, seed.tenantA.staffEmail, DEV_PASSWORD);
+      expect(after.mfaEnrolled).toBe(true);
+
+      expect(await provider.verifyMfaChallenge(seed.tenantA.staffUserId, seed.tenantA.tenantId, '000000')).toBe(false);
+      expect(
+        await provider.verifyMfaChallenge(seed.tenantA.staffUserId, seed.tenantA.tenantId, authenticator.generate(enrollment.secret)),
+      ).toBe(true);
+    });
+
+    it('issueMfaPendingToken/verifyMfaPendingToken round-trip the userId/tenantId', async () => {
+      const token = await provider.issueMfaPendingToken(seed.tenantA.adminUserId, seed.tenantA.tenantId);
+      const claims = await provider.verifyMfaPendingToken(token);
+      expect(claims).toEqual({ userId: seed.tenantA.adminUserId, tenantId: seed.tenantA.tenantId });
+    });
   });
 });

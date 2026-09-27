@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { Kysely } from 'kysely';
 import { withTenantContext, type DB } from '@ehr/db';
 import { recordAuditEvent } from '@ehr/audit';
-import type { IdentityProvider, TokenPair } from '@ehr/auth-adapter';
+import type { IdentityProvider, MfaEnrollment, TokenPair } from '@ehr/auth-adapter';
 import { DB_CONNECTION, IDENTITY_PROVIDER } from '../common/tokens.js';
 
 export interface RequestMeta {
@@ -10,6 +10,8 @@ export interface RequestMeta {
   ip?: string;
   userAgent?: string;
 }
+
+export type LoginResult = { mfaRequired: true; mfaPendingToken: string } | ({ mfaRequired: false } & TokenPair);
 
 /**
  * Login/refresh/logout happen before any request-scoped transaction exists (there is no
@@ -31,11 +33,44 @@ export class AuthService {
     @Inject(DB_CONNECTION) private readonly db: Kysely<DB>,
   ) {}
 
-  async login(tenantSlug: string, email: string, password: string, meta: RequestMeta): Promise<TokenPair> {
-    const { userId, tenantId } = await this.identityProvider.verifyCredentials(tenantSlug, email, password);
+  /**
+   * Real MFA (2026-09-27 pass, replacing ADR-0002's structural stub): if the user has enrolled,
+   * this returns a short-lived `mfaPendingToken` instead of real tokens — the caller must present
+   * it plus a valid TOTP code to `completeMfaChallenge()` before getting a usable session.
+   */
+  async login(tenantSlug: string, email: string, password: string, meta: RequestMeta): Promise<LoginResult> {
+    const { userId, tenantId, mfaEnrolled } = await this.identityProvider.verifyCredentials(tenantSlug, email, password);
+
+    if (mfaEnrolled) {
+      const mfaPendingToken = await this.identityProvider.issueMfaPendingToken(userId, tenantId);
+      await this.auditAuthEvent(tenantId, userId, 'auth.login.mfa_required', 'success', meta);
+      return { mfaRequired: true, mfaPendingToken };
+    }
+
     const tokens = await this.identityProvider.issueTokens(userId, tenantId);
     await this.auditAuthEvent(tenantId, userId, 'auth.login', 'success', meta);
+    return { mfaRequired: false, ...tokens };
+  }
+
+  async completeMfaChallenge(mfaPendingToken: string, code: string, meta: RequestMeta): Promise<TokenPair> {
+    const { userId, tenantId } = await this.identityProvider.verifyMfaPendingToken(mfaPendingToken);
+    const valid = await this.identityProvider.verifyMfaChallenge(userId, tenantId, code);
+    if (!valid) {
+      await this.auditAuthEvent(tenantId, userId, 'auth.mfa_challenge', 'failure', meta);
+      throw new InvalidMfaChallengeError('Invalid or expired MFA code');
+    }
+    const tokens = await this.identityProvider.issueTokens(userId, tenantId);
+    await this.auditAuthEvent(tenantId, userId, 'auth.mfa_challenge', 'success', meta);
     return tokens;
+  }
+
+  async startMfaEnrollment(userId: string, tenantId: string, accountLabel: string): Promise<MfaEnrollment> {
+    return this.identityProvider.startMfaEnrollment(userId, tenantId, accountLabel);
+  }
+
+  async confirmMfaEnrollment(userId: string, tenantId: string, code: string, meta: RequestMeta): Promise<void> {
+    await this.identityProvider.confirmMfaEnrollment(userId, tenantId, code);
+    await this.auditAuthEvent(tenantId, userId, 'auth.mfa_enroll', 'success', meta);
   }
 
   async refresh(refreshToken: string): Promise<TokenPair> {
@@ -67,3 +102,5 @@ export class AuthService {
     );
   }
 }
+
+export class InvalidMfaChallengeError extends Error {}

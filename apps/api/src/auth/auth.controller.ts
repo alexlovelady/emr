@@ -1,15 +1,22 @@
 import { randomUUID } from 'node:crypto';
-import { Body, Controller, Get, HttpCode, Inject, NotImplementedException, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Post, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { Audited, SkipAudit } from '@ehr/audit';
 import { SkipAuthz, getEffectivePermissions } from '@ehr/authz';
 import { ForbiddenError, type RequestContext } from '@ehr/domain-common';
 import { getCurrentTransaction } from '@ehr/db';
-import type { IdentityProvider } from '@ehr/auth-adapter';
 import { UserService } from '@ehr/workforce';
-import { IDENTITY_PROVIDER } from '../common/tokens.js';
 import { ZodValidationPipe } from '@ehr/api-contracts';
-import { LoginSchema, MfaChallengeSchema, RefreshSchema, type LoginInput, type MfaChallengeInput, type RefreshInput } from './auth.dto.js';
+import {
+  LoginSchema,
+  MfaChallengeSchema,
+  MfaConfirmSchema,
+  RefreshSchema,
+  type LoginInput,
+  type MfaChallengeInput,
+  type MfaConfirmInput,
+  type RefreshInput,
+} from './auth.dto.js';
 import { AuthService } from './auth.service.js';
 
 /**
@@ -26,7 +33,6 @@ import { AuthService } from './auth.service.js';
 export class AuthController {
   constructor(
     @Inject(AuthService) private readonly authService: AuthService,
-    @Inject(IDENTITY_PROVIDER) private readonly identityProvider: IdentityProvider,
     private readonly userService: UserService = new UserService(),
   ) {}
 
@@ -35,15 +41,7 @@ export class AuthController {
   @SkipAudit()
   @HttpCode(200)
   async login(@Body(new ZodValidationPipe(LoginSchema)) body: LoginInput, @Req() req: FastifyRequest) {
-    return this.authService.login(body.tenantSlug, body.email, body.password, {
-      // req.ehrContext is always set by TenantContextMiddleware (with a real UUID requestId)
-      // even for this unauthenticated route — see its doc comment. The fallback here only
-      // guards against some future route bypassing that middleware; it must be a real UUID
-      // (audit_events.request_id is a uuid column), never a sentinel string like "unknown".
-      requestId: req.ehrContext?.requestId ?? randomUUID(),
-      ip: req.ip,
-      ...(req.headers['user-agent'] !== undefined ? { userAgent: req.headers['user-agent'] } : {}),
-    });
+    return this.authService.login(body.tenantSlug, body.email, body.password, requestMeta(req));
   }
 
   @Post('refresh')
@@ -63,15 +61,44 @@ export class AuthController {
   }
 
   /**
-   * Structural stub (ADR-0002): returns 501 rather than pretending to enforce MFA. Present in
-   * the OpenAPI contract so the gap is visible, not silently missing.
+   * Real MFA (2026-09-27), replacing ADR-0002's structural 501 stub. `mfaPendingToken` (from
+   * `login()`'s `{mfaRequired: true}` response) proves the caller already presented a correct
+   * password for this specific user — a raw client-supplied `userId` was the old (unbuilt) design
+   * and would have let an attacker brute-force a TOTP code against an arbitrary existing user with
+   * no password check at all.
    */
   @Post('mfa/challenge')
   @SkipAuthz()
   @SkipAudit()
-  async mfaChallenge(@Body(new ZodValidationPipe(MfaChallengeSchema)) body: MfaChallengeInput): Promise<never> {
-    await this.identityProvider.verifyMfaChallenge(body.userId, body.code);
-    throw new NotImplementedException('MFA is not implemented in Phase 1 — see ADR-0002.');
+  @HttpCode(200)
+  async mfaChallenge(@Body(new ZodValidationPipe(MfaChallengeSchema)) body: MfaChallengeInput, @Req() req: FastifyRequest) {
+    return this.authService.completeMfaChallenge(body.mfaPendingToken, body.code, requestMeta(req));
+  }
+
+  /**
+   * Self-service enrollment — any authenticated user may enroll themselves (no permission key
+   * beyond "is logged in"), same posture as `me()`/`permissions()`. Returns a secret + otpauth URI
+   * for the caller to render as a QR code; `mfa_enrolled` stays false until `mfa/confirm` verifies
+   * the first real code, so an abandoned enrollment never locks the account out.
+   */
+  @Post('mfa/enroll')
+  @SkipAuthz()
+  @Audited('auth.mfa_enroll_start', 'User')
+  async mfaEnroll(@Req() req: FastifyRequest) {
+    const ctx = requireCtx(req);
+    if (!ctx.actor) throw new ForbiddenError('No authenticated actor on request');
+    const user = await this.userService.getById(getCurrentTransaction(), ctx, ctx.actor.id);
+    return this.authService.startMfaEnrollment(ctx.actor.id, ctx.tenantId, user.email);
+  }
+
+  @Post('mfa/confirm')
+  @SkipAuthz()
+  @Audited('auth.mfa_enroll_confirm', 'User')
+  async mfaConfirm(@Body(new ZodValidationPipe(MfaConfirmSchema)) body: MfaConfirmInput, @Req() req: FastifyRequest): Promise<{ ok: true }> {
+    const ctx = requireCtx(req);
+    if (!ctx.actor) throw new ForbiddenError('No authenticated actor on request');
+    await this.authService.confirmMfaEnrollment(ctx.actor.id, ctx.tenantId, body.code, requestMeta(req));
+    return { ok: true };
   }
 
   /**
@@ -109,4 +136,16 @@ export class AuthController {
 function requireCtx(req: FastifyRequest): RequestContext {
   if (!req.ehrContext) throw new ForbiddenError('No authenticated actor on request');
   return req.ehrContext;
+}
+
+function requestMeta(req: FastifyRequest): { requestId: string; ip?: string; userAgent?: string } {
+  return {
+    // req.ehrContext is always set by TenantContextMiddleware (with a real UUID requestId)
+    // even for unauthenticated routes — see its doc comment. The fallback here only guards
+    // against some future route bypassing that middleware; it must be a real UUID
+    // (audit_events.request_id is a uuid column), never a sentinel string like "unknown".
+    requestId: req.ehrContext?.requestId ?? randomUUID(),
+    ip: req.ip,
+    ...(req.headers['user-agent'] !== undefined ? { userAgent: req.headers['user-agent'] } : {}),
+  };
 }

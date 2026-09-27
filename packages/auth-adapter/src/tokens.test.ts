@@ -9,7 +9,9 @@ import {
   InvalidAccessTokenError,
   InvalidRefreshTokenError,
   signAccessToken,
+  signMfaPendingToken,
   verifyAccessToken,
+  verifyMfaPendingToken,
   type TokenIssuerConfig,
 } from './tokens.js';
 
@@ -69,5 +71,24 @@ describe('refresh token encoding', () => {
     const secret = generateRefreshSecret();
     expect(hashRefreshSecret(secret)).toBe(hashRefreshSecret(secret));
     expect(hashRefreshSecret(secret)).not.toBe(secret);
+  });
+});
+
+describe('MFA pending tokens', () => {
+  it('round-trips a signed pending token through verifyMfaPendingToken', async () => {
+    const token = await signMfaPendingToken({ userId: 'u1', tenantId: 't1' }, keys, config.issuer);
+    const claims = await verifyMfaPendingToken(token, keys.publicKey, config.issuer);
+    expect(claims).toEqual({ userId: 'u1', tenantId: 't1' });
+  });
+
+  it('rejects a pending token verified with the wrong public key', async () => {
+    const token = await signMfaPendingToken({ userId: 'u1', tenantId: 't1' }, keys, config.issuer);
+    const { publicKey: otherKey } = await generateKeyPair(JWT_ALG, { extractable: true });
+    await expect(verifyMfaPendingToken(token, otherKey, config.issuer)).rejects.toBeInstanceOf(InvalidAccessTokenError);
+  });
+
+  it('rejects a real access token presented as a pending token (different audience)', async () => {
+    const accessToken = await signAccessToken({ userId: 'u1', tenantId: 't1' }, keys, config);
+    await expect(verifyMfaPendingToken(accessToken, keys.publicKey, config.issuer)).rejects.toBeInstanceOf(InvalidAccessTokenError);
   });
 });

@@ -6,17 +6,22 @@ export {
   decodeRefreshToken,
   generateRefreshSecret,
   hashRefreshSecret,
+  signMfaPendingToken,
+  verifyMfaPendingToken,
   InvalidAccessTokenError,
   InvalidRefreshTokenError,
   type TokenIssuerConfig,
   type AccessTokenClaims,
+  type MfaPendingClaims,
 } from './tokens.js';
 export {
   FirstPartyIdentityProvider,
   InvalidCredentialsError,
+  InvalidMfaCodeError,
   type IdentityProvider,
   type AuthResult,
   type TokenPair,
+  type MfaEnrollment,
 } from './identity-provider.js';
 export {
   signPortalAccessToken,

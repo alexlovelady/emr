@@ -3,7 +3,7 @@ import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE, SESSION_COOKIE_OPTIONS, isEx
 
 const API_INTERNAL_URL = process.env.API_INTERNAL_URL ?? 'http://localhost:3000';
 
-const PUBLIC_PATHS = ['/login', '/api/login'];
+const PUBLIC_PATHS = ['/login', '/api/login', '/api/mfa-challenge'];
 
 /**
  * Proactively refreshes the access token before any Server Component/Route Handler runs, since

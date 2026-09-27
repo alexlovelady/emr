@@ -18,10 +18,17 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json(problem ?? { title: 'Login failed' }, { status: res.status });
   }
 
-  const tokens = (await res.json()) as { accessToken: string; refreshToken: string };
-  const cookieStore = await cookies();
-  cookieStore.set(ACCESS_TOKEN_COOKIE, tokens.accessToken, SESSION_COOKIE_OPTIONS);
-  cookieStore.set(REFRESH_TOKEN_COOKIE, tokens.refreshToken, SESSION_COOKIE_OPTIONS);
+  const result = (await res.json()) as
+    | { mfaRequired: true; mfaPendingToken: string }
+    | { mfaRequired: false; accessToken: string; refreshToken: string };
 
-  return NextResponse.json({ ok: true });
+  if (result.mfaRequired) {
+    return NextResponse.json({ mfaRequired: true, mfaPendingToken: result.mfaPendingToken });
+  }
+
+  const cookieStore = await cookies();
+  cookieStore.set(ACCESS_TOKEN_COOKIE, result.accessToken, SESSION_COOKIE_OPTIONS);
+  cookieStore.set(REFRESH_TOKEN_COOKIE, result.refreshToken, SESSION_COOKIE_OPTIONS);
+
+  return NextResponse.json({ mfaRequired: false });
 }

@@ -13,7 +13,12 @@ export const RefreshSchema = z.object({
 export type RefreshInput = z.infer<typeof RefreshSchema>;
 
 export const MfaChallengeSchema = z.object({
-  userId: z.string().uuid(),
+  mfaPendingToken: z.string().min(1),
   code: z.string().min(1),
 });
 export type MfaChallengeInput = z.infer<typeof MfaChallengeSchema>;
+
+export const MfaConfirmSchema = z.object({
+  code: z.string().min(1),
+});
+export type MfaConfirmInput = z.infer<typeof MfaConfirmSchema>;

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Building2, LogOut, MapPin, ShieldCheck, Stethoscope, Users, KeyRound } from 'lucide-react';
+import { Building2, LogOut, MapPin, Settings, ShieldCheck, Stethoscope, Users, KeyRound } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/components/providers/permissions-provider';
 import { PERMISSION_KEYS } from '@/lib/permission-keys';
@@ -69,6 +69,13 @@ export function LeftNav({ user }: { user: CurrentUser }) {
             <div className="truncate text-sm font-medium text-white">{user.email}</div>
             <div className="text-xs text-sidebar-muted">Signed in</div>
           </div>
+          <Link
+            href="/settings/security"
+            title="Security settings"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-sidebar-muted transition-colors hover:bg-white/5 hover:text-white"
+          >
+            <Settings className="h-4 w-4" strokeWidth={2} />
+          </Link>
           <button
             onClick={onLogout}
             title="Sign out"

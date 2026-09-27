@@ -52,6 +52,47 @@ export async function verifyAccessToken(
   return { userId: payload.sub, tenantId: payload.tenant_id };
 }
 
+export interface MfaPendingClaims {
+  userId: string;
+  tenantId: string;
+}
+
+const MFA_PENDING_AUDIENCE = 'ehr-mfa-pending';
+const MFA_PENDING_TTL_SECONDS = 300;
+
+/**
+ * A short-lived, single-purpose token proving "this caller already presented a correct password
+ * for this user" without yet proving MFA — issued by `login()` when `mfa_enrolled` is true, and
+ * required by `POST /auth/mfa/challenge`. Deliberately a distinct audience from real access tokens
+ * (`verifyAccessToken`'s strict audience check means this token can never be used as one), and a
+ * distinct claims shape from `MfaChallengeSchema`'s old client-supplied-`userId` design — trusting a
+ * raw client-supplied userId at the challenge step would let an attacker guess a TOTP code against
+ * an arbitrary existing user without ever having proven that user's password.
+ */
+export async function signMfaPendingToken(claims: MfaPendingClaims, keys: KeyMaterial, issuer: string): Promise<string> {
+  return new SignJWT({ tenant_id: claims.tenantId })
+    .setProtectedHeader({ alg: JWT_ALG, kid: keys.kid })
+    .setSubject(claims.userId)
+    .setIssuer(issuer)
+    .setAudience(MFA_PENDING_AUDIENCE)
+    .setIssuedAt()
+    .setExpirationTime(`${MFA_PENDING_TTL_SECONDS}s`)
+    .sign(keys.privateKey);
+}
+
+export async function verifyMfaPendingToken(token: string, publicKey: KeyLike, issuer: string): Promise<MfaPendingClaims> {
+  let payload;
+  try {
+    ({ payload } = await jwtVerify(token, publicKey, { issuer, audience: MFA_PENDING_AUDIENCE }));
+  } catch (err) {
+    throw new InvalidAccessTokenError(err instanceof Error ? err.message : String(err));
+  }
+  if (typeof payload.sub !== 'string' || typeof payload.tenant_id !== 'string') {
+    throw new InvalidAccessTokenError('MFA pending token is missing required claims (sub, tenant_id)');
+  }
+  return { userId: payload.sub, tenantId: payload.tenant_id };
+}
+
 /**
  * Refresh tokens are `${tenantId}.${secret}` — the tenant id is plain routing info (not secret),
  * embedded so a presented refresh token can be looked up with a normal tenant-scoped,

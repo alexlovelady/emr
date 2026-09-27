@@ -88,6 +88,7 @@ export interface UsersTable extends CommonColumnsTable {
   password_algo: string;
   mfa_enrolled: Generated<boolean>;
   mfa_method: Generated<string>;
+  mfa_secret: string | null;
   last_login_at: Timestamp | null;
 }
 

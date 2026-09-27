@@ -1,0 +1,27 @@
+import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE, SESSION_COOKIE_OPTIONS } from '@/lib/session';
+
+const API_INTERNAL_URL = process.env.API_INTERNAL_URL ?? 'http://localhost:3000';
+
+export async function POST(req: Request): Promise<NextResponse> {
+  const body = (await req.json()) as { mfaPendingToken: string; code: string };
+
+  const res = await fetch(`${API_INTERNAL_URL}/api/v1/auth/mfa/challenge`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const problem = await res.json().catch(() => undefined);
+    return NextResponse.json(problem ?? { title: 'Invalid or expired code' }, { status: res.status });
+  }
+
+  const tokens = (await res.json()) as { accessToken: string; refreshToken: string };
+  const cookieStore = await cookies();
+  cookieStore.set(ACCESS_TOKEN_COOKIE, tokens.accessToken, SESSION_COOKIE_OPTIONS);
+  cookieStore.set(REFRESH_TOKEN_COOKIE, tokens.refreshToken, SESSION_COOKIE_OPTIONS);
+
+  return NextResponse.json({ ok: true });
+}

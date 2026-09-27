@@ -38,6 +38,7 @@ for the full rationale.
 ```
 middleware.ts                     proactively refreshes the session before any page runs
 app/api/login, app/api/logout     set/clear the httpOnly session cookies
+app/api/mfa-challenge             completes an MFA login challenge, then sets the same cookies
 app/api/backend/[...path]         generic proxy for any client-initiated call (e.g. eRx typeahead)
 lib/api-proxy.ts                  callBackend() — the one place that calls apps/api
 lib/session.ts                    cookie names/options, JWT exp decode (bookkeeping only)
@@ -55,6 +56,16 @@ each calling `revalidatePath()` on success. Every mutation button/nav-entry is a
 client-side by `usePermissions().has(...)` against `GET /api/v1/auth/permissions` (added this pass,
 `apps/api/src/auth/auth.controller.ts` — a fresh DB read every call, never cached or embedded in the
 JWT) — UX only, the Server Action's target endpoint remains the real authorization boundary.
+
+**MFA (real TOTP, added this pass):** `/login` is a two-step form — credentials first, then (only if
+`POST /api/login` returns `{mfaRequired: true, mfaPendingToken}`) a 6-digit authenticator code
+submitted to `/api/mfa-challenge`. Users self-enroll at `/settings/security`
+(`components/settings/mfa-enroll.tsx`), which renders the backend's `otpauthUrl` as a QR code
+client-side via the `qrcode` package. **Gotcha hit and fixed:** `middleware.ts`'s `PUBLIC_PATHS` must
+include `/api/mfa-challenge` — that request happens before any real session cookie exists (that's the
+whole point of the pending-token step), so without this the middleware redirected it straight back to
+`/login`, discarding the code before it ever reached the route handler. Caught via a real browser
+click-through, not typecheck/lint/build (all three passed while this bug was live).
 
 ## Running locally
 

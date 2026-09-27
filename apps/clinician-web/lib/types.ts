@@ -10,6 +10,12 @@ export interface CurrentUser {
   tenantId: string;
   email: string;
   status: string;
+  mfaEnrolled: boolean;
+}
+
+export interface MfaEnrollment {
+  secret: string;
+  otpauthUrl: string;
 }
 
 export interface Patient {

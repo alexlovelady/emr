@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { ZodSchema } from 'zod';
-import { LoginSchema, RefreshSchema, MfaChallengeSchema } from '../src/auth/auth.dto.js';
+import { LoginSchema, RefreshSchema, MfaChallengeSchema, MfaConfirmSchema } from '../src/auth/auth.dto.js';
 import { CreateOrganizationSchema, CreateLocationSchema } from '@ehr/tenant';
 import { CreateUserSchema, CreatePractitionerSchema } from '@ehr/workforce';
 import { RequestUploadSchema } from '@ehr/documents';
@@ -145,14 +145,14 @@ const document = {
     '/auth/logout': post('Revoke a refresh token', 'Auth', RefreshSchema, 'Logout'),
     '/auth/me': get('Get the caller’s own user record (no permission required beyond a valid token)', 'Auth'),
     '/auth/permissions': get('Get the caller’s own effective permission set (no permission required beyond a valid token)', 'Auth'),
-    '/auth/mfa/challenge': {
-      post: {
-        summary: 'MFA challenge (structural stub — always 501, see ADR-0002)',
-        tags: ['Auth'],
-        requestBody: { required: true, ...jsonBody(MfaChallengeSchema, 'MfaChallenge') },
-        responses: { '501': problemResponse },
-      },
-    },
+    '/auth/mfa/challenge': post(
+      'Complete an MFA challenge (mfaPendingToken + TOTP code) to obtain real tokens',
+      'Auth',
+      MfaChallengeSchema,
+      'MfaChallenge',
+    ),
+    '/auth/mfa/enroll': post('Start TOTP enrollment for the caller (returns a secret + otpauth URI)', 'Auth'),
+    '/auth/mfa/confirm': post('Confirm TOTP enrollment with a first valid code', 'Auth', MfaConfirmSchema, 'MfaConfirm'),
     '/organizations': {
       ...post('Create an organization', 'Tenant', CreateOrganizationSchema, 'CreateOrganization'),
       ...get('List organizations in the caller’s tenant', 'Tenant'),

@@ -21,6 +21,7 @@ it — the browser never calls `apps/api` directly; all backend calls happen ser
 ```
 middleware.ts                     proactively refreshes the session before any page runs
 app/api/login, app/api/logout     set/clear the httpOnly session cookies
+app/api/mfa-challenge             completes an MFA login challenge, then sets the same cookies
 lib/api-proxy.ts                  callBackend() — the one place that calls apps/api
 lib/session.ts                    cookie names/options, JWT exp decode (bookkeeping only)
 lib/types.ts                      hand-written types matching apps/api's real JSON responses
@@ -33,6 +34,11 @@ components/providers/permissions-provider.tsx   usePermissions().has(key) — UX
 No generic `/api/backend/[...path]` proxy route here (unlike clinician-web/patient-portal) — every
 screen's data is fetched server-side in its own page component and passed down as props; nothing
 here needs a client-side keystroke-driven fetch, so the extra proxy route would be unused.
+
+**MFA (real TOTP, added this pass):** same two-step `/login` + `/settings/security` enrollment flow
+as clinician-web (`components/settings/mfa-enroll.tsx`), same `qrcode`-rendered QR code. Same
+`middleware.ts` `PUBLIC_PATHS` gotcha applies here too — `/api/mfa-challenge` must stay in that list
+or the pre-session MFA-code request gets redirected to `/login` before it reaches the route handler.
 
 ## Running locally
 

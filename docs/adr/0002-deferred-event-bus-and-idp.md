@@ -4,6 +4,11 @@
 
 Accepted — 2026-09-25
 
+**Update (2026-09-27):** MFA (TOTP) is now real, closing the gap described in the "MFA is
+structurally present but not functionally implemented" bullet below — see `packages/auth-adapter`'s
+`startMfaEnrollment`/`confirmMfaEnrollment`/`verifyMfaChallenge` and `apps/api`'s `auth.controller.ts`.
+External identity federation (SSO/SAML/OIDC) remains exactly as described below: not implemented.
+
 ## Context
 
 `EHR_BUILD_SPEC.md` §2.1 specifies two external vendor dependencies that Phase 1 as scoped does

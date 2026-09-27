@@ -162,8 +162,16 @@ and [`docs/adr/0006-clinician-web-bff-auth.md`](docs/adr/0006-clinician-web-bff-
   (`apps/api/src/common/request-transaction.interceptor.ts`), so both had to become
   interceptors to share that transaction with the eventual domain write. Global interceptor
   *registration order* in `apps/api/src/app.module.ts` is load-bearing; see its comments.
-- **MFA and real identity federation are structural stubs, not implemented.** Do not point this
-  at real workforce credentials or real patient data — see ADR-0002 and
+- **MFA is real (TOTP, `otplib`), identity federation is still a structural stub.** Enrollment
+  (`POST /api/v1/auth/mfa/enroll` + `mfa/confirm`) and login-time challenge (`POST
+  /api/v1/auth/mfa/challenge`) are fully implemented in `packages/auth-adapter` — a login for an
+  enrolled user returns `{mfaRequired: true, mfaPendingToken}` instead of real tokens; the pending
+  token is a short-lived (300s), separately-audienced (`ehr-mfa-pending`) signed JWT proving the
+  caller already presented the correct password for that specific user, closing the arbitrary-user
+  TOTP-brute-force hole a raw client-supplied `userId` at the challenge step would have opened.
+  `clinician-web`/`admin-web` both have a two-step login UI and a Settings → Security page (QR
+  enrollment via the `qrcode` package). SSO/SAML/OIDC federation is still not implemented — do not
+  point this at real workforce credentials or real patient data — see ADR-0002 and
   `EHR_REGULATORY_MANUAL.md` §29's pre-pilot gate.
 - **Patient identity never uses an external identifier as the primary key** (spec §5.3) — `patients.id`
   is the only stable key; MRNs and other external identifiers live in `patient_identifiers`,

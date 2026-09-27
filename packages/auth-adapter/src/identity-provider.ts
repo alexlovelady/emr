@@ -1,4 +1,5 @@
 import * as argon2 from 'argon2';
+import { authenticator } from 'otplib';
 import { exportJWK } from 'jose';
 import type { Kysely } from 'kysely';
 import type { DB } from '@ehr/db';
@@ -11,12 +12,16 @@ import {
   hashRefreshSecret,
   InvalidRefreshTokenError,
   signAccessToken,
+  signMfaPendingToken,
+  verifyMfaPendingToken,
+  type MfaPendingClaims,
   type TokenIssuerConfig,
 } from './tokens.js';
 
 export interface AuthResult {
   userId: string;
   tenantId: string;
+  mfaEnrolled: boolean;
 }
 
 export interface TokenPair {
@@ -24,7 +29,13 @@ export interface TokenPair {
   refreshToken: string;
 }
 
+export interface MfaEnrollment {
+  secret: string;
+  otpauthUrl: string;
+}
+
 export class InvalidCredentialsError extends Error {}
+export class InvalidMfaCodeError extends Error {}
 
 /**
  * ADR-0002's first-party stand-in for Auth0/Okta/Cognito. All token verification downstream goes
@@ -38,12 +49,15 @@ export interface IdentityProvider {
   refresh(refreshToken: string): Promise<TokenPair>;
   revoke(refreshToken: string): Promise<void>;
   getJWKS(): Promise<{ keys: Record<string, unknown>[] }>;
-  /**
-   * Structural stub (ADR-0002) — always resolves 'not_implemented' rather than pretending to
-   * enforce MFA. Real MFA is a pilot go-live gate (EHR_REGULATORY_MANUAL.md §29), not a Phase 1
-   * deliverable; apps/api's /auth/mfa/challenge route surfaces this as an honest 501.
-   */
-  verifyMfaChallenge(userId: string, code: string): Promise<'not_implemented'>;
+  /** Issued by `AuthService.login()` when `mfa_enrolled` is true, instead of real tokens. */
+  issueMfaPendingToken(userId: string, tenantId: string): Promise<string>;
+  verifyMfaPendingToken(token: string): Promise<MfaPendingClaims>;
+  /** Generates and stores a new TOTP secret for a user, not yet enrolled until `confirmMfaEnrollment` succeeds. */
+  startMfaEnrollment(userId: string, tenantId: string, accountLabel: string): Promise<MfaEnrollment>;
+  /** Verifies the first code against the pending secret and flips `mfa_enrolled` on. */
+  confirmMfaEnrollment(userId: string, tenantId: string, code: string): Promise<void>;
+  /** Real TOTP verification — replaces the old structural 'not_implemented' stub. */
+  verifyMfaChallenge(userId: string, tenantId: string, code: string): Promise<boolean>;
 }
 
 export class FirstPartyIdentityProvider implements IdentityProvider {
@@ -67,7 +81,7 @@ export class FirstPartyIdentityProvider implements IdentityProvider {
     const user = await withTenantContext(this.db, tenant.id, (trx) =>
       trx
         .selectFrom('users')
-        .select(['id', 'password_hash', 'status'])
+        .select(['id', 'password_hash', 'status', 'mfa_enrolled'])
         .where('email', '=', email)
         .executeTakeFirst(),
     );
@@ -80,7 +94,7 @@ export class FirstPartyIdentityProvider implements IdentityProvider {
     const valid = await argon2.verify(user.password_hash, password);
     if (!valid) throw new InvalidCredentialsError('Unknown tenant, or invalid email/password');
 
-    return { userId: user.id, tenantId: tenant.id };
+    return { userId: user.id, tenantId: tenant.id, mfaEnrolled: user.mfa_enrolled };
   }
 
   async issueTokens(userId: string, tenantId: string): Promise<TokenPair> {
@@ -149,7 +163,46 @@ export class FirstPartyIdentityProvider implements IdentityProvider {
     return { keys: [{ ...jwk, kid: this.keys.kid, use: 'sig', alg: 'ES256' }] };
   }
 
-  async verifyMfaChallenge(): Promise<'not_implemented'> {
-    return 'not_implemented';
+  async issueMfaPendingToken(userId: string, tenantId: string): Promise<string> {
+    return signMfaPendingToken({ userId, tenantId }, this.keys, this.config.issuer);
+  }
+
+  async verifyMfaPendingToken(token: string): Promise<MfaPendingClaims> {
+    return verifyMfaPendingToken(token, this.keys.publicKey, this.config.issuer);
+  }
+
+  async startMfaEnrollment(userId: string, tenantId: string, accountLabel: string): Promise<MfaEnrollment> {
+    const secret = authenticator.generateSecret();
+    const otpauthUrl = authenticator.keyuri(accountLabel, 'EHR', secret);
+    // Stored before confirmation — mfa_enrolled stays false until confirmMfaEnrollment verifies a
+    // real code, so an abandoned enrollment attempt never silently locks the account out.
+    await withTenantContext(this.db, tenantId, (trx) =>
+      trx.updateTable('users').set({ mfa_secret: secret, updated_at: new Date() }).where('id', '=', userId).execute(),
+    );
+    return { secret, otpauthUrl };
+  }
+
+  async confirmMfaEnrollment(userId: string, tenantId: string, code: string): Promise<void> {
+    const user = await withTenantContext(this.db, tenantId, (trx) =>
+      trx.selectFrom('users').select(['mfa_secret']).where('id', '=', userId).executeTakeFirst(),
+    );
+    if (!user?.mfa_secret || !authenticator.verify({ token: code, secret: user.mfa_secret })) {
+      throw new InvalidMfaCodeError('Invalid or expired MFA code');
+    }
+    await withTenantContext(this.db, tenantId, (trx) =>
+      trx
+        .updateTable('users')
+        .set({ mfa_enrolled: true, mfa_method: 'totp', updated_at: new Date() })
+        .where('id', '=', userId)
+        .execute(),
+    );
+  }
+
+  async verifyMfaChallenge(userId: string, tenantId: string, code: string): Promise<boolean> {
+    const user = await withTenantContext(this.db, tenantId, (trx) =>
+      trx.selectFrom('users').select(['mfa_secret', 'mfa_enrolled']).where('id', '=', userId).executeTakeFirst(),
+    );
+    if (!user?.mfa_enrolled || !user.mfa_secret) return false;
+    return authenticator.verify({ token: code, secret: user.mfa_secret });
   }
 }
