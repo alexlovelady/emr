@@ -17,6 +17,7 @@ export async function createPrescription(
   const frequency = String(formData.get('frequency') ?? '');
   const daysSupply = String(formData.get('daysSupply') ?? '');
   const encounterId = String(formData.get('encounterId') ?? '');
+  const rxnormCode = String(formData.get('rxnormCode') ?? '');
 
   const body = {
     prescriberId: String(formData.get('prescriberId') ?? ''),
@@ -28,6 +29,7 @@ export async function createPrescription(
     pharmacyName: String(formData.get('pharmacyName') ?? ''),
     isControlledSubstance,
     ...(encounterId ? { encounterId } : {}),
+    ...(rxnormCode ? { rxnormCode } : {}),
     ...(dose ? { dose } : {}),
     ...(route ? { route } : {}),
     ...(frequency ? { frequency } : {}),

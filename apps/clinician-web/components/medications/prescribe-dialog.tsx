@@ -10,55 +10,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { usePermissions } from '@/components/providers/permissions-provider';
 import { PERMISSION_KEYS } from '@/lib/permission-keys';
-import { useMedicationSearch, usePharmacySearch } from '@/components/prescriptions/use-erx-search';
+import { usePharmacySearch } from '@/components/prescriptions/use-erx-search';
+import { useTerminologySearch, type ConceptMatch } from '@/lib/use-terminology-search';
+import { Typeahead } from '@/components/ui/typeahead';
 import { createPrescription } from '@/lib/actions/prescriptions';
 import { useCloseOnSuccess } from '@/lib/use-close-on-success';
 
-function Typeahead<T>({
-  query,
-  onQueryChange,
-  results,
-  renderLabel,
-  onSelect,
-}: {
-  query: string;
-  onQueryChange: (q: string) => void;
-  results: T[];
-  renderLabel: (item: T) => string;
-  onSelect: (item: T) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="relative">
-      <Input
-        value={query}
-        onChange={(e) => {
-          onQueryChange(e.target.value);
-          setOpen(true);
-        }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-        autoComplete="off"
-      />
-      {open && results.length > 0 && (
-        <ul className="absolute z-10 mt-1 max-h-40 w-full overflow-y-auto rounded-md border border-border bg-card shadow-md">
-          {results.map((r, i) => (
-            <li
-              key={i}
-              className="cursor-pointer px-3 py-2 text-sm hover:bg-accent"
-              onMouseDown={() => {
-                onSelect(r);
-                setOpen(false);
-              }}
-            >
-              {renderLabel(r)}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
+const RXNORM_SYSTEM = 'RxNorm';
 
 export function PrescribeDialog({ patientId }: { patientId: string }) {
   const { has } = usePermissions();
@@ -67,20 +25,30 @@ export function PrescribeDialog({ patientId }: { patientId: string }) {
   const [pharmacyQuery, setPharmacyQuery] = useState('');
   const [pharmacyNcpdpId, setPharmacyNcpdpId] = useState('');
   const [pharmacyName, setPharmacyName] = useState('');
+  const [rxnormCode, setRxnormCode] = useState('');
   const [isControlled, setIsControlled] = useState(false);
   const [deaSchedule, setDeaSchedule] = useState('');
 
-  const medications = useMedicationSearch(medicationQuery);
+  const medications = useTerminologySearch(RXNORM_SYSTEM, medicationQuery);
   const pharmacies = usePharmacySearch(pharmacyQuery);
+
+  function selectMedication(m: ConceptMatch): void {
+    setMedicationQuery(m.display);
+    setRxnormCode(m.code);
+  }
 
   const action = createPrescription.bind(null, patientId);
   const [state, formAction, isPending] = useActionState(action, null);
 
   // Doesn't auto-close when the (currently always-empty, see NoopInteractionCheckGateway)
-  // interaction check ever does return findings — the clinician should see them, not have the
-  // dialog vanish out from under a warning.
+  // interaction check ever does return findings, or when the RxNorm code was actually checked and
+  // came back unrecognized — the clinician should see either, not have the dialog vanish out from
+  // under a warning.
   useCloseOnSuccess(state, () => {
-    if (state?.ok && state.data.interactionFindings.length === 0) setOpen(false);
+    if (!state?.ok) return;
+    const validation = state.data.codeValidation;
+    const codeIsSuspect = validation !== null && validation.checked && !validation.valid;
+    if (state.data.interactionFindings.length === 0 && !codeIsSuspect) setOpen(false);
   });
 
   const canPrescribeControlled = has(PERMISSION_KEYS.CONTROLLED_SUBSTANCE_PRESCRIBE);
@@ -109,12 +77,16 @@ export function PrescribeDialog({ patientId }: { patientId: string }) {
             <Label>Medication</Label>
             <Typeahead
               query={medicationQuery}
-              onQueryChange={setMedicationQuery}
+              onQueryChange={(q) => {
+                setMedicationQuery(q);
+                setRxnormCode('');
+              }}
               results={medications}
               renderLabel={(m) => m.display}
-              onSelect={(m) => setMedicationQuery(m.display)}
+              onSelect={selectMedication}
             />
             <input type="hidden" name="medicationName" value={medicationQuery} />
+            <input type="hidden" name="rxnormCode" value={rxnormCode} />
           </div>
 
           <div className="grid grid-cols-3 gap-4">
@@ -217,6 +189,9 @@ export function PrescribeDialog({ patientId }: { patientId: string }) {
                 <div key={i}>{f.description}</div>
               ))}
             </Alert>
+          )}
+          {state && state.ok && state.data.codeValidation?.checked && !state.data.codeValidation.valid && (
+            <Alert>RxNorm code not recognized — recorded anyway, since this may be a real code RxNav doesn&apos;t have.</Alert>
           )}
           {state && !state.ok && <Alert variant="destructive">{state.error}</Alert>}
           <DialogFooter>

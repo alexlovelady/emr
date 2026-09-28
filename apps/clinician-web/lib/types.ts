@@ -98,6 +98,19 @@ export interface Problem {
   status: string;
 }
 
+/** Mirrors `@ehr/terminology`'s `CodeValidation` — `checked: false` means "couldn't check" (an
+ * unloaded local system, or an unreachable live RxNav request), never "this code is wrong". */
+export interface CodeValidation {
+  valid: boolean;
+  checked: boolean;
+  display?: string;
+}
+
+export interface ProblemCreateResult {
+  problem: Problem;
+  codeValidation: CodeValidation | null;
+}
+
 export interface Allergy {
   id: string;
   substance: string;
@@ -113,6 +126,11 @@ export interface MedicationItem {
   route: string | null;
   frequency: string | null;
   status: string;
+}
+
+export interface MedicationCreateResult {
+  medication: MedicationItem;
+  codeValidation: CodeValidation | null;
 }
 
 export interface SignedNote {
@@ -232,6 +250,7 @@ export interface InteractionFinding {
 export interface PrescriptionCreateResult {
   prescription: Prescription;
   interactionFindings: InteractionFinding[];
+  codeValidation: CodeValidation | null;
 }
 
 export interface RefillRequest {

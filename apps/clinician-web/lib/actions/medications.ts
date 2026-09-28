@@ -3,15 +3,18 @@
 import { revalidatePath } from 'next/cache';
 import { callBackend } from '@/lib/api-proxy';
 import { runAction, type ActionResult } from './action-result';
-import type { MedicationItem } from '@/lib/types';
+import type { MedicationItem, MedicationCreateResult } from '@/lib/types';
 
-export async function createMedication(_prevState: ActionResult<MedicationItem> | null, formData: FormData): Promise<ActionResult<MedicationItem>> {
+export async function createMedication(
+  _prevState: ActionResult<MedicationCreateResult> | null,
+  formData: FormData,
+): Promise<ActionResult<MedicationCreateResult>> {
   const patientId = String(formData.get('patientId') ?? '');
   const dose = String(formData.get('dose') ?? '');
   const route = String(formData.get('route') ?? '');
   const frequency = String(formData.get('frequency') ?? '');
   const result = await runAction(() =>
-    callBackend<MedicationItem>(`/api/v1/patients/${patientId}/medications`, {
+    callBackend<MedicationCreateResult>(`/api/v1/patients/${patientId}/medications`, {
       method: 'POST',
       body: {
         medicationName: String(formData.get('medicationName') ?? ''),
