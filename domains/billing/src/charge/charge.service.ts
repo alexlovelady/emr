@@ -75,6 +75,7 @@ export class ChargeService {
         code: input.code ?? current.code,
         description: input.description ?? current.description,
         diagnosisCodes: input.diagnosisCodes ?? current.diagnosisCodes,
+        sourceAiGenerationId: input.sourceAiGenerationId ?? null,
       },
       actorId ?? ctx.tenantId,
     );

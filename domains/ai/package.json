@@ -17,6 +17,7 @@
     "@ehr/api-contracts": "workspace:*",
     "@ehr/audit": "workspace:*",
     "@ehr/authz": "workspace:*",
+    "@ehr/billing": "workspace:*",
     "@ehr/claims": "workspace:*",
     "@ehr/clinical": "workspace:*",
     "@ehr/db": "workspace:*",

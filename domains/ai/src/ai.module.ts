@@ -5,6 +5,7 @@ import { EncounterSummaryController } from './encounter-summary/encounter-summar
 import { ChartQaController } from './chart-qa/chart-qa.controller.js';
 import { MessageDraftController } from './message-draft/message-draft.controller.js';
 import { CodingSuggestionController } from './coding-suggestion/coding-suggestion.controller.js';
+import { ChargeCodingSuggestionController } from './coding-suggestion/charge-coding-suggestion.controller.js';
 import { DenialSummaryController } from './denial-summary/denial-summary.controller.js';
 import { TaskSummaryController } from './task-summary/task-summary.controller.js';
 import { NlToCohortDslProposeController, NlToCohortDslExecuteController } from './nl-to-cohort-dsl/nl-to-cohort-dsl.controller.js';
@@ -17,6 +18,7 @@ import { NlToCohortDslProposeController, NlToCohortDslExecuteController } from '
     ChartQaController,
     MessageDraftController,
     CodingSuggestionController,
+    ChargeCodingSuggestionController,
     DenialSummaryController,
     TaskSummaryController,
     NlToCohortDslProposeController,

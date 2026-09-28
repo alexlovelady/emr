@@ -482,6 +482,7 @@ export interface ChargesTable extends CommonColumnsTable {
   unit_price: string;
   diagnosis_codes: Generated<string[]>;
   claim_id: string | null;
+  source_ai_generation_id: string | null;
 }
 
 export interface ClaimsTable extends CommonColumnsTable {

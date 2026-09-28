@@ -17,5 +17,8 @@ export const FinalizeChargeCodingSchema = z.object({
   code: z.string().min(1).max(20).nullish(),
   description: z.string().min(1).max(300).nullish(),
   diagnosisCodes: z.array(z.string().min(1).max(20)).nullish(),
+  /** Real traceability, not a UX-only field: set this when the coder accepted (with or without
+   * edits) an AI coding suggestion rather than entering codes from scratch — see migration 0039. */
+  sourceAiGenerationId: z.string().uuid().nullish(),
 });
 export type FinalizeChargeCodingInput = z.infer<typeof FinalizeChargeCodingSchema>;

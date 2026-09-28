@@ -14,6 +14,7 @@ export interface ChargeRow {
   unitPrice: string;
   diagnosisCodes: string[];
   claimId: string | null;
+  sourceAiGenerationId: string | null;
   status: string;
   createdAt: Date;
   updatedAt: Date;
@@ -108,7 +109,7 @@ export class ChargeRepository {
     trx: Executor,
     tenantId: string,
     id: string,
-    input: { codeSystem: string; code: string; description: string; diagnosisCodes: string[] },
+    input: { codeSystem: string; code: string; description: string; diagnosisCodes: string[]; sourceAiGenerationId?: string | null },
     updatedBy: string,
   ): Promise<ChargeRow> {
     const row = await trx
@@ -118,6 +119,7 @@ export class ChargeRepository {
         code: input.code,
         description: input.description,
         diagnosis_codes: input.diagnosisCodes,
+        ...(input.sourceAiGenerationId !== undefined ? { source_ai_generation_id: input.sourceAiGenerationId } : {}),
         status: 'coded',
         updated_by: updatedBy,
         updated_at: new Date(),
@@ -154,6 +156,7 @@ function toRow(dbRow: Selectable<DB['charges']>): ChargeRow {
     unitPrice: dbRow.unit_price,
     diagnosisCodes: dbRow.diagnosis_codes,
     claimId: dbRow.claim_id,
+    sourceAiGenerationId: dbRow.source_ai_generation_id,
     status: dbRow.status,
     createdAt: dbRow.created_at,
     updatedAt: dbRow.updated_at,

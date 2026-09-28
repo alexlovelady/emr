@@ -715,6 +715,9 @@ importers:
       '@ehr/authz':
         specifier: workspace:*
         version: link:../../packages/authz
+      '@ehr/billing':
+        specifier: workspace:*
+        version: link:../billing
       '@ehr/claims':
         specifier: workspace:*
         version: link:../claims
