@@ -390,7 +390,19 @@ export interface Denial {
   resolvedAt: string | null;
   resolutionNotes: string | null;
   taskId: string | null;
-  status: 'open' | 'resolved';
+  status: 'open' | 'appealed' | 'resolved';
+}
+
+export interface Appeal {
+  id: string;
+  claimId: string;
+  denialId: string;
+  appealReason: string;
+  submittedAt: string | null;
+  decidedAt: string | null;
+  decisionNotes: string | null;
+  sourceAiGenerationId: string | null;
+  status: 'draft' | 'submitted' | 'won' | 'lost' | 'withdrawn';
 }
 
 export interface Remittance {
@@ -408,6 +420,7 @@ export interface FullClaimTimeline {
   claim: Claim;
   versions: ClaimVersion[];
   denials: Denial[];
+  appeals: Appeal[];
   remittances: Remittance[];
 }
 
@@ -430,12 +443,50 @@ export interface LedgerEntry {
   amount: string;
   description: string;
   occurredAt: string;
+  paymentMethod: string | null;
+  paymentReference: string | null;
+  paymentPlanInstallmentId: string | null;
   status: string;
 }
 
 export interface PatientLedger {
   entries: LedgerEntry[];
   balance: string;
+}
+
+export type PaymentMethod = 'card' | 'ach' | 'cash' | 'check';
+
+export interface PaymentResult {
+  transactionId: string;
+  status: 'succeeded' | 'pending' | 'failed';
+  failureReason: string | null;
+  ledgerEntry: LedgerEntry | null;
+}
+
+export interface PaymentPlan {
+  id: string;
+  patientId: string;
+  totalAmount: string;
+  installmentAmount: string;
+  installmentCount: number;
+  frequency: 'weekly' | 'biweekly' | 'monthly';
+  startDate: string;
+  status: 'active' | 'completed' | 'cancelled';
+}
+
+export interface PaymentPlanInstallment {
+  id: string;
+  paymentPlanId: string;
+  sequenceNumber: number;
+  dueDate: string;
+  amount: string;
+  status: 'pending' | 'paid' | 'missed' | 'cancelled';
+  paidLedgerEntryId: string | null;
+}
+
+export interface PaymentPlanWithInstallments {
+  plan: PaymentPlan;
+  installments: PaymentPlanInstallment[];
 }
 
 export interface ProblemDetails {

@@ -16,7 +16,7 @@ export function AiProposeTrigger({
 }: {
   label: string;
   proposeFn: () => Promise<ActionResult<AiGeneration>>;
-  onAccept?: (text: string) => void;
+  onAccept?: (text: string, generationId: string) => void;
   disabled?: boolean;
 }) {
   const [generation, setGeneration] = useState<AiGeneration | null>(null);
@@ -36,7 +36,13 @@ export function AiProposeTrigger({
   }
 
   if (generation) {
-    return <AiGenerationReview generation={generation} onAccept={onAccept} onReset={() => setGeneration(null)} />;
+    return (
+      <AiGenerationReview
+        generation={generation}
+        onAccept={onAccept ? (text) => onAccept(text, generation.id) : undefined}
+        onReset={() => setGeneration(null)}
+      />
+    );
   }
 
   return (

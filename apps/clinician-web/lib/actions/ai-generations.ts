@@ -59,6 +59,15 @@ export async function proposeDenialSummary(denialId: string, instructions?: stri
   );
 }
 
+export async function proposeAppealDraft(denialId: string, instructions?: string): Promise<ActionResult<AiGeneration>> {
+  return runAction(() =>
+    callBackend<AiGeneration>(`/api/v1/denials/${denialId}/ai/appeal-draft`, {
+      method: 'POST',
+      body: { instructions: instructions?.trim() || undefined },
+    }),
+  );
+}
+
 export async function proposeTaskSummary(
   assignedToUserId: string | undefined,
   patientId: string | undefined,

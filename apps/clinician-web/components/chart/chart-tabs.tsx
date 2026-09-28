@@ -24,6 +24,7 @@ import { DocumentsPanel } from '@/components/chart/documents-panel';
 import { BillingPanel } from '@/components/chart/billing-panel';
 import type {
   Allergy,
+  Appeal,
   Charge,
   Claim,
   Coverage,
@@ -37,6 +38,7 @@ import type {
   MessageThread,
   PatientIdentifier,
   PatientLedger,
+  PaymentPlanWithInstallments,
   Prescription,
   Problem,
   SignedNote,
@@ -71,8 +73,10 @@ interface ChartTabsProps {
   charges: Charge[];
   claims: Claim[];
   denials: Denial[];
+  appeals: Appeal[];
   eligibilityChecks: EligibilityCheck[];
   ledger: PatientLedger | null;
+  paymentPlans: PaymentPlanWithInstallments[];
 }
 
 export function ChartTabs({
@@ -92,8 +96,10 @@ export function ChartTabs({
   charges,
   claims,
   denials,
+  appeals,
   eligibilityChecks,
   ledger,
+  paymentPlans,
 }: ChartTabsProps) {
   const activeProblems = problems.filter((p) => p.status !== 'deleted' && p.clinicalStatus === 'active').length;
   const activeAllergies = allergies.filter((a) => a.status !== 'deleted').length;
@@ -178,8 +184,10 @@ export function ChartTabs({
                 charges={charges}
                 claims={claims}
                 denials={denials}
+                appeals={appeals}
                 eligibilityChecks={eligibilityChecks}
                 ledger={ledger}
+                paymentPlans={paymentPlans}
               />
             </TabsContent>
           </Tabs>

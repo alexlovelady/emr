@@ -34,6 +34,7 @@ export const PERMISSION_KEYS = {
   CLAIM_SUBMIT: 'claim.submit',
   DENIAL_MANAGE: 'denial.manage',
   LEDGER_READ: 'ledger.read',
+  PAYMENT_RECORD: 'payment.record',
   ELIGIBILITY_CHECK: 'eligibility.check',
   AI_GENERATION_MANAGE: 'ai_generation.manage',
   COHORT_MANAGE: 'cohort.manage',

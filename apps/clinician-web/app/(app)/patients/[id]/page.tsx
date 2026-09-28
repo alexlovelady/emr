@@ -18,8 +18,11 @@ import type {
   Charge,
   Claim,
   Denial,
+  Appeal,
   EligibilityCheck,
   PatientLedger,
+  PaymentPlan,
+  PaymentPlanWithInstallments,
 } from '@/lib/types';
 
 export default async function PatientChartPage({ params }: { params: Promise<{ id: string }> }) {
@@ -43,6 +46,7 @@ export default async function PatientChartPage({ params }: { params: Promise<{ i
     claims,
     eligibilityChecks,
     ledger,
+    paymentPlanRows,
   ] = await Promise.all([
     callBackend<Patient>(`/api/v1/patients/${id}`),
     callBackend<Problem[]>(`/api/v1/patients/${id}/problems`),
@@ -61,14 +65,22 @@ export default async function PatientChartPage({ params }: { params: Promise<{ i
     callBackendOr<Claim[]>(`/api/v1/patients/${id}/claims`, []),
     callBackendOr<EligibilityCheck[]>(`/api/v1/patients/${id}/eligibility-checks`, []),
     callBackendOr<PatientLedger | null>(`/api/v1/patients/${id}/ledger`, null),
+    callBackendOr<PaymentPlan[]>(`/api/v1/patients/${id}/payment-plans`, []),
   ]);
 
-  // No "list denials by patient" endpoint exists — denials only surface per-claim via each
-  // claim's timeline (GET /claims/:id/timeline), so derive the patient-level list from there.
+  // No "list denials/appeals by patient" endpoint exists — both only surface per-claim via each
+  // claim's timeline (GET /claims/:id/timeline), so derive the patient-level lists from there.
   const claimTimelines = await Promise.all(
-    claims.map((c) => callBackendOr<{ denials: Denial[] } | null>(`/api/v1/claims/${c.id}/timeline`, null)),
+    claims.map((c) => callBackendOr<{ denials: Denial[]; appeals: Appeal[] } | null>(`/api/v1/claims/${c.id}/timeline`, null)),
   );
   const denials = claimTimelines.flatMap((t) => t?.denials ?? []);
+  const appeals = claimTimelines.flatMap((t) => t?.appeals ?? []);
+
+  // The list endpoint returns bare plans (no installments) — same N+1-via-detail pattern as claim
+  // timelines above, fine at this scale (a patient rarely has more than a couple of active plans).
+  const paymentPlans = await Promise.all(
+    paymentPlanRows.map((p) => callBackendOr<PaymentPlanWithInstallments | null>(`/api/v1/payment-plans/${p.id}`, null)),
+  ).then((results) => results.filter((r): r is PaymentPlanWithInstallments => r !== null));
 
   return (
     <div className="space-y-5">
@@ -90,8 +102,10 @@ export default async function PatientChartPage({ params }: { params: Promise<{ i
         charges={charges}
         claims={claims}
         denials={denials}
+        appeals={appeals}
         eligibilityChecks={eligibilityChecks}
         ledger={ledger}
+        paymentPlans={paymentPlans}
       />
     </div>
   );
