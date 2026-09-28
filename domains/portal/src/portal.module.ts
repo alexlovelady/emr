@@ -5,6 +5,7 @@ import { PortalChartController } from './chart/portal-chart.controller.js';
 import { PortalPaymentController } from './payment/portal-payment.controller.js';
 import { PortalExportController } from './export/portal-export.controller.js';
 import { PortalSchedulingController } from './scheduling/portal-scheduling.controller.js';
+import { PortalSmartLaunchController } from './smart-launch/smart-launch.controller.js';
 import { PortalSessionService } from './session/portal-session.service.js';
 
 @Module({
@@ -15,6 +16,7 @@ import { PortalSessionService } from './session/portal-session.service.js';
     PortalPaymentController,
     PortalExportController,
     PortalSchedulingController,
+    PortalSmartLaunchController,
   ],
   providers: [PortalSessionService],
 })

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createHash, randomUUID } from 'node:crypto';
 import { withTenantContext, DEV_SMART_CLIENT_SECRET } from '@ehr/db';
 import { ForbiddenError } from '@ehr/domain-common';
 import { loadOrCreateKeyMaterial, type KeyMaterial } from '@ehr/auth-adapter';
@@ -7,6 +8,12 @@ import { PatientRepository } from '@ehr/patient';
 import { toFhirPatient } from '@ehr/fhir-mapping';
 import { TokenService } from './token.service.js';
 import { verifySmartAccessToken } from './smart-token.js';
+
+const REDIRECT_URI = 'https://example-smart-app.test/callback';
+
+function challengeFor(verifier: string): string {
+  return createHash('sha256').update(verifier).digest('base64url');
+}
 
 const TEST_ENV_CONFIG = { JWT_ISSUER: 'ehr-local-test', JWT_AUDIENCE: 'ehr-api-test', ACCESS_TOKEN_TTL_SECONDS: 900 };
 const TEST_VERIFY_CONFIG = { issuer: TEST_ENV_CONFIG.JWT_ISSUER, audience: TEST_ENV_CONFIG.JWT_AUDIENCE };
@@ -109,5 +116,166 @@ describe('SMART client-credentials token issuance + scope enforcement', () => {
     const otherTenantId = handle.seed.tenantB.tenantId;
     const rowFromWrongTenant = await withTenantContext(handle.db, otherTenantId, (trx) => patientRepo.findById(trx, otherTenantId, patientId));
     expect(rowFromWrongTenant).toBeNull();
+  });
+});
+
+/**
+ * The standalone-launch code exchange — `smart_authorization_codes` rows are inserted directly
+ * here (mirroring how `@ehr/portal`'s `SmartLaunchService.decide()` creates one after a real
+ * consent decision) rather than pulling that domain package in as a test-only dependency, since
+ * `apps/interop-fhir` deliberately never depends on `@ehr/portal` in production either — see
+ * `AuthorizeController`'s doc comment for the full app-boundary split.
+ */
+describe('SMART authorization_code grant + PKCE', () => {
+  let handle: TestDbHandle;
+  let keys: KeyMaterial;
+  let patientId: string;
+  let portalAccountId: string;
+
+  beforeAll(async () => {
+    handle = await setupTestDb();
+    keys = await loadOrCreateKeyMaterial('.dev-test/jwt-private.pem', '.dev-test/jwt-public.pem');
+    const ctxA = handle.seed.tenantA;
+
+    patientId = await withTenantContext(handle.db, ctxA.tenantId, async (trx) => {
+      const patient = await trx
+        .insertInto('patients')
+        .values({ tenant_id: ctxA.tenantId, given_name: 'Launch', family_name: `Test-${Date.now()}`, date_of_birth: '1988-03-03', status: 'active' })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      return patient.id;
+    });
+    portalAccountId = await withTenantContext(handle.db, ctxA.tenantId, async (trx) => {
+      const account = await trx
+        .insertInto('portal_accounts')
+        .values({ tenant_id: ctxA.tenantId, email: `launch-test-${Date.now()}@example.test`, password_hash: 'unused-in-this-test', status: 'active' })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      return account.id;
+    });
+  });
+
+  afterAll(() => handle.close());
+
+  async function insertCode(overrides: Partial<{ codeChallenge: string; redirectUri: string; expiresAt: Date; status: string }> = {}) {
+    const ctxA = handle.seed.tenantA;
+    const row = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      trx
+        .insertInto('smart_authorization_codes')
+        .values({
+          tenant_id: ctxA.tenantId,
+          client_id: ctxA.smartClientId,
+          patient_id: patientId,
+          portal_account_id: portalAccountId,
+          scope: 'patient/Patient.read',
+          redirect_uri: overrides.redirectUri ?? REDIRECT_URI,
+          code_challenge: overrides.codeChallenge ?? challengeFor('a-real-code-verifier-with-enough-entropy-1'),
+          code_challenge_method: 'S256',
+          expires_at: overrides.expiresAt ?? new Date(Date.now() + 10 * 60_000),
+          status: overrides.status ?? 'issued',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow(),
+    );
+    return row.id;
+  }
+
+  it('exchanges a valid code for a token carrying the patient launch-context claim', async () => {
+    const verifier = 'a-real-code-verifier-with-enough-entropy-1';
+    const code = await insertCode({ codeChallenge: challengeFor(verifier) });
+    const service = new TokenService(handle.ownerDb, keys, TEST_ENV_CONFIG);
+
+    const response = await service.issueToken({
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: REDIRECT_URI,
+      client_id: handle.seed.tenantA.smartClientId,
+      client_secret: DEV_SMART_CLIENT_SECRET,
+      code_verifier: verifier,
+    });
+
+    expect(response.patient).toBe(patientId);
+    const claims = await verifySmartAccessToken(response.access_token, keys.publicKey, TEST_VERIFY_CONFIG);
+    expect(claims.patientId).toBe(patientId);
+    expect(claims.scope).toEqual(['patient/Patient.read']);
+  });
+
+  it('rejects a mismatched PKCE code_verifier', async () => {
+    const code = await insertCode({ codeChallenge: challengeFor('the-real-verifier') });
+    const service = new TokenService(handle.ownerDb, keys, TEST_ENV_CONFIG);
+    await expect(
+      service.issueToken({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: REDIRECT_URI,
+        client_id: handle.seed.tenantA.smartClientId,
+        client_secret: DEV_SMART_CLIENT_SECRET,
+        code_verifier: 'a-completely-different-verifier',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it('rejects a code that has already been consumed (single-use, no replay)', async () => {
+    const verifier = 'a-real-code-verifier-with-enough-entropy-2';
+    const code = await insertCode({ codeChallenge: challengeFor(verifier) });
+    const service = new TokenService(handle.ownerDb, keys, TEST_ENV_CONFIG);
+    const exchange = () =>
+      service.issueToken({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: REDIRECT_URI,
+        client_id: handle.seed.tenantA.smartClientId,
+        client_secret: DEV_SMART_CLIENT_SECRET,
+        code_verifier: verifier,
+      });
+
+    await expect(exchange()).resolves.toBeDefined();
+    await expect(exchange()).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it('rejects an expired code', async () => {
+    const verifier = 'a-real-code-verifier-with-enough-entropy-3';
+    const code = await insertCode({ codeChallenge: challengeFor(verifier), expiresAt: new Date(Date.now() - 60_000) });
+    const service = new TokenService(handle.ownerDb, keys, TEST_ENV_CONFIG);
+    await expect(
+      service.issueToken({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: REDIRECT_URI,
+        client_id: handle.seed.tenantA.smartClientId,
+        client_secret: DEV_SMART_CLIENT_SECRET,
+        code_verifier: verifier,
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it('rejects a redirect_uri that does not match the one used to obtain the code', async () => {
+    const verifier = 'a-real-code-verifier-with-enough-entropy-4';
+    const code = await insertCode({ codeChallenge: challengeFor(verifier) });
+    const service = new TokenService(handle.ownerDb, keys, TEST_ENV_CONFIG);
+    await expect(
+      service.issueToken({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: 'https://a-different-app.test/callback',
+        client_id: handle.seed.tenantA.smartClientId,
+        client_secret: DEV_SMART_CLIENT_SECRET,
+        code_verifier: verifier,
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it('rejects an unknown code', async () => {
+    const service = new TokenService(handle.ownerDb, keys, TEST_ENV_CONFIG);
+    await expect(
+      service.issueToken({
+        grant_type: 'authorization_code',
+        code: randomUUID(),
+        redirect_uri: REDIRECT_URI,
+        client_id: handle.seed.tenantA.smartClientId,
+        client_secret: DEV_SMART_CLIENT_SECRET,
+        code_verifier: 'irrelevant',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
   });
 });

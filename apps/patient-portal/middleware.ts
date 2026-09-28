@@ -45,10 +45,14 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
   }
 }
 
+/** Preserves the original path+query as `?next=` so a deep link (the SMART launch consent screen,
+ * chiefly) survives a login round trip instead of always landing on the default post-login page. */
 function redirectToLogin(req: NextRequest): NextResponse {
+  const originalPathAndQuery = req.nextUrl.pathname + req.nextUrl.search;
   const url = req.nextUrl.clone();
   url.pathname = '/login';
   url.search = '';
+  if (originalPathAndQuery !== '/') url.searchParams.set('next', originalPathAndQuery);
   const response = NextResponse.redirect(url);
   response.cookies.delete(ACCESS_TOKEN_COOKIE);
   response.cookies.delete(REFRESH_TOKEN_COOKIE);

@@ -15,6 +15,7 @@ import type { DB } from './types.js';
 
 export const DEV_PASSWORD = 'Dev-Passw0rd!';
 export const DEV_SMART_CLIENT_SECRET = 'Dev-Smart-Client-Secr3t!';
+export const DEV_SMART_CLIENT_REDIRECT_URIS = ['https://example-smart-app.test/callback'];
 export const DEV_SMART_CLIENT_SCOPES = [
   'patient/Patient.read',
   'patient/Observation.read',
@@ -227,10 +228,15 @@ async function seedTenant(
       client_secret_hash: opts.smartClientSecretHash,
       display_name: `${opts.name} SMART Test Client`,
       allowed_scopes: DEV_SMART_CLIENT_SCOPES,
+      redirect_uris: DEV_SMART_CLIENT_REDIRECT_URIS,
       status: 'active',
     })
     .onConflict((oc) =>
-      oc.column('client_id').doUpdateSet({ client_secret_hash: opts.smartClientSecretHash, allowed_scopes: DEV_SMART_CLIENT_SCOPES }),
+      oc.column('client_id').doUpdateSet({
+        client_secret_hash: opts.smartClientSecretHash,
+        allowed_scopes: DEV_SMART_CLIENT_SCOPES,
+        redirect_uris: DEV_SMART_CLIENT_REDIRECT_URIS,
+      }),
     )
     .execute();
 

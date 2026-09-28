@@ -1,14 +1,26 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { Suspense, useState, type FormEvent } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+/** `useSearchParams()` (for the SMART-launch `?next=` deep link, see middleware.ts) needs a
+ * Suspense boundary or `next build`'s static prerendering of this page fails outright. */
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = searchParams.get('next');
   const [tenantSlug, setTenantSlug] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -30,7 +42,11 @@ export default function LoginPage() {
         setError(problem?.title ?? 'Sign in failed. Check your organization, email, and password.');
         return;
       }
-      router.push('/');
+      // Only ever a same-origin relative path — `next` is attacker-controllable via the URL bar,
+      // so anything else (an absolute URL, or `//host` which browsers treat as protocol-relative)
+      // is rejected rather than followed, to avoid an open-redirect after a real login.
+      const safeNext = next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
+      router.push(safeNext);
       router.refresh();
     } finally {
       setSubmitting(false);

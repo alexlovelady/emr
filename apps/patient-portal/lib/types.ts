@@ -32,6 +32,11 @@ export interface PortalAccessiblePatient {
   patient: Patient;
 }
 
+export interface SmartClientInfo {
+  clientId: string;
+  displayName: string;
+}
+
 export interface Appointment {
   id: string;
   patientId: string;

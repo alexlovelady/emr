@@ -13,3 +13,9 @@ export {
   type PortalBookAppointmentInput,
   type PortalCancelAppointmentInput,
 } from './scheduling/portal-scheduling.dto.js';
+export { SmartLaunchService, type SmartClientInfo } from './smart-launch/smart-launch.service.js';
+export {
+  SmartAuthorizeDecisionSchema,
+  type SmartAuthorizeDecisionInput,
+  type SmartAuthorizeDecisionResult,
+} from './smart-launch/smart-launch.dto.js';

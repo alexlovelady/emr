@@ -473,6 +473,20 @@ export interface SmartClientsTable extends CommonColumnsTable {
   client_secret_hash: string;
   display_name: string;
   allowed_scopes: string[];
+  redirect_uris: Generated<string[]>;
+  client_type: Generated<string>;
+}
+
+export interface SmartAuthorizationCodesTable extends CommonColumnsTable {
+  client_id: string;
+  patient_id: string;
+  portal_account_id: string;
+  scope: string;
+  redirect_uri: string;
+  code_challenge: string;
+  code_challenge_method: string;
+  expires_at: Timestamp;
+  consumed_at: Timestamp | null;
 }
 
 export interface BulkExportJobsTable extends CommonColumnsTable {
@@ -827,6 +841,7 @@ export interface DB {
   hl7_messages: Hl7MessagesTable;
   external_candidates: ExternalCandidatesTable;
   smart_clients: SmartClientsTable;
+  smart_authorization_codes: SmartAuthorizationCodesTable;
   bulk_export_jobs: BulkExportJobsTable;
   charges: ChargesTable;
   billing_rules: BillingRulesTable;

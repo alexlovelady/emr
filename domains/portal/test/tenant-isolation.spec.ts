@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { withTenantContext } from '@ehr/db';
-import { ConflictError, NotFoundError } from '@ehr/domain-common';
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '@ehr/domain-common';
 import { ConsentService } from '@ehr/consent';
 import type { PaymentGateway } from '@ehr/payment-adapter';
 import type { ObjectStorageGateway } from '@ehr/object-storage';
@@ -10,6 +10,7 @@ import { PortalChartService } from '../src/chart/portal-chart.service.js';
 import { PortalPaymentService } from '../src/payment/portal-payment.service.js';
 import { PortalSessionService } from '../src/session/portal-session.service.js';
 import { PortalSchedulingService } from '../src/scheduling/portal-scheduling.service.js';
+import { SmartLaunchService } from '../src/smart-launch/smart-launch.service.js';
 
 /** EHR_BUILD_SPEC.md §18.2 — run via `pnpm test:tenant-isolation`, requires a live Postgres. */
 describe('tenant isolation — portal', () => {
@@ -316,5 +317,160 @@ describe('tenant isolation — portal', () => {
       );
       expect(practitioners.some((p) => p.id === tenantAPractitionerId)).toBe(false);
     });
+  });
+});
+
+/** Tier 2 platform gap: SMART standalone launch's consent decision — the real backend behind
+ * apps/patient-portal's `/smart/authorize` screen. */
+describe('SmartLaunchService (SMART standalone launch consent)', () => {
+  let handle: TestDbHandle;
+  const smartLaunchService = new SmartLaunchService();
+  let patientId: string;
+  let portalAccountId: string;
+  let otherPatientId: string;
+
+  async function createPatient(tenantId: string): Promise<string> {
+    return withTenantContext(handle.db, tenantId, async (trx) => {
+      const patient = await trx
+        .insertInto('patients')
+        .values({ tenant_id: tenantId, given_name: 'Launch', family_name: `Consent-${Date.now()}`, date_of_birth: '1990-01-01', status: 'active' })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      return patient.id;
+    });
+  }
+
+  async function createPortalAccount(tenantId: string): Promise<string> {
+    return withTenantContext(handle.db, tenantId, async (trx) => {
+      const account = await trx
+        .insertInto('portal_accounts')
+        .values({ tenant_id: tenantId, email: `launch-consent-${randomUUID()}@example.com`, password_hash: 'not-a-real-hash', status: 'active' })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      return account.id;
+    });
+  }
+
+  beforeAll(async () => {
+    handle = await setupTestDb();
+    const consentService = new ConsentService();
+    patientId = await createPatient(handle.seed.tenantA.tenantId);
+    portalAccountId = await createPortalAccount(handle.seed.tenantA.tenantId);
+    await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+      consentService.createSelfGrant(trx, handle.seed.tenantA.tenantId, patientId, portalAccountId),
+    );
+    // A patient this account has NOT been granted access to — used to prove the ConsentService
+    // gate is real, not just a redirect-URI/scope formality.
+    otherPatientId = await createPatient(handle.seed.tenantA.tenantId);
+  });
+
+  afterAll(() => handle.close());
+
+  function ctx() {
+    return requestContextFor(handle.seed.tenantA.tenantId, portalAccountId, { actor: { id: portalAccountId, type: 'patient' } }) as Parameters<
+      SmartLaunchService['decide']
+    >[1];
+  }
+
+  it('allow creates a real authorization code and returns a redirect carrying it', async () => {
+    const result = await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+      smartLaunchService.decide(trx, ctx(), {
+        decision: 'allow',
+        clientId: handle.seed.tenantA.smartClientId,
+        redirectUri: 'https://example-smart-app.test/callback',
+        scope: 'patient/Patient.read',
+        state: 'abc',
+        codeChallenge: 'a-fake-challenge-value',
+        codeChallengeMethod: 'S256',
+        patientId,
+      }),
+    );
+    const url = new URL(result.redirectUrl);
+    expect(url.origin + url.pathname).toBe('https://example-smart-app.test/callback');
+    expect(url.searchParams.get('state')).toBe('abc');
+    expect(url.searchParams.get('code')).toBeTruthy();
+
+    const codeId = url.searchParams.get('code')!;
+    const row = await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+      trx.selectFrom('smart_authorization_codes').selectAll().where('id', '=', codeId).executeTakeFirst(),
+    );
+    expect(row?.patient_id).toBe(patientId);
+    expect(row?.portal_account_id).toBe(portalAccountId);
+    expect(row?.status).toBe('issued');
+  });
+
+  it('deny returns an access_denied redirect and creates no authorization code', async () => {
+    const before = await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+      trx.selectFrom('smart_authorization_codes').select(({ fn }) => fn.countAll<string>().as('count')).executeTakeFirst(),
+    );
+    const result = await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+      smartLaunchService.decide(trx, ctx(), {
+        decision: 'deny',
+        clientId: handle.seed.tenantA.smartClientId,
+        redirectUri: 'https://example-smart-app.test/callback',
+        scope: 'patient/Patient.read',
+        state: 'xyz',
+        codeChallenge: 'a-fake-challenge-value',
+        codeChallengeMethod: 'S256',
+        patientId,
+      }),
+    );
+    expect(result.redirectUrl).toContain('error=access_denied');
+    expect(result.redirectUrl).toContain('state=xyz');
+    const after = await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+      trx.selectFrom('smart_authorization_codes').select(({ fn }) => fn.countAll<string>().as('count')).executeTakeFirst(),
+    );
+    expect(after?.count).toBe(before?.count);
+  });
+
+  it('rejects a redirect_uri that is not registered for the client', async () => {
+    await expect(
+      withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+        smartLaunchService.decide(trx, ctx(), {
+          decision: 'allow',
+          clientId: handle.seed.tenantA.smartClientId,
+          redirectUri: 'https://not-a-registered-app.test/callback',
+          scope: 'patient/Patient.read',
+          state: null,
+          codeChallenge: 'x',
+          codeChallengeMethod: 'S256',
+          patientId,
+        }),
+      ),
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it('rejects a scope the client is not allowed', async () => {
+    await expect(
+      withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+        smartLaunchService.decide(trx, ctx(), {
+          decision: 'allow',
+          clientId: handle.seed.tenantA.smartClientId,
+          redirectUri: 'https://example-smart-app.test/callback',
+          scope: 'patient/MedicationRequest.write',
+          state: null,
+          codeChallenge: 'x',
+          codeChallengeMethod: 'S256',
+          patientId,
+        }),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it('rejects allowing a launch for a patient this portal account has no consent grant for', async () => {
+    await expect(
+      withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+        smartLaunchService.decide(trx, ctx(), {
+          decision: 'allow',
+          clientId: handle.seed.tenantA.smartClientId,
+          redirectUri: 'https://example-smart-app.test/callback',
+          scope: 'patient/Patient.read',
+          state: null,
+          codeChallenge: 'x',
+          codeChallengeMethod: 'S256',
+          patientId: otherPatientId,
+        }),
+      ),
+    ).rejects.toBeInstanceOf(NotFoundError);
   });
 });

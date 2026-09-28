@@ -60,6 +60,9 @@ export const envSchema = z.object({
 
   // --- Bulk FHIR $export relay ---
   BULK_EXPORT_RELAY_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
+
+  // --- SMART standalone launch — where the interactive consent/patient-picker UI lives ---
+  PATIENT_PORTAL_BASE_URL: z.string().url().default('http://localhost:3030'),
 });
 
 export type Env = z.infer<typeof envSchema>;

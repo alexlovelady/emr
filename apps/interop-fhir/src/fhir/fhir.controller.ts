@@ -20,7 +20,7 @@ import {
 } from '@ehr/fhir-mapping';
 import { DB_CONNECTION, ENV_CONFIG } from '../common/tokens.js';
 import { RequireScope } from '../common/require-scope.decorator.js';
-import { requireFhirCtx } from './require-fhir-context.js';
+import { requireFhirCtx, assertPatientInLaunchContext } from './require-fhir-context.js';
 
 /**
  * EHR_BUILD_SPEC.md §8.1 Lane A. Deliberately just the four endpoints the spec lists
@@ -51,17 +51,21 @@ export class FhirController {
 
   /**
    * SMART App Launch's discovery document, published relative to the FHIR base URL per spec.
-   * `authorization_endpoint` is intentionally omitted — no interactive authorize/launch flow is
-   * implemented yet (client-credentials only); update this alongside whichever controller adds it.
+   * Standalone launch only (no EHR launch — that needs to be embedded inside a host EHR's own UI
+   * with a launch-context token, a different, larger feature); the interactive consent/patient-
+   * picker UI itself lives in `apps/patient-portal`'s `/smart/authorize` page, not here — see
+   * `AuthorizeController`'s doc comment for the full split.
    */
   @Get('.well-known/smart-configuration')
   smartConfiguration(): Record<string, unknown> {
     const baseUrl = this.fhirBaseUrl();
     return {
       issuer: baseUrl,
+      authorization_endpoint: `${baseUrl}/authorize`,
       token_endpoint: `${baseUrl}/token`,
-      token_endpoint_auth_methods_supported: ['client_secret_post'],
-      grant_types_supported: ['client_credentials'],
+      token_endpoint_auth_methods_supported: ['client_secret_post', 'none'],
+      grant_types_supported: ['client_credentials', 'authorization_code'],
+      code_challenge_methods_supported: ['S256'],
       scopes_supported: [
         'patient/Patient.read',
         'patient/Observation.read',
@@ -72,8 +76,14 @@ export class FhirController {
         'patient/DocumentReference.read',
         'system/*.read',
       ],
-      response_types_supported: [],
-      capabilities: ['client-confidential-symmetric', 'permission-v2'],
+      response_types_supported: ['code'],
+      capabilities: [
+        'client-confidential-symmetric',
+        'client-public',
+        'launch-standalone',
+        'permission-patient',
+        'permission-v2',
+      ],
     };
   }
 
@@ -81,6 +91,7 @@ export class FhirController {
   @RequireScope('patient/Patient.read')
   async getPatient(@Param('id') id: string, @Req() req: FastifyRequest): Promise<Record<string, unknown>> {
     const ctx = requireFhirCtx(req);
+    assertPatientInLaunchContext(ctx, id);
     const row = await withTenantContext(this.db, ctx.tenantId, (trx) => this.patientRepo.findById(trx, ctx.tenantId, id));
     if (!row) throw new NotFoundError('Patient not found', { id });
     return toFhirPatient(row);
@@ -95,6 +106,7 @@ export class FhirController {
   ): Promise<Record<string, unknown>> {
     const ctx = requireFhirCtx(req);
     if (!patientId) throw new ValidationError('The `patient` search parameter is required');
+    assertPatientInLaunchContext(ctx, patientId);
     const rows = await withTenantContext(this.db, ctx.tenantId, (trx) =>
       this.observationRepo.listByPatient(trx, ctx.tenantId, patientId, category ? { category } : {}),
     );
@@ -106,6 +118,7 @@ export class FhirController {
   async searchEncounters(@Query('patient') patientId: string | undefined, @Req() req: FastifyRequest): Promise<Record<string, unknown>> {
     const ctx = requireFhirCtx(req);
     if (!patientId) throw new ValidationError('The `patient` search parameter is required');
+    assertPatientInLaunchContext(ctx, patientId);
     const rows = await withTenantContext(this.db, ctx.tenantId, (trx) => this.encounterRepo.list(trx, ctx.tenantId, { patientId }));
     return toSearchBundle(rows.map(toFhirEncounter));
   }
@@ -116,6 +129,7 @@ export class FhirController {
     const ctx = requireFhirCtx(req);
     const row = await withTenantContext(this.db, ctx.tenantId, (trx) => this.problemRepo.findById(trx, ctx.tenantId, id));
     if (!row) throw new NotFoundError('Condition not found', { id });
+    assertPatientInLaunchContext(ctx, row.patientId);
     return toFhirCondition(row);
   }
 
@@ -124,6 +138,7 @@ export class FhirController {
   async searchConditions(@Query('patient') patientId: string | undefined, @Req() req: FastifyRequest): Promise<Record<string, unknown>> {
     const ctx = requireFhirCtx(req);
     if (!patientId) throw new ValidationError('The `patient` search parameter is required');
+    assertPatientInLaunchContext(ctx, patientId);
     const rows = await withTenantContext(this.db, ctx.tenantId, (trx) => this.problemRepo.listByPatient(trx, ctx.tenantId, patientId));
     return toSearchBundle(rows.map(toFhirCondition));
   }
@@ -134,6 +149,7 @@ export class FhirController {
     const ctx = requireFhirCtx(req);
     const row = await withTenantContext(this.db, ctx.tenantId, (trx) => this.allergyRepo.findById(trx, ctx.tenantId, id));
     if (!row) throw new NotFoundError('AllergyIntolerance not found', { id });
+    assertPatientInLaunchContext(ctx, row.patientId);
     return toFhirAllergyIntolerance(row);
   }
 
@@ -142,6 +158,7 @@ export class FhirController {
   async searchAllergyIntolerances(@Query('patient') patientId: string | undefined, @Req() req: FastifyRequest): Promise<Record<string, unknown>> {
     const ctx = requireFhirCtx(req);
     if (!patientId) throw new ValidationError('The `patient` search parameter is required');
+    assertPatientInLaunchContext(ctx, patientId);
     const rows = await withTenantContext(this.db, ctx.tenantId, (trx) => this.allergyRepo.listByPatient(trx, ctx.tenantId, patientId));
     return toSearchBundle(rows.map(toFhirAllergyIntolerance));
   }
@@ -152,6 +169,7 @@ export class FhirController {
     const ctx = requireFhirCtx(req);
     const prescription = await withTenantContext(this.db, ctx.tenantId, (trx) => this.prescriptionRepo.findById(trx, ctx.tenantId, id));
     if (!prescription) throw new NotFoundError('MedicationRequest not found', { id });
+    assertPatientInLaunchContext(ctx, prescription.patientId);
     const medication = await withTenantContext(this.db, ctx.tenantId, (trx) =>
       this.medicationRepo.findById(trx, ctx.tenantId, prescription.medicationId),
     );
@@ -164,6 +182,7 @@ export class FhirController {
   async searchMedicationRequests(@Query('patient') patientId: string | undefined, @Req() req: FastifyRequest): Promise<Record<string, unknown>> {
     const ctx = requireFhirCtx(req);
     if (!patientId) throw new ValidationError('The `patient` search parameter is required');
+    assertPatientInLaunchContext(ctx, patientId);
     const prescriptions = await withTenantContext(this.db, ctx.tenantId, (trx) => this.prescriptionRepo.listByPatient(trx, ctx.tenantId, patientId));
     const resources = await Promise.all(
       prescriptions.map(async (prescription) => {
@@ -182,6 +201,7 @@ export class FhirController {
     const ctx = requireFhirCtx(req);
     const row = await withTenantContext(this.db, ctx.tenantId, (trx) => this.documentRepo.findById(trx, ctx.tenantId, id));
     if (!row) throw new NotFoundError('DocumentReference not found', { id });
+    if (row.patientId) assertPatientInLaunchContext(ctx, row.patientId);
     return toFhirDocumentReference(row, `${this.fhirBaseUrl()}/DocumentReference`);
   }
 
@@ -190,6 +210,7 @@ export class FhirController {
   async searchDocumentReferences(@Query('patient') patientId: string | undefined, @Req() req: FastifyRequest): Promise<Record<string, unknown>> {
     const ctx = requireFhirCtx(req);
     if (!patientId) throw new ValidationError('The `patient` search parameter is required');
+    assertPatientInLaunchContext(ctx, patientId);
     const rows = await withTenantContext(this.db, ctx.tenantId, (trx) => this.documentRepo.list(trx, ctx.tenantId, { patientId }));
     const documentReferenceUrl = `${this.fhirBaseUrl()}/DocumentReference`;
     return toSearchBundle(rows.map((row) => toFhirDocumentReference(row, documentReferenceUrl)));
