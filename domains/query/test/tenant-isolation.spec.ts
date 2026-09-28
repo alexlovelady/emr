@@ -272,6 +272,212 @@ describe('tenant isolation — query platform', () => {
     expect(parsed.success).toBe(false);
   });
 
+  describe('payer performance & remittance trend queries (Athelas-parity pass)', () => {
+    // Unique per run — this dev DB is shared and never reset between runs, so a fixed payer name
+    // would accumulate claims from every historical run of this test and break the exact-count
+    // assertions below. See the same fix already applied to the search test above.
+    const payerName = `AthelasPayer-${Date.now()}`;
+
+    beforeAll(async () => {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      await withTenantContext(handle.db, ctxA.tenantId, async (trx) => {
+        async function newEncounter() {
+          const patient = await trx
+            .insertInto('patients')
+            .values({ tenant_id: ctxA.tenantId, given_name: 'Isolation', family_name: `PayerPerf-${randomUUID()}`, date_of_birth: '1980-01-01', status: 'active' })
+            .returning('id')
+            .executeTakeFirstOrThrow();
+          const appointment = await trx
+            .insertInto('appointments')
+            .values({
+              tenant_id: ctxA.tenantId,
+              patient_id: patient.id,
+              location_id: handle.seed.tenantA.locationId,
+              practitioner_id: tenantAPractitionerId,
+              appointment_type: 'office_visit',
+              scheduled_start: daysAgo(11),
+              scheduled_end: daysAgo(11),
+              status: 'checked_in',
+            })
+            .returning('id')
+            .executeTakeFirstOrThrow();
+          const encounter = await trx
+            .insertInto('encounters')
+            .values({
+              tenant_id: ctxA.tenantId,
+              patient_id: patient.id,
+              appointment_id: appointment.id,
+              location_id: handle.seed.tenantA.locationId,
+              practitioner_id: tenantAPractitionerId,
+              encounter_type: 'office_visit',
+              started_at: daysAgo(11),
+              ended_at: daysAgo(11),
+              status: 'signed',
+            })
+            .returning('id')
+            .executeTakeFirstOrThrow();
+          const coverage = await trx
+            .insertInto('coverages')
+            .values({
+              tenant_id: ctxA.tenantId,
+              patient_id: patient.id,
+              payer_name: payerName,
+              member_id: 'M-PAYERPERF',
+              coverage_type: 'primary',
+              effective_start: '2024-01-01',
+              status: 'active',
+            })
+            .returning('id')
+            .executeTakeFirstOrThrow();
+          return { patientId: patient.id, encounterId: encounter.id, coverageId: coverage.id };
+        }
+
+        // Paid claim: submitted 10 days ago, remittance posted "now" — a ~10-day days-to-payment.
+        const paid = await newEncounter();
+        const paidClaim = await trx
+          .insertInto('claims')
+          .values({
+            tenant_id: ctxA.tenantId,
+            patient_id: paid.patientId,
+            encounter_id: paid.encounterId,
+            coverage_id: paid.coverageId,
+            billing_practitioner_id: tenantAPractitionerId,
+            total_charge_amount: '500',
+            current_version: 2,
+            status: 'paid',
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        const paidClaimVersion = await trx
+          .insertInto('claim_versions')
+          .values({
+            tenant_id: ctxA.tenantId,
+            claim_id: paidClaim.id,
+            version_number: 2,
+            version_status: 'submitted',
+            status: 'submitted',
+            payload: JSON.stringify({}),
+            submitted_at: daysAgo(10),
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        await trx
+          .insertInto('remittances')
+          .values({
+            tenant_id: ctxA.tenantId,
+            claim_id: paidClaim.id,
+            claim_version_id: paidClaimVersion.id,
+            payer_paid_amount: '500',
+            adjustment_amount: '20',
+            patient_responsibility_amount: '30',
+            raw_payload: JSON.stringify({ source: 'synthetic-835' }),
+            status: 'posted',
+          })
+          .execute();
+
+        // Denied claim: submitted, no remittance, one open denial.
+        const denied = await newEncounter();
+        const deniedClaim = await trx
+          .insertInto('claims')
+          .values({
+            tenant_id: ctxA.tenantId,
+            patient_id: denied.patientId,
+            encounter_id: denied.encounterId,
+            coverage_id: denied.coverageId,
+            billing_practitioner_id: tenantAPractitionerId,
+            total_charge_amount: '300',
+            current_version: 2,
+            status: 'denied',
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        await trx
+          .insertInto('claim_versions')
+          .values({
+            tenant_id: ctxA.tenantId,
+            claim_id: deniedClaim.id,
+            version_number: 2,
+            version_status: 'submitted',
+            status: 'submitted',
+            payload: JSON.stringify({}),
+            submitted_at: daysAgo(5),
+          })
+          .execute();
+        await trx
+          .insertInto('denials')
+          .values({
+            tenant_id: ctxA.tenantId,
+            claim_id: deniedClaim.id,
+            denial_reason_code: 'CO-50',
+            denial_reason_text: 'Not medically necessary',
+            status: 'open',
+          })
+          .execute();
+      });
+    });
+
+    it('summarizes claim volume, denial count, total paid, and avg days-to-payment for a payer', async () => {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      const results = (await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        GOVERNED_QUERIES.payer_performance_summary!.run(trx, ctxA.tenantId, {}),
+      )) as Array<{
+        payerName: string;
+        claimsTotal: number;
+        claimsSubmitted: number;
+        claimsPaid: number;
+        claimsDenied: number;
+        totalPaidAmount: number;
+        avgDaysToPayment: number | null;
+      }>;
+
+      const row = results.find((r) => r.payerName === payerName)!;
+      expect(row).toBeDefined();
+      expect(row.claimsTotal).toBe(2);
+      expect(row.claimsSubmitted).toBe(2);
+      expect(row.claimsPaid).toBe(1);
+      expect(row.claimsDenied).toBe(1);
+      expect(row.totalPaidAmount).toBe(500);
+      expect(row.avgDaysToPayment).toBeGreaterThan(9);
+      expect(row.avgDaysToPayment).toBeLessThan(11);
+    });
+
+    it('buckets remittance totals by month, filterable to one payer', async () => {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      const results = (await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        GOVERNED_QUERIES.remittance_trends_by_month!.run(trx, ctxA.tenantId, { payerName }),
+      )) as Array<{ month: string; claimsCount: number; totalPaidAmount: number; totalAdjustmentAmount: number; totalPatientResponsibilityAmount: number }>;
+
+      expect(results).toHaveLength(1);
+      const currentMonth = new Date().toISOString().slice(0, 7);
+      expect(results[0]!.month).toBe(currentMonth);
+      expect(results[0]!.claimsCount).toBe(1);
+      expect(results[0]!.totalPaidAmount).toBe(500);
+      expect(results[0]!.totalAdjustmentAmount).toBe(20);
+      expect(results[0]!.totalPatientResponsibilityAmount).toBe(30);
+    });
+
+    it('an unfiltered call to remittance_trends_by_month does not throw and includes at least this payer', async () => {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      const results = (await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        GOVERNED_QUERIES.remittance_trends_by_month!.run(trx, ctxA.tenantId, {}),
+      )) as Array<{ totalPaidAmount: number }>;
+      expect(results.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('Tenant B sees none of Tenant A payer data via either governed query', async () => {
+      const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
+      const performance = (await withTenantContext(handle.db, ctxB.tenantId, (trx) =>
+        GOVERNED_QUERIES.payer_performance_summary!.run(trx, ctxB.tenantId, {}),
+      )) as Array<{ payerName: string }>;
+      expect(performance.some((r) => r.payerName === payerName)).toBe(false);
+
+      const trends = (await withTenantContext(handle.db, ctxB.tenantId, (trx) =>
+        GOVERNED_QUERIES.remittance_trends_by_month!.run(trx, ctxB.tenantId, { payerName }),
+      )) as unknown[];
+      expect(trends).toHaveLength(0);
+    });
+  });
+
   it('reindexes patients/documents/claims and finds them via tenant-scoped full-text search', async () => {
     const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
     await withTenantContext(handle.db, ctxA.tenantId, async (trx) => {
