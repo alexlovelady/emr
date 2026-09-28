@@ -1,5 +1,6 @@
 import { sql, type Kysely, type Transaction } from 'kysely';
 import type { DB } from '@ehr/db';
+import { RXNORM_SYSTEM, validateRxNormCode, searchRxNorm } from './rxnav-client.js';
 
 type Executor = Kysely<DB> | Transaction<DB>;
 
@@ -19,19 +20,24 @@ export interface ConceptMatch {
 }
 
 /**
- * Phase M (eCW/athena parity roadmap): a small read-only lookup over `terminology_codes`, the
- * global reference-data catalog loaded once by this package's `scripts/seed.ts` from the
- * downloaded RxNorm/ICD-10-CM flat files. Stateless and transaction-per-call, same convention as
- * every domain repository in this codebase (e.g. `domains/clinical`'s `ProblemRepository`) — no
- * constructor state, no DI wiring needed to use it from another domain's service.
+ * Phase M (eCW/athena parity roadmap): a small read-only code lookup, dispatched by `system`.
+ * `RxNorm` goes to NLM's free, live RxNav API (see `rxnav-client.ts`'s doc comment for why —
+ * no account, no bulk download, always current). Every other system (today, just `ICD-10`) queries
+ * `terminology_codes`, the global reference-data catalog loaded once by this package's
+ * `scripts/seed.ts` from a downloaded flat file. Stateless and transaction-per-call for the local
+ * path, same convention as every domain repository in this codebase (e.g. `domains/clinical`'s
+ * `ProblemRepository`) — no constructor state, no DI wiring needed to use it from another domain's
+ * service.
  */
 export class TerminologyService {
   /**
    * "Warn, don't hard-block" per the plan: a caller checks `checked` before deciding whether an
-   * `!valid` result means anything — an unloaded system (e.g. RxNorm before its file is loaded)
+   * `!valid` result means anything — an unloaded local system, or an unreachable RxNav request,
    * must never be presented as "this code is wrong."
    */
   async validateCode(trx: Executor, system: string, code: string): Promise<CodeValidation> {
+    if (system === RXNORM_SYSTEM) return validateRxNormCode(code);
+
     const row = await trx
       .selectFrom('terminology_codes')
       .select(['display'])
@@ -59,6 +65,8 @@ export class TerminologyService {
   async searchConcepts(trx: Executor, system: string, query: string, limit = 20): Promise<ConceptMatch[]> {
     const trimmed = query.trim();
     if (trimmed.length === 0) return [];
+
+    if (system === RXNORM_SYSTEM) return searchRxNorm(trimmed, limit);
 
     const result = await sql<{ code: string; display: string }>`
       select code, display

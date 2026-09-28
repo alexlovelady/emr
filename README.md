@@ -652,29 +652,31 @@ and [`docs/adr/0006-clinician-web-bff-auth.md`](docs/adr/0006-clinician-web-bff-
 
 ### eCW/athena parity roadmap — Phase M (terminology service v1)
 
-**Partially built — blocked on an external download, not code.** Per the plan, this phase needs two
-downloaded government/NLM files that require an account/license click-through, not engineering
-work: the free RxNorm full release (NLM, requires a free UMLS Terminology Services account) and the
-free CMS ICD-10-CM code set. The ICD-10-CM file was obtained and loaded this pass; RxNorm's UMLS
-download service was intermittently unavailable and is still pending — flagged here rather than
-faked or silently skipped.
+**Built and fully live for both code systems** — RxNorm ended up not needing the download the plan
+originally called for; see below.
 
 - **New `packages/terminology`**: `TerminologyService.validateCode(trx, system, code)` and
-  `.searchConcepts(trx, system, query)` over a new global `terminology_codes` table (migration
-  `0037_terminology_codes.ts` — no tenant_id/RLS, same posture as the `roles` catalog), with a
-  generated `tsvector`/GIN index for real full-text search, same pattern as `search_documents`.
-  `validateCode`'s result carries a `checked` flag distinguishing "this code doesn't exist" from
-  "this code system hasn't been loaded yet" — the plan's "warn, don't hard-block" requirement means
-  those two cases must never look identical to a caller.
-- **Loaders for both file formats**, run via `pnpm --filter @ehr/terminology run seed`: ICD-10-CM's
-  fixed-width `icd10cm_order_<year>.txt` (loads both billable codes and non-billable category
-  headers, distinguished by a `billable` column) and RxNorm's pipe-delimited `RXNCONSO.RRF`
-  (filtered to `SAB=RXNORM`, `ISPREF=Y`, English, non-suppressed, and the 4 prescribable term types
-  — SCD/SBD/GPCK/BPCK — one preferred name per concept, not every synonym). **ICD-10-CM is loaded
-  and live**: 98,403 real codes from the FY2027 release. **RxNorm's loader is implemented and unit
-  tested against a hand-built fixture in the documented RRF format, but has never run against the
-  real multi-million-row file** — `validateCode('RxNorm', ...)` correctly reports `checked: false`
-  for every RxNorm code until that file is loaded and the seed script re-run.
+  `.searchConcepts(trx, system, query)`, dispatched by `system`. `validateCode`'s result carries a
+  `checked` flag distinguishing "this code doesn't exist" from "we couldn't check it" (an unloaded
+  local system, or an unreachable live request) — the plan's "warn, don't hard-block" requirement
+  means those two cases must never look identical to a caller.
+- **ICD-10-CM: a one-time bulk load**, same as the plan described. A new global `terminology_codes`
+  table (migration `0037_terminology_codes.ts` — no tenant_id/RLS, same posture as the `roles`
+  catalog) with a generated `tsvector`/GIN index for real full-text search, same pattern as
+  `search_documents`. Loaded from CMS's public, no-account-needed ICD-10-CM flat file via
+  `pnpm --filter @ehr/terminology run seed` — **98,403 real codes from the FY2027 release, live**.
+- **RxNorm: a live lookup against NLM's free RxNav REST API, not a bulk load** — a deliberate
+  deviation from the plan's original "download the RxNorm full release" instruction. That download
+  requires a free UMLS Terminology Services account, and this pass's actual attempts to use it hit
+  three different real failures in a row (a Google-SSO `InvalidUserCreds`, then an oversized-cookie
+  Tomcat crash — "Request header is too large" — after retrying, then "This service is currently
+  unavailable" even after switching identity providers to Login.gov). RxNav needs no account, no
+  license, and no file to keep current: `GET /rxcui/{code}/properties.json` for `validateCode`,
+  `GET /drugs.json?name=...` (filtered to the 4 prescribable term types — SCD/SBD/GPCK/BPCK) for
+  `searchConcepts`, both with a 4-second timeout that degrades to `checked: false` rather than
+  hanging a prescribing request. This fully replaces the originally-planned bulk RxNorm loader
+  (deleted, along with its now-pointless `RXNORM_RRF_FILE` env var) — there is nothing left to
+  download or seed for RxNorm; it is unblocked and live today.
 - **`GET /api/v1/terminology/search`/`/validate`**, gated on the same `PATIENT_READ_CLINICAL`
   permission `domains/query`'s global search endpoint uses (reference data, not patient data, but
   every real caller already needs that permission to be mid-way through adding a problem or
@@ -685,11 +687,8 @@ faked or silently skipped.
   resource — `{problem, codeValidation}` / `{medication, codeValidation}` — without ever rejecting
   the write. Blast radius: 3 call sites across `domains/clinical`/`domains/medication` updated to
   destructure the new shape (same pattern as Phase K's `PrescriptionService` return-shape change).
-  **Frontend typeahead upgrade (the add-problem/prescribe dialogs) is not yet done this pass** — the
-  backend is real and curl-verified end to end (a real code validates, a bogus code doesn't but
-  still saves, an RxNorm code correctly reports `checked: false`), but the UI still uses raw text
-  code entry; a candidate for a follow-up once RxNorm data exists to make the medication side
-  actually useful.
+  Curl-verified end to end: a real ICD-10 code validates with its real description, a bogus code
+  still saves with `valid: false`, and a real RxNorm code now validates live against RxNav.
 - **Real bug found and fixed while regenerating `docs/api/openapi.json`** for the new endpoints:
   the spec had been stale since Phase K — `Allergy.codeSystem`/`.code` (added by migration `0036`)
   were never reflected because nothing had re-run the generator since. Fixed as a side effect, not
