@@ -29,9 +29,11 @@ without something real backing it.
 
 ## Security
 
-- [ ] MFA enforced. — *Structurally stubbed only: `POST /api/v1/auth/mfa/challenge` returns a real
-      501, not a fake pass (see `docs/adr/0002-deferred-event-bus-and-idp.md`). Needs: real MFA
-      implementation before any pilot.*
+- [ ] MFA enforced. — *Real TOTP MFA is implemented and working (eCW/athena parity roadmap Phase
+      H): `POST /api/v1/auth/mfa/{enroll,confirm,challenge}` do a genuine time-window TOTP check,
+      not the old structural 501 stub — see README's Phase H scope decisions. Still unchecked
+      because enrollment is opt-in per user (`mfa_enrolled`), not mandatory for every account.
+      Needs: a decision + enforcement mechanism to require it fleet-wide before a pilot.*
 - [x] Tenant-isolation tests passing. — 19 `domains/*/test/tenant-isolation.spec.ts` files plus this
       phase's `apps/api/src/e2e/golden-path.integration.test.ts` cross-tenant checks, all green
       under `pnpm turbo run test:tenant-isolation` (see this session's full-suite run).
@@ -62,11 +64,16 @@ without something real backing it.
 - [x] Golden patient safety cases passing — *for the hazards with a real application-level control*:
       duplicate-patient merge/reverse-merge, signed-note immutability + amendment, diagnostic-report
       amendment, and critical-result → Task creation are all real, tested end to end in
-      `apps/api/src/e2e/golden-path.integration.test.ts`. **Not covered, because no control exists
-      at all yet** (a genuine gap, not an oversight): medication/allergy interaction checking,
-      medication dose/unit validation, unit conversion, and stale copied-forward note tracking.
-      Building those controls is out of scope for this phase — see
-      `docs/security/pre-pilot-self-assessment.md` and this phase's README notes.
+      `apps/api/src/e2e/golden-path.integration.test.ts`. **Medication/allergy interaction checking
+      now has real plumbing** (eCW/athena parity roadmap Phase K) — `PrescriptionService.create()`
+      genuinely calls an `InteractionCheckGateway` with the patient's active medications/allergies —
+      but the only implementation, `NoopInteractionCheckGateway`, always returns no findings because
+      no licensed drug-interaction database is connected, and the prescribe UI says so explicitly.
+      This is NOT a safety control yet, just a real seam ready for one. Medication dose/unit
+      validation, unit conversion, and stale copied-forward note tracking still have no control at
+      all. Building a real interaction check (a licensed vendor) and the remaining controls is out
+      of scope for this phase — see `docs/security/pre-pilot-self-assessment.md` and this phase's
+      README notes.
 - [x] Wrong-patient protections tested. — Tenant-isolation (structural, RLS-backed) plus
       `DiagnosticReportService`'s encounter/patient consistency check, both exercised in the
       golden-path suite's cross-tenant test.
@@ -82,14 +89,18 @@ without something real backing it.
 ## Interoperability
 
 - [ ] FHIR conformance tests for claimed profiles. — *`apps/interop-fhir` has real integration tests
-      for token issuance/verification, but no formal US Core conformance suite (e.g. Inferno) has
-      been run. Needs: real conformance testing before claiming any profile support.*
+      for token issuance/verification and, as of the eCW/athena parity roadmap's Phase J, read/search
+      routes for Patient/Observation/Encounter/Condition/AllergyIntolerance/MedicationRequest/
+      DocumentReference — but no formal US Core conformance suite (e.g. Inferno) has been run against
+      any of them. Needs: real conformance testing before claiming any profile support.*
 - [ ] SMART flow tests. — *Token-level SMART client-credentials issuance is tested; a full
       authorization-code/launch-context flow has not been exercised end to end (no real EHR launch
       context exists to test against).*
-- [ ] HL7 interfaces tested with actual partners. — *Only synthetic ORU^R01 messages have been
-      tested (`apps/interop-hl7`'s integration test and this phase's suite). Needs: a real sending
-      lab/partner interface.*
+- [ ] HL7 interfaces tested with actual partners. — *Only synthetic messages have been tested —
+      ORU^R01 (results) plus, as of the eCW/athena parity roadmap's Phase J, ADT^A01/A02/A03/A08
+      (demographics), SIU^S12/S14/S15 (scheduling), and ORM^O01 (orders) — all against
+      `apps/interop-hl7`'s own integration tests, never a real sending lab/partner interface. Needs:
+      a real partner connection.*
 - [ ] C-CDA import/reconciliation tested if enabled. — *The reconciliation mechanism itself
       (`domains/clinical`'s external-candidate import/accept/reject/replace flow, Phase 4) is real
       and exists, but has not been tested against a real C-CDA document from a real source system.*
