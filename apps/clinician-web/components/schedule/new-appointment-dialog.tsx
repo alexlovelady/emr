@@ -10,12 +10,23 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { createAppointment } from '@/lib/actions/appointments';
 import { useCloseOnSuccess } from '@/lib/use-close-on-success';
-import type { Patient, Resource } from '@/lib/types';
+import type { Location, Patient, Resource } from '@/lib/types';
 
-export function NewAppointmentDialog({ patients, resources }: { patients: Patient[]; resources: Resource[] }) {
+export function NewAppointmentDialog({
+  patients,
+  resources,
+  locations,
+}: {
+  patients: Patient[];
+  resources: Resource[];
+  locations: Location[];
+}) {
   const [open, setOpen] = useState(false);
   const [recurring, setRecurring] = useState(false);
+  const [locationId, setLocationId] = useState('');
   const [state, formAction, isPending] = useActionState(createAppointment, null);
+
+  const visibleResources = locationId ? resources.filter((r) => r.locationId === locationId) : resources;
 
   useCloseOnSuccess(state, () => setOpen(false));
 
@@ -62,8 +73,30 @@ export function NewAppointmentDialog({ patients, resources }: { patients: Patien
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label htmlFor="locationId">Location ID</Label>
-              <Input id="locationId" name="locationId" placeholder="UUID" required />
+              <Label htmlFor="locationId">Location</Label>
+              {locations.length > 0 ? (
+                <Select name="locationId" value={locationId} onValueChange={setLocationId} required>
+                  <SelectTrigger id="locationId">
+                    <SelectValue placeholder="Select a location" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {locations.map((l) => (
+                      <SelectItem key={l.id} value={l.id}>
+                        {l.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  id="locationId"
+                  name="locationId"
+                  placeholder="UUID"
+                  value={locationId}
+                  onChange={(e) => setLocationId(e.target.value)}
+                  required
+                />
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="practitionerId">Practitioner ID</Label>
@@ -71,11 +104,11 @@ export function NewAppointmentDialog({ patients, resources }: { patients: Patien
             </div>
           </div>
 
-          {resources.length > 0 && (
+          {visibleResources.length > 0 && (
             <div className="space-y-1.5">
               <Label>Rooms / equipment (optional)</Label>
               <div className="space-y-1 rounded-md border p-2">
-                {resources.map((r) => (
+                {visibleResources.map((r) => (
                   <label key={r.id} className="flex items-center gap-2 text-sm">
                     <input type="checkbox" name="resourceIds" value={r.id} className="h-4 w-4" />
                     {r.name} <span className="text-xs text-muted-foreground">({r.resourceType})</span>
@@ -83,6 +116,9 @@ export function NewAppointmentDialog({ patients, resources }: { patients: Patien
                 ))}
               </div>
             </div>
+          )}
+          {locationId && resources.length > 0 && visibleResources.length === 0 && (
+            <p className="text-xs text-muted-foreground">No rooms or equipment are assigned to this location.</p>
           )}
 
           <label className="flex items-center gap-2 text-sm">
@@ -106,6 +142,11 @@ export function NewAppointmentDialog({ patients, resources }: { patients: Patien
               <div className="space-y-1.5">
                 <Label htmlFor="recurrenceCount">Occurrences</Label>
                 <Input id="recurrenceCount" name="recurrenceCount" type="number" min={2} max={52} defaultValue={4} />
+              </div>
+              <div className="col-span-2 space-y-1.5">
+                <Label htmlFor="recurrenceUntil">Stop by (optional)</Label>
+                <Input id="recurrenceUntil" name="recurrenceUntil" type="date" />
+                <p className="text-xs text-muted-foreground">Stops the series early if this date comes before the occurrence count is reached.</p>
               </div>
             </div>
           )}

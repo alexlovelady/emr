@@ -9,4 +9,5 @@ export const PERMISSION_KEYS = {
   PRACTITIONER_MANAGE: 'practitioner.manage',
   USER_MANAGE: 'user.manage',
   ROLE_MANAGE: 'role.manage',
+  APPOINTMENT_MANAGE: 'appointment.manage',
 } as const;

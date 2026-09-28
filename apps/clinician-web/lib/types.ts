@@ -173,6 +173,11 @@ export interface Resource {
   resourceType: string;
 }
 
+export interface Location {
+  id: string;
+  name: string;
+}
+
 export interface Encounter {
   id: string;
   patientId: string;

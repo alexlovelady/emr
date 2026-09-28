@@ -13,6 +13,7 @@ export async function createAppointment(_prevState: ActionResult<Appointment> | 
   const recurring = formData.get('recurring') === 'on';
 
   if (recurring) {
+    const recurrenceUntil = String(formData.get('recurrenceUntil') ?? '');
     const result = await runAction(() =>
       callBackend<Appointment[]>('/api/v1/appointments/series', {
         method: 'POST',
@@ -28,6 +29,7 @@ export async function createAppointment(_prevState: ActionResult<Appointment> | 
           recurrence: {
             frequency: String(formData.get('recurrenceFrequency') ?? 'weekly'),
             count: Number(formData.get('recurrenceCount') ?? 2),
+            ...(recurrenceUntil ? { until: recurrenceUntil } : {}),
           },
         },
       }),

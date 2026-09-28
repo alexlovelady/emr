@@ -693,6 +693,37 @@ originally called for; see below.
   the spec had been stale since Phase K — `Allergy.codeSystem`/`.code` (added by migration `0036`)
   were never reflected because nothing had re-run the generator since. Fixed as a side effect, not
   a separate pass.
+- **Also completes the frontend typeahead upgrade** the plan called for: `apps/clinician-web`'s
+  add-problem dialog gained a real ICD-10 "search by condition name" typeahead, and the prescribe
+  dialog's existing medication-name typeahead now searches real RxNorm data instead of
+  `NoopPrescribingGateway`'s 3-item synthetic list, capturing the selected RxCUI into a `rxnormCode`
+  field that was previously being discarded entirely. See `apps/clinician-web/lib/
+  use-terminology-search.ts` and `components/ui/typeahead.tsx` (extracted from the prescribe
+  dialog so both features share it).
+
+### eCW/athena parity roadmap — Phase I follow-up (scheduling UI polish)
+
+Closes the three UI trims the original Phase I pass left open (curl/API-only, not exposed in the
+UI) — no backend changes needed, since the server already supported all three:
+
+- **A real "Resources" admin page** (`apps/admin-web/app/(app)/resources/`) — create a room/
+  equipment resource against a location, list existing ones. Previously `POST /api/v1/resources`
+  had no UI at all. Gated on `APPOINTMENT_MANAGE` (mirrored into `apps/admin-web/lib/
+  permission-keys.ts`, matching the backend's own reasoning that a resource has no independent
+  business meaning outside scheduling).
+- **The New Appointment dialog's location field is now a real dropdown** (fetched from
+  `GET /api/v1/locations`, degrading to the original raw-UUID text field if the caller's role lacks
+  `LOCATION_MANAGE`), and its resource checkbox list now filters to the selected location's own
+  resources instead of showing every resource in the tenant — `GET /api/v1/resources?locationId=`
+  already supported this filter server-side; only the frontend wasn't passing it.
+- **A recurring series' "Stop by" date** (`recurrence.until`) is now a real form field —
+  `RecurrenceSchema` already accepted an optional `until` date; only the dialog never exposed it,
+  so a series could only ever be bounded by occurrence count.
+
+Live-verified in a real browser: created a new resource ("Ultrasound Machine A") via the new admin
+page and confirmed it appears in both admin-web's list and clinician-web's appointment dialog;
+selecting a location with no resources correctly shows "No rooms or equipment are assigned to this
+location" instead of an unfiltered list.
 
 ## Verification status
 

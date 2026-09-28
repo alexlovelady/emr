@@ -2,7 +2,7 @@ import { callBackend, callBackendOr } from '@/lib/api-proxy';
 import { Card, CardContent } from '@/components/ui/card';
 import { TodayScheduleTable } from '@/components/schedule/today-schedule-table';
 import { NewAppointmentDialog } from '@/components/schedule/new-appointment-dialog';
-import type { Appointment, Patient, Resource } from '@/lib/types';
+import type { Appointment, Location, Patient, Resource } from '@/lib/types';
 
 function todayUtcRange(): { scheduledFrom: string; scheduledTo: string } {
   const now = new Date();
@@ -13,10 +13,13 @@ function todayUtcRange(): { scheduledFrom: string; scheduledTo: string } {
 
 export default async function SchedulePage() {
   const { scheduledFrom, scheduledTo } = todayUtcRange();
-  const [appointments, allPatients, resources] = await Promise.all([
+  const [appointments, allPatients, resources, locations] = await Promise.all([
     callBackend<Appointment[]>('/api/v1/appointments', { query: { scheduledFrom, scheduledTo } }),
     callBackend<Patient[]>('/api/v1/patients'),
     callBackendOr<Resource[]>('/api/v1/resources', []),
+    // Location.manage is a narrower permission than most scheduling staff hold — degrade to an
+    // empty list (the dialog falls back to a raw location-ID field) rather than 403 the whole page.
+    callBackendOr<Location[]>('/api/v1/locations', []),
   ]);
 
   const uniquePatientIds = [...new Set(appointments.map((a) => a.patientId))];
@@ -33,7 +36,7 @@ export default async function SchedulePage() {
             {appointments.length} appointments
           </p>
         </div>
-        <NewAppointmentDialog patients={allPatients} resources={resources} />
+        <NewAppointmentDialog patients={allPatients} resources={resources} locations={locations} />
       </div>
       <Card>
         <CardContent className="pt-6">

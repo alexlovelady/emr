@@ -43,6 +43,13 @@ export interface LocationRow {
   createdAt: string;
 }
 
+export interface ResourceRow {
+  id: string;
+  locationId: string;
+  name: string;
+  resourceType: string;
+}
+
 export interface PractitionerRow {
   id: string;
   workforceIdentityId: string;
