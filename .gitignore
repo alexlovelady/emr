@@ -31,8 +31,15 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 
-# test / coverage
+# test / coverage — NOT anchored to root/package-level only: a bare `coverage/` pattern also
+# matched `domains/patient/src/coverage/`, a genuine source directory (insurance coverage), which
+# meant that entire domain was never actually tracked by git despite being real, tested, deployed
+# code — see the commit that added this comment for the full story. No test script in this repo
+# actually generates a coverage-report directory yet (nothing passes `--coverage`), so scoping this
+# down costs nothing today and prevents this from silently eating a future domain folder too.
 coverage/
+!**/src/coverage/
+!**/test/coverage/
 .nyc_output/
 
 # generated (still committed selectively — see docs/api/openapi.json)
