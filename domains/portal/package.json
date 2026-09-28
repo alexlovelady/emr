@@ -30,6 +30,8 @@
     "@ehr/payments": "workspace:*",
     "@ehr/results": "workspace:*",
     "@ehr/scheduling": "workspace:*",
+    "@ehr/tenant": "workspace:*",
+    "@ehr/workforce": "workspace:*",
     "@nestjs/common": "^12.1.0",
     "kysely": "^0.28.17",
     "zod": "^3.24.1"

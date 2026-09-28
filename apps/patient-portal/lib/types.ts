@@ -35,11 +35,29 @@ export interface PortalAccessiblePatient {
 export interface Appointment {
   id: string;
   patientId: string;
+  locationId: string;
   practitionerId: string;
   appointmentType: string;
   scheduledStart: string;
   scheduledEnd: string;
   status: string;
+}
+
+export interface BookablePractitioner {
+  id: string;
+  displayName: string;
+  taxonomyCode: string | null;
+}
+
+export interface BookableLocation {
+  id: string;
+  name: string;
+  timeZone: string;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  state: string | null;
+  postalCode: string | null;
 }
 
 export interface Problem {

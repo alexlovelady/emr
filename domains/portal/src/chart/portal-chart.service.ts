@@ -3,6 +3,7 @@ import type { DB } from '@ehr/db';
 import { NotFoundError, type RequestContext } from '@ehr/domain-common';
 import { ConsentService } from '@ehr/consent';
 import { AppointmentService, type AppointmentRow } from '@ehr/scheduling';
+import type { PortalBookAppointmentInput } from '../scheduling/portal-scheduling.dto.js';
 import { DiagnosticReportRepository, type DiagnosticReportRow } from '@ehr/results';
 import { NoteRepository, ProblemRepository, AllergyRepository, type NoteRow, type ProblemRow, type AllergyRow } from '@ehr/clinical';
 import { MedicationRepository, type MedicationRow } from '@ehr/medication';
@@ -35,6 +36,21 @@ export class PortalChartService {
   async listAppointments(trx: Executor, ctx: RequestContext, patientId: string): Promise<AppointmentRow[]> {
     await this.assertAccess(trx, ctx, patientId);
     return this.appointmentService.list(trx, ctx, { patientId });
+  }
+
+  async bookAppointment(trx: Executor, ctx: RequestContext, patientId: string, input: PortalBookAppointmentInput): Promise<AppointmentRow> {
+    await this.assertAccess(trx, ctx, patientId);
+    return this.appointmentService.create(trx, ctx, { patientId, ...input });
+  }
+
+  /** Only ever cancels an appointment that both (a) the account has consent for and (b) actually
+   * belongs to that exact patient — `getById` alone doesn't prove the second, since a portal
+   * account could otherwise guess another patient's appointment id. */
+  async cancelAppointment(trx: Executor, ctx: RequestContext, patientId: string, appointmentId: string, reason: string | null): Promise<AppointmentRow> {
+    await this.assertAccess(trx, ctx, patientId);
+    const appointment = await this.appointmentService.getById(trx, ctx, appointmentId);
+    if (appointment.patientId !== patientId) throw new NotFoundError('Appointment not found', { appointmentId });
+    return this.appointmentService.cancel(trx, ctx, appointmentId, reason);
   }
 
   async listResults(trx: Executor, ctx: RequestContext, patientId: string): Promise<DiagnosticReportRow[]> {

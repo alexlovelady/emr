@@ -6,3 +6,10 @@ export { ChargePaymentSchema, type ChargePaymentInput } from './payment/portal-p
 export { PortalExportService } from './export/portal-export.service.js';
 export { ExportRequestRepository, type ExportRequestRow } from './export/export-request.repository.js';
 export { PortalSessionService, type PortalSessionRow } from './session/portal-session.service.js';
+export { PortalSchedulingService, type BookablePractitioner, type BookableLocation } from './scheduling/portal-scheduling.service.js';
+export {
+  PortalBookAppointmentSchema,
+  PortalCancelAppointmentSchema,
+  type PortalBookAppointmentInput,
+  type PortalCancelAppointmentInput,
+} from './scheduling/portal-scheduling.dto.js';

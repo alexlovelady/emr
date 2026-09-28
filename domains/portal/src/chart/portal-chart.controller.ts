@@ -1,12 +1,19 @@
-import { Controller, Get, Inject, Param, Req } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Post, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { getCurrentTransaction } from '@ehr/db';
 import { ForbiddenError, type RequestContext } from '@ehr/domain-common';
 import { Audited } from '@ehr/audit';
 import { SkipAuthz } from '@ehr/authz';
+import { ZodValidationPipe } from '@ehr/api-contracts';
 import { OBJECT_STORAGE_GATEWAY } from '@ehr/documents';
 import type { ObjectStorageGateway } from '@ehr/object-storage';
 import { PortalChartService } from './portal-chart.service.js';
+import {
+  PortalBookAppointmentSchema,
+  PortalCancelAppointmentSchema,
+  type PortalBookAppointmentInput,
+  type PortalCancelAppointmentInput,
+} from '../scheduling/portal-scheduling.dto.js';
 
 @Controller('api/v1/portal/patients/:patientId')
 @SkipAuthz()
@@ -21,6 +28,27 @@ export class PortalChartController {
   @Audited('portal_chart.appointments', 'Appointment')
   async listAppointments(@Param('patientId') patientId: string, @Req() req: FastifyRequest) {
     return this.service.listAppointments(getCurrentTransaction(), requirePortalCtx(req), patientId);
+  }
+
+  @Post('appointments')
+  @Audited('portal_chart.book_appointment', 'Appointment')
+  async bookAppointment(
+    @Param('patientId') patientId: string,
+    @Body(new ZodValidationPipe(PortalBookAppointmentSchema)) body: PortalBookAppointmentInput,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.service.bookAppointment(getCurrentTransaction(), requirePortalCtx(req), patientId, body);
+  }
+
+  @Post('appointments/:appointmentId/cancel')
+  @Audited('portal_chart.cancel_appointment', 'Appointment')
+  async cancelAppointment(
+    @Param('patientId') patientId: string,
+    @Param('appointmentId') appointmentId: string,
+    @Body(new ZodValidationPipe(PortalCancelAppointmentSchema)) body: PortalCancelAppointmentInput,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.service.cancelAppointment(getCurrentTransaction(), requirePortalCtx(req), patientId, appointmentId, body.reason ?? null);
   }
 
   @Get('results')

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { withTenantContext } from '@ehr/db';
-import { NotFoundError } from '@ehr/domain-common';
+import { ConflictError, NotFoundError } from '@ehr/domain-common';
 import { ConsentService } from '@ehr/consent';
 import type { PaymentGateway } from '@ehr/payment-adapter';
 import type { ObjectStorageGateway } from '@ehr/object-storage';
@@ -9,6 +9,7 @@ import { setupTestDb, requestContextFor, type TestDbHandle } from '@ehr/testing'
 import { PortalChartService } from '../src/chart/portal-chart.service.js';
 import { PortalPaymentService } from '../src/payment/portal-payment.service.js';
 import { PortalSessionService } from '../src/session/portal-session.service.js';
+import { PortalSchedulingService } from '../src/scheduling/portal-scheduling.service.js';
 
 /** EHR_BUILD_SPEC.md §18.2 — run via `pnpm test:tenant-isolation`, requires a live Postgres. */
 describe('tenant isolation — portal', () => {
@@ -21,9 +22,11 @@ describe('tenant isolation — portal', () => {
     putObject: async () => ({ storageKey: `exports/${randomUUID()}.json` }),
   };
   const chartService = new PortalChartService(fakeStorageGateway);
+  const schedulingService = new PortalSchedulingService();
 
   let tenantAPatientId: string;
   let tenantAPortalAccountId: string;
+  let tenantAPractitionerId: string;
 
   async function createPatient(tenantId: string): Promise<string> {
     return withTenantContext(handle.db, tenantId, async (trx) => {
@@ -65,6 +68,29 @@ describe('tenant isolation — portal', () => {
     await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
       consentService.createSelfGrant(trx, handle.seed.tenantA.tenantId, tenantAPatientId, tenantAPortalAccountId),
     );
+    tenantAPractitionerId = await withTenantContext(handle.db, handle.seed.tenantA.tenantId, async (trx) => {
+      const workforceIdentity = await trx
+        .insertInto('workforce_identities')
+        .values({
+          tenant_id: handle.seed.tenantA.tenantId,
+          user_id: handle.seed.tenantA.adminUserId,
+          organization_id: handle.seed.tenantA.organizationId,
+          status: 'active',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const practitioner = await trx
+        .insertInto('practitioners')
+        .values({
+          tenant_id: handle.seed.tenantA.tenantId,
+          workforce_identity_id: workforceIdentity.id,
+          display_name: 'Dr. Portal Test',
+          status: 'active',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      return practitioner.id;
+    });
   });
 
   afterAll(() => handle.close());
@@ -177,5 +203,118 @@ describe('tenant isolation — portal', () => {
     await expect(
       withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) => sessionService.revoke(trx, ctxOther, firstSession.id)),
     ).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  describe('patient self-scheduling (Tier 2 UI build-out)', () => {
+    function ctxFor(patientAccountId: string) {
+      return requestContextFor(handle.seed.tenantA.tenantId, patientAccountId, { actor: { id: patientAccountId, type: 'patient' } });
+    }
+
+    it('lists active practitioners and locations, patient-safe shape only', async () => {
+      const ctxPortal = ctxFor(tenantAPortalAccountId);
+      const [practitioners, locations] = await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+        Promise.all([schedulingService.listBookablePractitioners(trx, ctxPortal), schedulingService.listBookableLocations(trx, ctxPortal)]),
+      );
+      const found = practitioners.find((p) => p.id === tenantAPractitionerId);
+      expect(found).toEqual({ id: tenantAPractitionerId, displayName: 'Dr. Portal Test', taxonomyCode: null });
+      expect(Object.keys(found ?? {})).not.toContain('workforceIdentityId');
+      expect(locations.some((l) => l.id === handle.seed.tenantA.locationId)).toBe(true);
+    });
+
+    it('books an appointment for the account\'s own patient, and rejects a double-booked slot', async () => {
+      const ctxPortal = ctxFor(tenantAPortalAccountId);
+      const scheduledStart = new Date(Date.now() + 30 * 24 * 3600_000);
+      const scheduledEnd = new Date(scheduledStart.getTime() + 30 * 60_000);
+
+      const booked = await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+        chartService.bookAppointment(trx, ctxPortal, tenantAPatientId, {
+          locationId: handle.seed.tenantA.locationId,
+          practitionerId: tenantAPractitionerId,
+          appointmentType: 'office_visit',
+          scheduledStart,
+          scheduledEnd,
+        }),
+      );
+      expect(booked.status).toBe('scheduled');
+      expect(booked.patientId).toBe(tenantAPatientId);
+
+      const otherPatientId = await createPatient(handle.seed.tenantA.tenantId);
+      const otherAccountId = await createPortalAccount(handle.seed.tenantA.tenantId);
+      await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+        consentService.createSelfGrant(trx, handle.seed.tenantA.tenantId, otherPatientId, otherAccountId),
+      );
+      await expect(
+        withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+          chartService.bookAppointment(trx, ctxFor(otherAccountId), otherPatientId, {
+            locationId: handle.seed.tenantA.locationId,
+            practitionerId: tenantAPractitionerId,
+            appointmentType: 'office_visit',
+            scheduledStart,
+            scheduledEnd,
+          }),
+        ),
+      ).rejects.toBeInstanceOf(ConflictError);
+    });
+
+    it('cannot book on behalf of a patient the account has no grant for', async () => {
+      const ungrantedAccountId = await createPortalAccount(handle.seed.tenantA.tenantId);
+      const scheduledStart = new Date(Date.now() + 40 * 24 * 3600_000);
+      await expect(
+        withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+          chartService.bookAppointment(trx, ctxFor(ungrantedAccountId), tenantAPatientId, {
+            locationId: handle.seed.tenantA.locationId,
+            practitionerId: tenantAPractitionerId,
+            appointmentType: 'office_visit',
+            scheduledStart,
+            scheduledEnd: new Date(scheduledStart.getTime() + 30 * 60_000),
+          }),
+        ),
+      ).rejects.toBeInstanceOf(NotFoundError);
+    });
+
+    it('cancels its own appointment, and cannot cancel an appointment belonging to a different patient', async () => {
+      const ctxPortal = ctxFor(tenantAPortalAccountId);
+      const scheduledStart = new Date(Date.now() + 50 * 24 * 3600_000);
+      const booked = await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+        chartService.bookAppointment(trx, ctxPortal, tenantAPatientId, {
+          locationId: handle.seed.tenantA.locationId,
+          practitionerId: tenantAPractitionerId,
+          appointmentType: 'office_visit',
+          scheduledStart,
+          scheduledEnd: new Date(scheduledStart.getTime() + 30 * 60_000),
+        }),
+      );
+
+      const otherPatientId = await createPatient(handle.seed.tenantA.tenantId);
+      const otherAccountId = await createPortalAccount(handle.seed.tenantA.tenantId);
+      await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+        consentService.createSelfGrant(trx, handle.seed.tenantA.tenantId, otherPatientId, otherAccountId),
+      );
+      // Even with a real appointment id and a valid grant for *some* patient, cancelling someone
+      // else's appointment must fail — grant validity alone isn't enough, ownership must match too.
+      await expect(
+        withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+          chartService.cancelAppointment(trx, ctxFor(otherAccountId), otherPatientId, booked.id, 'Not mine'),
+        ),
+      ).rejects.toBeInstanceOf(NotFoundError);
+
+      const cancelled = await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+        chartService.cancelAppointment(trx, ctxPortal, tenantAPatientId, booked.id, 'Patient requested'),
+      );
+      expect(cancelled.status).toBe('cancelled');
+    });
+
+    it('Tenant B sees no Tenant A practitioners or locations', async () => {
+      const tenantBPatientId = await createPatient(handle.seed.tenantB.tenantId);
+      const tenantBAccountId = await createPortalAccount(handle.seed.tenantB.tenantId);
+      await withTenantContext(handle.db, handle.seed.tenantB.tenantId, (trx) =>
+        consentService.createSelfGrant(trx, handle.seed.tenantB.tenantId, tenantBPatientId, tenantBAccountId),
+      );
+      const ctxB = requestContextFor(handle.seed.tenantB.tenantId, tenantBAccountId, { actor: { id: tenantBAccountId, type: 'patient' } });
+      const practitioners = await withTenantContext(handle.db, handle.seed.tenantB.tenantId, (trx) =>
+        schedulingService.listBookablePractitioners(trx, ctxB),
+      );
+      expect(practitioners.some((p) => p.id === tenantAPractitionerId)).toBe(false);
+    });
   });
 });
