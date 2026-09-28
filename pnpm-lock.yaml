@@ -1383,6 +1383,9 @@ importers:
       '@ehr/patient':
         specifier: workspace:*
         version: link:../patient
+      '@ehr/payment-adapter':
+        specifier: workspace:*
+        version: link:../../packages/payment-adapter
       '@nestjs/common':
         specifier: ^12.1.0
         version: 12.1.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)

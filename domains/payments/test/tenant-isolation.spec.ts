@@ -1,14 +1,17 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenantContext } from '@ehr/db';
-import { NotFoundError } from '@ehr/domain-common';
+import { ConflictError, NotFoundError } from '@ehr/domain-common';
 import { setupTestDb, requestContextFor, type TestDbHandle } from '@ehr/testing';
 import { NoopClearinghouseGateway } from '@ehr/clearinghouse-adapter';
+import { NoopPaymentGateway } from '@ehr/payment-adapter';
 import { ChargeService } from '@ehr/billing';
 import { ClaimService } from '@ehr/claims';
 import { RemittanceService } from '../src/remittance/remittance.service.js';
 import { LedgerService } from '../src/ledger/ledger.service.js';
 import { EligibilityService } from '../src/eligibility/eligibility.service.js';
 import { ClaimTimelineService } from '../src/claim-timeline/claim-timeline.service.js';
+import { PaymentService } from '../src/payment/payment.service.js';
+import { PaymentPlanService } from '../src/payment-plan/payment-plan.service.js';
 
 /** EHR_BUILD_SPEC.md §18.2 — run via `pnpm test:tenant-isolation`, requires a live Postgres. */
 describe('tenant isolation — payments', () => {
@@ -19,6 +22,8 @@ describe('tenant isolation — payments', () => {
   const ledgerService = new LedgerService();
   const eligibilityService = new EligibilityService(new NoopClearinghouseGateway());
   const timelineService = new ClaimTimelineService(claimService, remittanceService);
+  const paymentService = new PaymentService(new NoopPaymentGateway());
+  const paymentPlanService = new PaymentPlanService(undefined, undefined, paymentService);
 
   let tenantAPatientId: string;
   let tenantAPractitionerId: string;
@@ -228,6 +233,76 @@ describe('tenant isolation — payments', () => {
     expect(list.length).toBeGreaterThanOrEqual(1);
   });
 
+  it('a card payment posts a ledger entry tagged with its payment method', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const result = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      paymentService.charge(trx, ctxA, tenantAPatientId, { method: 'card', amountCents: 5000, currency: 'usd', paymentMethodToken: 'tok_test' }),
+    );
+    expect(result.status).toBe('succeeded');
+    expect(result.ledgerEntry?.paymentMethod).toBe('card');
+    expect(result.ledgerEntry?.amount).toBe('-50.00');
+  });
+
+  it('a check payment never calls the gateway but still posts a ledger entry with the check number', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const result = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      paymentService.charge(trx, ctxA, tenantAPatientId, { method: 'check', amountCents: 2500, currency: 'usd', referenceNumber: 'CHK-4471' }),
+    );
+    expect(result.status).toBe('succeeded');
+    expect(result.transactionId).toMatch(/^manual-check-/);
+    expect(result.ledgerEntry?.paymentMethod).toBe('check');
+    expect(result.ledgerEntry?.paymentReference).toBe('CHK-4471');
+  });
+
+  it('creates a payment plan whose installments sum exactly to the total and are spaced by frequency', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const { plan, installments } = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      paymentPlanService.create(trx, ctxA, tenantAPatientId, { totalAmountCents: 1000, installmentCount: 3, frequency: 'weekly', startDate: '2026-01-05' }),
+    );
+    expect(plan.status).toBe('active');
+    expect(installments).toHaveLength(3);
+    const totalCents = installments.reduce((sum, i) => sum + Math.round(Number(i.amount) * 100), 0);
+    expect(totalCents).toBe(1000);
+    expect(installments.map((i) => i.dueDate)).toEqual(['2026-01-05', '2026-01-12', '2026-01-19']);
+    expect(installments.every((i) => i.status === 'pending')).toBe(true);
+  });
+
+  it('paying every installment marks each paid, links its ledger entry, and completes the plan', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const { plan, installments } = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      paymentPlanService.create(trx, ctxA, tenantAPatientId, { totalAmountCents: 2000, installmentCount: 2, frequency: 'monthly', startDate: '2026-02-01' }),
+    );
+
+    const first = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      paymentPlanService.payInstallment(trx, ctxA, plan.id, installments[0]!.id, { method: 'cash' }),
+    );
+    expect(first.payment.status).toBe('succeeded');
+    expect(first.installment.status).toBe('paid');
+    expect(first.installment.paidLedgerEntryId).toBe(first.payment.ledgerEntry?.id);
+    expect(first.payment.ledgerEntry?.paymentPlanInstallmentId).toBe(installments[0]!.id);
+
+    const midway = await withTenantContext(handle.db, ctxA.tenantId, (trx) => paymentPlanService.getWithInstallments(trx, ctxA, plan.id));
+    expect(midway.plan.status).toBe('active');
+
+    await withTenantContext(handle.db, ctxA.tenantId, (trx) => paymentPlanService.payInstallment(trx, ctxA, plan.id, installments[1]!.id, { method: 'cash' }));
+
+    const completed = await withTenantContext(handle.db, ctxA.tenantId, (trx) => paymentPlanService.getWithInstallments(trx, ctxA, plan.id));
+    expect(completed.plan.status).toBe('completed');
+    expect(completed.installments.every((i) => i.status === 'paid')).toBe(true);
+  });
+
+  it('rejects paying an installment that is already paid', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const { plan, installments } = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      paymentPlanService.create(trx, ctxA, tenantAPatientId, { totalAmountCents: 500, installmentCount: 2, frequency: 'biweekly', startDate: '2026-03-01' }),
+    );
+    await withTenantContext(handle.db, ctxA.tenantId, (trx) => paymentPlanService.payInstallment(trx, ctxA, plan.id, installments[0]!.id, { method: 'cash' }));
+
+    await expect(
+      withTenantContext(handle.db, ctxA.tenantId, (trx) => paymentPlanService.payInstallment(trx, ctxA, plan.id, installments[0]!.id, { method: 'cash' })),
+    ).rejects.toBeInstanceOf(ConflictError);
+  });
+
   it('Tenant B cannot read Tenant A ledger entries, and RLS blocks a raw cross-tenant query', async () => {
     const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
     await expect(
@@ -237,6 +312,21 @@ describe('tenant isolation — payments', () => {
     const rows = await withTenantContext(handle.db, ctxB.tenantId, (trx) =>
       trx.selectFrom('ledger_entries').selectAll().where('patient_id', '=', tenantAPatientId).execute(),
     );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('RLS blocks a raw cross-tenant query on payment plans', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const { plan } = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      paymentPlanService.create(trx, ctxA, tenantAPatientId, { totalAmountCents: 400, installmentCount: 2, frequency: 'weekly', startDate: '2026-04-01' }),
+    );
+
+    const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
+    await expect(
+      withTenantContext(handle.db, ctxB.tenantId, (trx) => paymentPlanService.getWithInstallments(trx, ctxB, plan.id)),
+    ).rejects.toBeInstanceOf(NotFoundError);
+
+    const rows = await withTenantContext(handle.db, ctxB.tenantId, (trx) => trx.selectFrom('payment_plans').selectAll().where('id', '=', plan.id).execute());
     expect(rows).toHaveLength(0);
   });
 });

@@ -532,6 +532,26 @@ export interface LedgerEntriesTable extends CommonColumnsTable {
   amount: string;
   description: string;
   occurred_at: GeneratedTimestamp;
+  payment_method: string | null;
+  payment_reference: string | null;
+  payment_plan_installment_id: string | null;
+}
+
+export interface PaymentPlansTable extends CommonColumnsTable {
+  patient_id: string;
+  total_amount: string;
+  installment_amount: string;
+  installment_count: number;
+  frequency: string;
+  start_date: Timestamp;
+}
+
+export interface PaymentPlanInstallmentsTable extends CommonColumnsTable {
+  payment_plan_id: string;
+  sequence_number: number;
+  due_date: Timestamp;
+  amount: string;
+  paid_ledger_entry_id: string | null;
 }
 
 export interface EligibilityChecksTable extends CommonColumnsTable {
@@ -747,6 +767,8 @@ export interface DB {
   denials: DenialsTable;
   remittances: RemittancesTable;
   ledger_entries: LedgerEntriesTable;
+  payment_plans: PaymentPlansTable;
+  payment_plan_installments: PaymentPlanInstallmentsTable;
   eligibility_checks: EligibilityChecksTable;
   search_documents: SearchDocumentsTable;
   cohorts: CohortsTable;

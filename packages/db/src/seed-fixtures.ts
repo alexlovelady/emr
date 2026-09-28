@@ -79,6 +79,7 @@ export const PERMISSION_KEYS = {
   CLAIM_SUBMIT: 'claim.submit',
   DENIAL_MANAGE: 'denial.manage',
   LEDGER_READ: 'ledger.read',
+  PAYMENT_RECORD: 'payment.record',
   ELIGIBILITY_CHECK: 'eligibility.check',
   COHORT_MANAGE: 'cohort.manage',
   REPORT_QUERY_POPULATION: 'report.query.population',

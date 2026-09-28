@@ -10,6 +10,9 @@ export interface LedgerEntryRow {
   amount: string;
   description: string;
   occurredAt: Date;
+  paymentMethod: string | null;
+  paymentReference: string | null;
+  paymentPlanInstallmentId: string | null;
   status: string;
   createdAt: Date;
   updatedAt: Date;
@@ -29,6 +32,9 @@ export class LedgerRepository {
       amount: string;
       description: string;
       createdBy: string;
+      paymentMethod?: string | null;
+      paymentReference?: string | null;
+      paymentPlanInstallmentId?: string | null;
     },
   ): Promise<LedgerEntryRow> {
     const row = await trx
@@ -40,6 +46,9 @@ export class LedgerRepository {
         entry_type: input.entryType,
         amount: input.amount,
         description: input.description,
+        payment_method: input.paymentMethod ?? null,
+        payment_reference: input.paymentReference ?? null,
+        payment_plan_installment_id: input.paymentPlanInstallmentId ?? null,
         status: 'posted',
         created_by: input.createdBy,
         updated_by: input.createdBy,
@@ -71,6 +80,9 @@ function toRow(dbRow: Selectable<DB['ledger_entries']>): LedgerEntryRow {
     amount: dbRow.amount,
     description: dbRow.description,
     occurredAt: dbRow.occurred_at,
+    paymentMethod: dbRow.payment_method,
+    paymentReference: dbRow.payment_reference,
+    paymentPlanInstallmentId: dbRow.payment_plan_installment_id,
     status: dbRow.status,
     createdAt: dbRow.created_at,
     updatedAt: dbRow.updated_at,

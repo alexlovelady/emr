@@ -25,7 +25,16 @@ export class LedgerService {
   async postEntry(
     trx: Executor,
     ctx: RequestContext,
-    input: { patientId: string; claimId: string | null; entryType: string; amount: string; description: string },
+    input: {
+      patientId: string;
+      claimId: string | null;
+      entryType: string;
+      amount: string;
+      description: string;
+      paymentMethod?: string | null;
+      paymentReference?: string | null;
+      paymentPlanInstallmentId?: string | null;
+    },
   ): Promise<LedgerEntryRow> {
     const actorId = ctx.actor?.id ?? null;
     return this.repo.create(trx, {
@@ -35,6 +44,9 @@ export class LedgerService {
       entryType: input.entryType,
       amount: input.amount,
       description: input.description,
+      paymentMethod: input.paymentMethod ?? null,
+      paymentReference: input.paymentReference ?? null,
+      paymentPlanInstallmentId: input.paymentPlanInstallmentId ?? null,
       createdBy: actorId ?? ctx.tenantId,
     });
   }
