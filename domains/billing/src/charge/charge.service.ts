@@ -1,10 +1,11 @@
 import type { Kysely, Transaction } from 'kysely';
 import type { DB } from '@ehr/db';
-import { ConflictError, NotFoundError, type RequestContext } from '@ehr/domain-common';
+import { ConflictError, NotFoundError, ValidationError, type RequestContext } from '@ehr/domain-common';
 import { buildOutboxInsert } from '@ehr/outbox';
 import { EncounterRepository } from '@ehr/clinical';
 import type { CreateChargeInput, FinalizeChargeCodingInput } from './charge.dto.js';
 import { ChargeRepository, type ChargeRow } from './charge.repository.js';
+import { BillingRuleService } from '../billing-rule/billing-rule.service.js';
 
 type Executor = Kysely<DB> | Transaction<DB>;
 
@@ -18,6 +19,7 @@ export class ChargeService {
   constructor(
     private readonly repo: ChargeRepository = new ChargeRepository(),
     private readonly encounterRepo: EncounterRepository = new EncounterRepository(),
+    private readonly billingRuleService: BillingRuleService = new BillingRuleService(),
   ) {}
 
   async create(trx: Executor, ctx: RequestContext, patientId: string, input: CreateChargeInput): Promise<ChargeRow> {
@@ -65,6 +67,19 @@ export class ChargeService {
     if (current.status !== 'draft') {
       throw new ConflictError(`Charge is already ${current.status}`, { id, status: current.status });
     }
+
+    const finalCode = input.code ?? current.code;
+    const finalDiagnosisCodes = input.diagnosisCodes ?? current.diagnosisCodes;
+    const violations = await this.billingRuleService.evaluateCharge(trx, ctx.tenantId, {
+      patientId: current.patientId,
+      code: finalCode,
+      units: current.units,
+      diagnosisCodes: finalDiagnosisCodes,
+    });
+    if (violations.length > 0) {
+      throw new ValidationError('Charge failed billing rule validation', { issues: violations });
+    }
+
     const actorId = ctx.actor?.id ?? null;
     const coded = await this.repo.finalizeCoding(
       trx,
@@ -72,9 +87,9 @@ export class ChargeService {
       id,
       {
         codeSystem: input.codeSystem ?? current.codeSystem,
-        code: input.code ?? current.code,
+        code: finalCode,
         description: input.description ?? current.description,
-        diagnosisCodes: input.diagnosisCodes ?? current.diagnosisCodes,
+        diagnosisCodes: finalDiagnosisCodes,
         sourceAiGenerationId: input.sourceAiGenerationId ?? null,
       },
       actorId ?? ctx.tenantId,

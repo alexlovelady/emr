@@ -81,6 +81,7 @@ export const PERMISSION_KEYS = {
   LEDGER_READ: 'ledger.read',
   PAYMENT_RECORD: 'payment.record',
   BANK_RECONCILIATION_MANAGE: 'bank_reconciliation.manage',
+  BILLING_RULE_MANAGE: 'billing_rule.manage',
   ELIGIBILITY_CHECK: 'eligibility.check',
   COHORT_MANAGE: 'cohort.manage',
   REPORT_QUERY_POPULATION: 'report.query.population',

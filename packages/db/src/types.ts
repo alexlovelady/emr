@@ -485,6 +485,12 @@ export interface ChargesTable extends CommonColumnsTable {
   source_ai_generation_id: string | null;
 }
 
+export interface BillingRulesTable extends CommonColumnsTable {
+  rule_type: string;
+  description: string;
+  parameters: JsonColumn<Record<string, unknown>>;
+}
+
 export interface ClaimsTable extends CommonColumnsTable {
   patient_id: string;
   encounter_id: string;
@@ -783,6 +789,7 @@ export interface DB {
   external_candidates: ExternalCandidatesTable;
   smart_clients: SmartClientsTable;
   charges: ChargesTable;
+  billing_rules: BillingRulesTable;
   claims: ClaimsTable;
   claim_versions: ClaimVersionsTable;
   denials: DenialsTable;
