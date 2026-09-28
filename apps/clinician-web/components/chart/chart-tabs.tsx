@@ -8,6 +8,7 @@ import {
   MessageSquare,
   Pill,
   Share2,
+  ShieldCheck,
   Stethoscope,
   Upload,
 } from 'lucide-react';
@@ -24,6 +25,7 @@ import { MessagesPanel } from '@/components/chart/messages-panel';
 import { DocumentsPanel } from '@/components/chart/documents-panel';
 import { BillingPanel } from '@/components/chart/billing-panel';
 import { ReferralsPanel } from '@/components/chart/referrals-panel';
+import { PriorAuthorizationsPanel } from '@/components/chart/prior-authorizations-panel';
 import type {
   Allergy,
   Appeal,
@@ -42,6 +44,7 @@ import type {
   PatientLedger,
   PaymentPlanWithInstallments,
   Prescription,
+  PriorAuthorization,
   Problem,
   Referral,
   SignedNote,
@@ -81,6 +84,7 @@ interface ChartTabsProps {
   ledger: PatientLedger | null;
   paymentPlans: PaymentPlanWithInstallments[];
   referrals: Referral[];
+  priorAuthorizations: PriorAuthorization[];
 }
 
 export function ChartTabs({
@@ -105,6 +109,7 @@ export function ChartTabs({
   ledger,
   paymentPlans,
   referrals,
+  priorAuthorizations,
 }: ChartTabsProps) {
   const activeProblems = problems.filter((p) => p.status !== 'deleted' && p.clinicalStatus === 'active').length;
   const activeAllergies = allergies.filter((a) => a.status !== 'deleted').length;
@@ -157,6 +162,9 @@ export function ChartTabs({
               <TabsTrigger value="referrals">
                 <Share2 className="mr-1.5 h-3.5 w-3.5" /> Referrals
               </TabsTrigger>
+              <TabsTrigger value="prior-auth">
+                <ShieldCheck className="mr-1.5 h-3.5 w-3.5" /> Prior Auth
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="problems">
               <ProblemsPanel problems={problems} patientId={patientId} />
@@ -200,6 +208,9 @@ export function ChartTabs({
             </TabsContent>
             <TabsContent value="referrals">
               <ReferralsPanel referrals={referrals} patientId={patientId} />
+            </TabsContent>
+            <TabsContent value="prior-auth">
+              <PriorAuthorizationsPanel priorAuthorizations={priorAuthorizations} coverages={coverages} patientId={patientId} />
             </TabsContent>
           </Tabs>
         </CardContent>

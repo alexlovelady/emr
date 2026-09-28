@@ -4,9 +4,19 @@ import { DenialController } from './denial/denial.controller.js';
 import { DenialService } from './denial/denial.service.js';
 import { DenialAppealController, AppealController } from './appeal/appeal.controller.js';
 import { AppealService } from './appeal/appeal.service.js';
+import { PatientPriorAuthController, PriorAuthDetailController } from './prior-auth/prior-auth.controller.js';
+import { PriorAuthorizationService } from './prior-auth/prior-auth.service.js';
 
 @Module({
-  controllers: [ClaimController, ClaimDetailController, DenialController, DenialAppealController, AppealController],
-  providers: [DenialService, AppealService],
+  controllers: [
+    ClaimController,
+    ClaimDetailController,
+    DenialController,
+    DenialAppealController,
+    AppealController,
+    PatientPriorAuthController,
+    PriorAuthDetailController,
+  ],
+  providers: [DenialService, AppealService, PriorAuthorizationService],
 })
 export class ClaimsModule {}

@@ -36,6 +36,7 @@ export const PERMISSION_KEYS = {
   LEDGER_READ: 'ledger.read',
   PAYMENT_RECORD: 'payment.record',
   REFERRAL_MANAGE: 'referral.manage',
+  PRIOR_AUTH_MANAGE: 'prior_auth.manage',
   ELIGIBILITY_CHECK: 'eligibility.check',
   AI_GENERATION_MANAGE: 'ai_generation.manage',
   COHORT_MANAGE: 'cohort.manage',

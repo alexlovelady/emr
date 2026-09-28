@@ -24,6 +24,7 @@ import type {
   PaymentPlan,
   PaymentPlanWithInstallments,
   Referral,
+  PriorAuthorization,
 } from '@/lib/types';
 
 export default async function PatientChartPage({ params }: { params: Promise<{ id: string }> }) {
@@ -49,6 +50,7 @@ export default async function PatientChartPage({ params }: { params: Promise<{ i
     ledger,
     paymentPlanRows,
     referrals,
+    priorAuthorizations,
   ] = await Promise.all([
     callBackend<Patient>(`/api/v1/patients/${id}`),
     callBackend<Problem[]>(`/api/v1/patients/${id}/problems`),
@@ -69,6 +71,7 @@ export default async function PatientChartPage({ params }: { params: Promise<{ i
     callBackendOr<PatientLedger | null>(`/api/v1/patients/${id}/ledger`, null),
     callBackendOr<PaymentPlan[]>(`/api/v1/patients/${id}/payment-plans`, []),
     callBackendOr<Referral[]>(`/api/v1/patients/${id}/referrals`, []),
+    callBackendOr<PriorAuthorization[]>(`/api/v1/patients/${id}/prior-authorizations`, []),
   ]);
 
   // No "list denials/appeals by patient" endpoint exists — both only surface per-claim via each
@@ -110,6 +113,7 @@ export default async function PatientChartPage({ params }: { params: Promise<{ i
         ledger={ledger}
         paymentPlans={paymentPlans}
         referrals={referrals}
+        priorAuthorizations={priorAuthorizations}
       />
     </div>
   );

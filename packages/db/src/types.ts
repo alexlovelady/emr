@@ -502,6 +502,20 @@ export interface ReferralsTable extends CommonColumnsTable {
   notes: string | null;
 }
 
+export interface PriorAuthorizationsTable extends CommonColumnsTable {
+  patient_id: string;
+  coverage_id: string;
+  requested_by_practitioner_id: string;
+  procedure_code: string;
+  procedure_description: string;
+  diagnosis_code: string;
+  payer_reference_number: string | null;
+  valid_from: Timestamp | null;
+  valid_until: Timestamp | null;
+  denial_reason: string | null;
+  notes: string | null;
+}
+
 export interface ClaimsTable extends CommonColumnsTable {
   patient_id: string;
   encounter_id: string;
@@ -802,6 +816,7 @@ export interface DB {
   charges: ChargesTable;
   billing_rules: BillingRulesTable;
   referrals: ReferralsTable;
+  prior_authorizations: PriorAuthorizationsTable;
   claims: ClaimsTable;
   claim_versions: ClaimVersionsTable;
   denials: DenialsTable;

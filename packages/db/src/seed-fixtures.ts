@@ -83,6 +83,7 @@ export const PERMISSION_KEYS = {
   BANK_RECONCILIATION_MANAGE: 'bank_reconciliation.manage',
   BILLING_RULE_MANAGE: 'billing_rule.manage',
   REFERRAL_MANAGE: 'referral.manage',
+  PRIOR_AUTH_MANAGE: 'prior_auth.manage',
   ELIGIBILITY_CHECK: 'eligibility.check',
   COHORT_MANAGE: 'cohort.manage',
   REPORT_QUERY_POPULATION: 'report.query.population',

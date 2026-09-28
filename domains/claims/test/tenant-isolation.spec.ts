@@ -7,6 +7,7 @@ import { ChargeService } from '@ehr/billing';
 import { ClaimService } from '../src/claim/claim.service.js';
 import { DenialService } from '../src/denial/denial.service.js';
 import { AppealService } from '../src/appeal/appeal.service.js';
+import { PriorAuthorizationService } from '../src/prior-auth/prior-auth.service.js';
 
 /** EHR_BUILD_SPEC.md §18.2 — run via `pnpm test:tenant-isolation`, requires a live Postgres. */
 describe('tenant isolation — claims', () => {
@@ -15,6 +16,7 @@ describe('tenant isolation — claims', () => {
   const claimService = new ClaimService(new NoopClearinghouseGateway());
   const denialService = new DenialService();
   const appealService = new AppealService();
+  const priorAuthService = new PriorAuthorizationService();
 
   let tenantAPatientId: string;
   let tenantAPractitionerId: string;
@@ -502,6 +504,178 @@ describe('tenant isolation — claims', () => {
       ).rejects.toBeInstanceOf(NotFoundError);
 
       const rows = await withTenantContext(handle.db, ctxB.tenantId, (trx) => trx.selectFrom('appeals').selectAll().where('id', '=', appeal.id).execute());
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe('prior authorization tracking (Tier 2 platform gap)', () => {
+    async function createCoverage() {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      return withTenantContext(handle.db, ctxA.tenantId, async (trx) => {
+        const row = await trx
+          .insertInto('coverages')
+          .values({
+            tenant_id: ctxA.tenantId,
+            patient_id: tenantAPatientId,
+            payer_name: 'Acme Payer',
+            member_id: `M-PRIORAUTH-${Date.now()}`,
+            coverage_type: 'primary',
+            effective_start: '2024-01-01',
+            status: 'active',
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        return row.id;
+      });
+    }
+
+    it('creates a pending prior authorization', async () => {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      const coverageId = await createCoverage();
+      const auth = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        priorAuthService.create(trx, ctxA, tenantAPatientId, {
+          coverageId,
+          requestedByPractitionerId: tenantAPractitionerId,
+          procedureCode: '70551',
+          procedureDescription: 'MRI brain without contrast',
+          diagnosisCode: 'G43.909',
+        }),
+      );
+      expect(auth.status).toBe('pending');
+      expect(auth.payerReferenceNumber).toBeNull();
+    });
+
+    it('rejects a prior authorization against a coverage belonging to a different patient', async () => {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      const otherPatientId = await withTenantContext(handle.db, ctxA.tenantId, async (trx) => {
+        const row = await trx
+          .insertInto('patients')
+          .values({ tenant_id: ctxA.tenantId, given_name: 'Isolation', family_name: `PriorAuthOther-${Date.now()}`, date_of_birth: '1975-05-05', status: 'active' })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        return row.id;
+      });
+      const coverageId = await createCoverage();
+      await expect(
+        withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+          priorAuthService.create(trx, ctxA, otherPatientId, {
+            coverageId,
+            requestedByPractitionerId: tenantAPractitionerId,
+            procedureCode: '70551',
+            procedureDescription: 'MRI brain without contrast',
+            diagnosisCode: 'G43.909',
+          }),
+        ),
+      ).rejects.toBeInstanceOf(NotFoundError);
+    });
+
+    it('records an approval requiring a validUntil date, and rejects a second decision', async () => {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      const coverageId = await createCoverage();
+      const auth = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        priorAuthService.create(trx, ctxA, tenantAPatientId, {
+          coverageId,
+          requestedByPractitionerId: tenantAPractitionerId,
+          procedureCode: '29881',
+          procedureDescription: 'Knee arthroscopy',
+          diagnosisCode: 'M23.51',
+        }),
+      );
+
+      await expect(
+        withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+          priorAuthService.recordDecision(trx, ctxA, auth.id, { decision: 'approved', payerReferenceNumber: 'PA-1', validUntil: undefined }),
+        ),
+      ).rejects.toBeInstanceOf(ConflictError);
+
+      const approved = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        priorAuthService.recordDecision(trx, ctxA, auth.id, {
+          decision: 'approved',
+          payerReferenceNumber: 'PA-12345',
+          validFrom: '2026-01-01',
+          validUntil: '2026-06-01',
+        }),
+      );
+      expect(approved.status).toBe('approved');
+      expect(approved.payerReferenceNumber).toBe('PA-12345');
+      expect(approved.validUntil).toBe('2026-06-01');
+
+      await expect(
+        withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+          priorAuthService.recordDecision(trx, ctxA, auth.id, { decision: 'denied' }),
+        ),
+      ).rejects.toBeInstanceOf(ConflictError);
+    });
+
+    it('records a denial with a reason, and follows the expire/cancel lifecycle', async () => {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      const coverageId = await createCoverage();
+
+      const denied = await withTenantContext(handle.db, ctxA.tenantId, async (trx) => {
+        const auth = await priorAuthService.create(trx, ctxA, tenantAPatientId, {
+          coverageId,
+          requestedByPractitionerId: tenantAPractitionerId,
+          procedureCode: '27447',
+          procedureDescription: 'Total knee replacement',
+          diagnosisCode: 'M17.11',
+        });
+        return priorAuthService.recordDecision(trx, ctxA, auth.id, { decision: 'denied', denialReason: 'Not medically necessary per payer review' });
+      });
+      expect(denied.status).toBe('denied');
+      expect(denied.denialReason).toBe('Not medically necessary per payer review');
+
+      await expect(
+        withTenantContext(handle.db, ctxA.tenantId, (trx) => priorAuthService.expire(trx, ctxA, denied.id)),
+      ).rejects.toBeInstanceOf(ConflictError);
+
+      const approvedThenExpired = await withTenantContext(handle.db, ctxA.tenantId, async (trx) => {
+        const auth = await priorAuthService.create(trx, ctxA, tenantAPatientId, {
+          coverageId,
+          requestedByPractitionerId: tenantAPractitionerId,
+          procedureCode: '99999',
+          procedureDescription: 'Test procedure',
+          diagnosisCode: 'Z00.00',
+        });
+        await priorAuthService.recordDecision(trx, ctxA, auth.id, { decision: 'approved', validUntil: '2026-01-01' });
+        return priorAuthService.expire(trx, ctxA, auth.id);
+      });
+      expect(approvedThenExpired.status).toBe('expired');
+
+      const cancelled = await withTenantContext(handle.db, ctxA.tenantId, async (trx) => {
+        const auth = await priorAuthService.create(trx, ctxA, tenantAPatientId, {
+          coverageId,
+          requestedByPractitionerId: tenantAPractitionerId,
+          procedureCode: '11111',
+          procedureDescription: 'Another test procedure',
+          diagnosisCode: 'Z00.00',
+        });
+        return priorAuthService.cancel(trx, ctxA, auth.id, 'Patient changed provider');
+      });
+      expect(cancelled.status).toBe('cancelled');
+      expect(cancelled.notes).toBe('Patient changed provider');
+    });
+
+    it('Tenant B cannot read a Tenant A prior authorization, and RLS blocks a raw cross-tenant query', async () => {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      const coverageId = await createCoverage();
+      const auth = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        priorAuthService.create(trx, ctxA, tenantAPatientId, {
+          coverageId,
+          requestedByPractitionerId: tenantAPractitionerId,
+          procedureCode: '70551',
+          procedureDescription: 'MRI brain without contrast',
+          diagnosisCode: 'G43.909',
+        }),
+      );
+
+      const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
+      await expect(
+        withTenantContext(handle.db, ctxB.tenantId, (trx) => priorAuthService.getById(trx, ctxB, auth.id)),
+      ).rejects.toBeInstanceOf(NotFoundError);
+
+      const rows = await withTenantContext(handle.db, ctxB.tenantId, (trx) =>
+        trx.selectFrom('prior_authorizations').selectAll().where('id', '=', auth.id).execute(),
+      );
       expect(rows).toHaveLength(0);
     });
   });

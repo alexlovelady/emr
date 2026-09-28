@@ -11,3 +11,13 @@ export { ResolveDenialSchema, type ResolveDenialInput } from './denial/denial.dt
 export { AppealService } from './appeal/appeal.service.js';
 export { AppealRepository, type AppealRow } from './appeal/appeal.repository.js';
 export { CreateAppealSchema, DecideAppealSchema, type CreateAppealInput, type DecideAppealInput } from './appeal/appeal.dto.js';
+export { PriorAuthorizationService } from './prior-auth/prior-auth.service.js';
+export { PriorAuthorizationRepository, type PriorAuthorizationRow } from './prior-auth/prior-auth.repository.js';
+export {
+  CreatePriorAuthorizationSchema,
+  RecordPriorAuthDecisionSchema,
+  CancelPriorAuthorizationSchema,
+  type CreatePriorAuthorizationInput,
+  type RecordPriorAuthDecisionInput,
+  type CancelPriorAuthorizationInput,
+} from './prior-auth/prior-auth.dto.js';

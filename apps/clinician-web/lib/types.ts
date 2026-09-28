@@ -578,6 +578,23 @@ export interface CohortExecutionRow {
   status: string;
 }
 
+export interface PriorAuthorization {
+  id: string;
+  patientId: string;
+  coverageId: string;
+  requestedByPractitionerId: string;
+  procedureCode: string;
+  procedureDescription: string;
+  diagnosisCode: string;
+  payerReferenceNumber: string | null;
+  validFrom: string | null;
+  validUntil: string | null;
+  denialReason: string | null;
+  notes: string | null;
+  status: 'pending' | 'approved' | 'denied' | 'expired' | 'cancelled';
+  createdAt: string;
+}
+
 export interface GovernedQuery {
   name: string;
   description: string;
