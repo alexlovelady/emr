@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3030",
-    "build": "next build",
-    "start": "next start -p 3030",
+    "dev": "cross-env NODE_ENV=development next dev -p 3030",
+    "build": "cross-env NODE_ENV=production next build",
+    "start": "cross-env NODE_ENV=production next start -p 3030",
     "lint": "eslint app components lib",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
@@ -25,6 +25,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "cross-env": "^7.0.3",
     "@types/react": "^19.1.1",
     "@types/react-dom": "^19.1.1",
     "autoprefixer": "^10.4.20",
