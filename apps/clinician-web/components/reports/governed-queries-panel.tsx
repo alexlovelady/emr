@@ -285,6 +285,101 @@ function RemittanceTrendsByMonth({ query }: { query: GovernedQuery }) {
   );
 }
 
+interface QualityMeasureRateResult {
+  denominator: number;
+  numerator: number;
+  rate: number | null;
+}
+
+function QualityMeasureRate({
+  title,
+  result,
+  numeratorLabel,
+}: {
+  title: string;
+  result: QualityMeasureRateResult;
+  numeratorLabel: string;
+}) {
+  return (
+    <div className="flex items-baseline gap-4">
+      <span className="text-2xl font-semibold">{result.rate === null ? '—' : `${(result.rate * 100).toFixed(1)}%`}</span>
+      <span className="text-sm text-muted-foreground">
+        {result.numerator} of {result.denominator} {title} {numeratorLabel}
+      </span>
+    </div>
+  );
+}
+
+function QualityMeasureDiabetesHba1cControl({ query }: { query: GovernedQuery }) {
+  const [result, setResult] = useState<(QualityMeasureRateResult & { patientsWithNoRecentHba1c: number }) | undefined>(undefined);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function run() {
+    setPending(true);
+    setError(null);
+    const res = await executeGovernedQuery(query.name, {});
+    setPending(false);
+    if (!res.ok) setError(res.error);
+    else setResult(res.data as QualityMeasureRateResult & { patientsWithNoRecentHba1c: number });
+  }
+
+  return (
+    <div className="space-y-3 rounded-md border border-border p-4">
+      <div>
+        <h3 className="text-sm font-semibold">{query.name.replace(/_/g, ' ')}</h3>
+        <p className="text-xs text-muted-foreground">{query.description}</p>
+      </div>
+      <Button type="button" size="sm" disabled={pending} onClick={run}>
+        {pending ? 'Running…' : 'Run'}
+      </Button>
+      {error && <Alert variant="destructive">{error}</Alert>}
+      {result && (
+        <div className="space-y-1">
+          <QualityMeasureRate title="diabetic patients" result={result} numeratorLabel="with HbA1c under 8%" />
+          <p className="text-xs text-muted-foreground">{result.patientsWithNoRecentHba1c} diabetic patient(s) have no HbA1c lab result on file.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function QualityMeasureAnnualWellnessVisit({ query }: { query: GovernedQuery }) {
+  const [lookbackDays, setLookbackDays] = useState('365');
+  const [result, setResult] = useState<(QualityMeasureRateResult & { lookbackDays: number }) | undefined>(undefined);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function run() {
+    setPending(true);
+    setError(null);
+    const res = await executeGovernedQuery(query.name, { lookbackDays: Number(lookbackDays) || 365 });
+    setPending(false);
+    if (!res.ok) setError(res.error);
+    else setResult(res.data as QualityMeasureRateResult & { lookbackDays: number });
+  }
+
+  return (
+    <div className="space-y-3 rounded-md border border-border p-4">
+      <div>
+        <h3 className="text-sm font-semibold">{query.name.replace(/_/g, ' ')}</h3>
+        <p className="text-xs text-muted-foreground">{query.description}</p>
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="space-y-1.5">
+          <Label>Lookback days</Label>
+          <Input type="number" min={1} value={lookbackDays} onChange={(e) => setLookbackDays(e.target.value)} className="w-28" />
+        </div>
+        <Button type="button" size="sm" disabled={pending} onClick={run}>
+          {pending ? 'Running…' : 'Run'}
+        </Button>
+      </div>
+      {error && <Alert variant="destructive">{error}</Alert>}
+      {result && <QualityMeasureRate title="active patients" result={result} numeratorLabel={`with a completed visit in the last ${result.lookbackDays} days`} />}
+    </div>
+  );
+}
+
 export function GovernedQueriesPanel({ queries }: { queries: GovernedQuery[] }) {
   return (
     <div className="space-y-4">
@@ -294,6 +389,8 @@ export function GovernedQueriesPanel({ queries }: { queries: GovernedQuery[] }) 
         if (q.name === 'claims_status_breakdown') return <ClaimsStatusBreakdown key={q.name} query={q} />;
         if (q.name === 'payer_performance_summary') return <PayerPerformanceSummary key={q.name} query={q} />;
         if (q.name === 'remittance_trends_by_month') return <RemittanceTrendsByMonth key={q.name} query={q} />;
+        if (q.name === 'quality_measure_diabetes_hba1c_control') return <QualityMeasureDiabetesHba1cControl key={q.name} query={q} />;
+        if (q.name === 'quality_measure_annual_wellness_visit') return <QualityMeasureAnnualWellnessVisit key={q.name} query={q} />;
         return null;
       })}
     </div>

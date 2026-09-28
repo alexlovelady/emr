@@ -30,6 +30,16 @@ const RemittanceTrendsByMonthParams = z.object({
   payerName: z.string().min(1).max(200).nullish(),
 });
 
+const QualityMeasureDiabetesHba1cControlParams = z.object({});
+
+const QualityMeasureAnnualWellnessVisitParams = z.object({
+  /** Encounters more than this many days ago don't count toward "had a visit this period." */
+  lookbackDays: z.number().int().min(1).max(1000).default(365),
+});
+
+/** LOINC code for Hemoglobin A1c — same code the cohort compiler's `latest_hba1c` measure uses. */
+const HBA1C_LOINC_CODE = '4548-4';
+
 /**
  * EHR_BUILD_SPEC.md §8.3: "Do not expose unrestricted SQL to normal customers." This is the
  * "governed SQL for internal analysts" bullet's real form — a fixed, in-code catalog of
@@ -181,6 +191,76 @@ export const GOVERNED_QUERIES: Record<string, GovernedQueryDefinition> = {
         totalAdjustmentAmount: Number(r.total_adjustment_amount),
         totalPatientResponsibilityAmount: Number(r.total_patient_responsibility_amount),
       }));
+    },
+  },
+  /**
+   * Tier 2 platform gap: population health / quality measures. Deliberately scoped down to 2 real,
+   * fixed measures rather than a general MIPS/HEDIS calculation engine (same "scope down first"
+   * discipline used for the billing-rules engine) — each is a simplified proxy for a real,
+   * well-known measure concept, not the certified NCQA/CMS specification (no age bands, exclusions,
+   * or multi-year lookback logic). Denominator/numerator/rate is the same shape a real quality
+   * measure reports in.
+   */
+  quality_measure_diabetes_hba1c_control: {
+    description:
+      'Simplified proxy for HEDIS "Hemoglobin A1c Control (<8%)": of active patients with an active diabetes diagnosis, what share\'s most recent HbA1c is under 8%.',
+    paramsSchema: QualityMeasureDiabetesHba1cControlParams,
+    async run(trx, tenantId) {
+      const result = await sql<{ denominator: string; numerator: string; no_recent_result: string }>`
+        with diabetic_patients as (
+          select distinct pr.patient_id
+          from problems pr
+          join patients p on p.id = pr.patient_id and p.tenant_id = pr.tenant_id
+          where pr.tenant_id = ${tenantId}
+            and pr.code_system = 'ICD-10' and pr.code like 'E11%'
+            and pr.clinical_status = 'active'
+            and p.status = 'active'
+        ),
+        latest_hba1c as (
+          select distinct on (o.patient_id) o.patient_id, o.value_quantity::numeric as value
+          from observations o
+          where o.tenant_id = ${tenantId}
+            and o.code = ${HBA1C_LOINC_CODE} and o.category = 'laboratory' and o.value_quantity is not null
+            and o.patient_id in (select patient_id from diabetic_patients)
+          order by o.patient_id, o.effective_at desc
+        )
+        select
+          (select count(*) from diabetic_patients) as denominator,
+          (select count(*) from latest_hba1c where value < 8.0) as numerator,
+          (select count(*) from diabetic_patients dp where not exists (select 1 from latest_hba1c h where h.patient_id = dp.patient_id)) as no_recent_result
+      `.execute(trx);
+      const row = result.rows[0]!;
+      const denominator = Number(row.denominator);
+      const numerator = Number(row.numerator);
+      return {
+        denominator,
+        numerator,
+        rate: denominator === 0 ? null : numerator / denominator,
+        patientsWithNoRecentHba1c: Number(row.no_recent_result),
+      };
+    },
+  },
+  quality_measure_annual_wellness_visit: {
+    description: 'Simplified proxy for an annual wellness/well-care visit measure: of active patients, what share had a completed encounter within the lookback window.',
+    paramsSchema: QualityMeasureAnnualWellnessVisitParams,
+    async run(trx, tenantId, rawParams) {
+      const params = QualityMeasureAnnualWellnessVisitParams.parse(rawParams);
+      const result = await sql<{ denominator: string; numerator: string }>`
+        with active_patients as (
+          select id as patient_id from patients where tenant_id = ${tenantId} and status = 'active'
+        )
+        select
+          (select count(*) from active_patients) as denominator,
+          (select count(distinct e.patient_id) from encounters e
+            where e.tenant_id = ${tenantId} and e.ended_at is not null
+              and e.ended_at >= now() - (${params.lookbackDays} || ' days')::interval
+              and e.patient_id in (select patient_id from active_patients)
+          ) as numerator
+      `.execute(trx);
+      const row = result.rows[0]!;
+      const denominator = Number(row.denominator);
+      const numerator = Number(row.numerator);
+      return { denominator, numerator, rate: denominator === 0 ? null : numerator / denominator, lookbackDays: params.lookbackDays };
     },
   },
 };
