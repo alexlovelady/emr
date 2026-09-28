@@ -13,3 +13,13 @@ export { RecordPaymentSchema, type RecordPaymentInput } from './payment/payment.
 export { PaymentPlanService, type PaymentPlanWithInstallments } from './payment-plan/payment-plan.service.js';
 export { PaymentPlanRepository, type PaymentPlanRow, type PaymentPlanInstallmentRow } from './payment-plan/payment-plan.repository.js';
 export { CreatePaymentPlanSchema, PayInstallmentSchema, type CreatePaymentPlanInput, type PayInstallmentInput } from './payment-plan/payment-plan.dto.js';
+export { BankReconciliationService, type ImportResult, type AutoMatchResult } from './bank-reconciliation/bank-reconciliation.service.js';
+export { BankDepositRepository, type BankDepositRow, type NewBankDeposit } from './bank-reconciliation/bank-deposit.repository.js';
+export {
+  ImportBankStatementSchema,
+  MatchDepositSchema,
+  IgnoreDepositSchema,
+  type ImportBankStatementInput,
+  type MatchDepositInput,
+  type IgnoreDepositInput,
+} from './bank-reconciliation/bank-reconciliation.dto.js';

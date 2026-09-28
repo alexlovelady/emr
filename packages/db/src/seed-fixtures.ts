@@ -80,6 +80,7 @@ export const PERMISSION_KEYS = {
   DENIAL_MANAGE: 'denial.manage',
   LEDGER_READ: 'ledger.read',
   PAYMENT_RECORD: 'payment.record',
+  BANK_RECONCILIATION_MANAGE: 'bank_reconciliation.manage',
   ELIGIBILITY_CHECK: 'eligibility.check',
   COHORT_MANAGE: 'cohort.manage',
   REPORT_QUERY_POPULATION: 'report.query.population',

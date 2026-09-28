@@ -16,6 +16,7 @@
     "@ehr/api-contracts": "workspace:*",
     "@ehr/audit": "workspace:*",
     "@ehr/authz": "workspace:*",
+    "@ehr/bai2": "workspace:*",
     "@ehr/claims": "workspace:*",
     "@ehr/clearinghouse-adapter": "workspace:*",
     "@ehr/db": "workspace:*",

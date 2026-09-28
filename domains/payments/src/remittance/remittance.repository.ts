@@ -71,6 +71,39 @@ export class RemittanceRepository {
     return row ? toRow(row) : null;
   }
 
+  async findById(trx: Executor, tenantId: string, id: string): Promise<RemittanceRow | null> {
+    const row = await trx.selectFrom('remittances').selectAll().where('tenant_id', '=', tenantId).where('id', '=', id).executeTakeFirst();
+    return row ? toRow(row) : null;
+  }
+
+  /** For bank-reconciliation auto-matching — a remittance already linked from a prior deposit match
+   * (`bank_deposits.matched_remittance_id`) is excluded so the same payer payment can't be matched
+   * twice. */
+  async findUnmatchedByAmountAndDateWindow(
+    trx: Executor,
+    tenantId: string,
+    amount: string,
+    aroundDate: string,
+    windowDays: number,
+  ): Promise<RemittanceRow[]> {
+    const center = new Date(`${aroundDate}T00:00:00.000Z`);
+    const from = new Date(center.getTime() - windowDays * 86_400_000);
+    const to = new Date(center.getTime() + windowDays * 86_400_000);
+
+    const rows = await trx
+      .selectFrom('remittances')
+      .selectAll()
+      .where('tenant_id', '=', tenantId)
+      .where('payer_paid_amount', '=', amount)
+      .where('posted_at', '>=', from)
+      .where('posted_at', '<=', to)
+      .where(({ not, exists, selectFrom }) =>
+        not(exists(selectFrom('bank_deposits').select('id').whereRef('bank_deposits.matched_remittance_id', '=', 'remittances.id'))),
+      )
+      .execute();
+    return rows.map(toRow);
+  }
+
   async listByClaim(trx: Executor, tenantId: string, claimId: string): Promise<RemittanceRow[]> {
     const rows = await trx
       .selectFrom('remittances')

@@ -574,6 +574,17 @@ export interface EligibilityChecksTable extends CommonColumnsTable {
   checked_at: GeneratedTimestamp;
 }
 
+export interface BankDepositsTable extends CommonColumnsTable {
+  account_number: string;
+  bank_reference_number: string | null;
+  transaction_date: Timestamp;
+  amount: string;
+  type_code: string;
+  description: string | null;
+  import_batch_id: string;
+  matched_remittance_id: string | null;
+}
+
 export interface SearchDocumentsTable extends CommonColumnsTable {
   patient_id: string | null;
   resource_type: string;
@@ -780,6 +791,7 @@ export interface DB {
   ledger_entries: LedgerEntriesTable;
   payment_plans: PaymentPlansTable;
   payment_plan_installments: PaymentPlanInstallmentsTable;
+  bank_deposits: BankDepositsTable;
   eligibility_checks: EligibilityChecksTable;
   search_documents: SearchDocumentsTable;
   cohorts: CohortsTable;

@@ -12,6 +12,7 @@ import { EligibilityService } from '../src/eligibility/eligibility.service.js';
 import { ClaimTimelineService } from '../src/claim-timeline/claim-timeline.service.js';
 import { PaymentService } from '../src/payment/payment.service.js';
 import { PaymentPlanService } from '../src/payment-plan/payment-plan.service.js';
+import { BankReconciliationService } from '../src/bank-reconciliation/bank-reconciliation.service.js';
 
 /** EHR_BUILD_SPEC.md §18.2 — run via `pnpm test:tenant-isolation`, requires a live Postgres. */
 describe('tenant isolation — payments', () => {
@@ -24,6 +25,7 @@ describe('tenant isolation — payments', () => {
   const timelineService = new ClaimTimelineService(claimService, remittanceService);
   const paymentService = new PaymentService(new NoopPaymentGateway());
   const paymentPlanService = new PaymentPlanService(undefined, undefined, paymentService);
+  const bankReconciliationService = new BankReconciliationService();
 
   let tenantAPatientId: string;
   let tenantAPractitionerId: string;
@@ -328,5 +330,135 @@ describe('tenant isolation — payments', () => {
 
     const rows = await withTenantContext(handle.db, ctxB.tenantId, (trx) => trx.selectFrom('payment_plans').selectAll().where('id', '=', plan.id).execute());
     expect(rows).toHaveLength(0);
+  });
+
+  describe('bank reconciliation (Athelas-parity pass)', () => {
+    // This dev DB is shared and never reset between test runs — every reference-number suffix
+    // below is tagged with a unique-per-run id so a repeat run never collides with rows a prior run
+    // already committed (bank_reference_number is exactly what real-world idempotent re-import
+    // dedupes on, so a fixed literal here would make every run after the first see "already
+    // imported" for the wrong reason). Same fix pattern as domains/query's search test and this
+    // describe block's own uniqueAmount for auto-matching.
+    const runId = Date.now();
+
+    function bai2Today(): string {
+      const now = new Date();
+      const yy = String(now.getUTCFullYear()).slice(2);
+      const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(now.getUTCDate()).padStart(2, '0');
+      return `${yy}${mm}${dd}`;
+    }
+
+    function buildBai2Statement(deposits: { refSuffix: string; amountCents: number }[]): string {
+      const asOfDate = bai2Today();
+      const txnLines = deposits.map((d) => `16,195,${d.amountCents},Z,DEP-${d.refSuffix},,Payer EFT deposit ${d.refSuffix}/`);
+      const controlTotal = deposits.reduce((sum, d) => sum + d.amountCents, 0);
+      return [
+        '01,BANKID,CUSTID,260101,0800,1,,,2/',
+        `02,CUSTID,BANKID,1,${asOfDate},,USD,/`,
+        '03,1234567,USD/',
+        ...txnLines,
+        `49,${controlTotal},${txnLines.length + 2}/`,
+        `98,${controlTotal},1,${txnLines.length + 4}/`,
+        `99,${controlTotal},1,${txnLines.length + 6}/`,
+      ].join('\n');
+    }
+
+    it('imports a BAI2 statement and is idempotent on a re-import of the same file', async () => {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      const statement = buildBai2Statement([{ refSuffix: `IMPORT1A${runId}`, amountCents: 12345 }, { refSuffix: `IMPORT1B${runId}`, amountCents: 6789 }]);
+
+      const first = await withTenantContext(handle.db, ctxA.tenantId, (trx) => bankReconciliationService.importStatement(trx, ctxA, statement));
+      expect(first.imported).toBe(2);
+      expect(first.skipped).toBe(0);
+      expect(first.warnings).toEqual([]);
+
+      const second = await withTenantContext(handle.db, ctxA.tenantId, (trx) => bankReconciliationService.importStatement(trx, ctxA, statement));
+      expect(second.imported).toBe(0);
+      expect(second.skipped).toBe(2);
+    });
+
+    it('auto-matches a deposit to a remittance of the same amount posted within the matching window', async () => {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      // A unique-per-run cents amount (not a round number like 150/175/200) — this dev DB is shared
+      // and never reset between test runs, so common round amounts have accumulated dozens of
+      // historical remittances, which would make the "exactly one candidate" auto-match assertion
+      // below genuinely ambiguous. See the analogous fix in domains/query's search test.
+      const uniqueAmount = 300 + (Date.now() % 9900) / 100;
+      const claim = await acceptedClaim(handle, ctxA, uniqueAmount);
+      await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        remittanceService.post(trx, ctxA, claim.id, {
+          remittanceAdviceNumber: `RA-BANK-${Date.now()}`,
+          payerPaidAmount: uniqueAmount,
+          adjustmentAmount: 0,
+          patientResponsibilityAmount: 0,
+          denialReasonCode: null,
+          denialReasonText: null,
+          rawPayload: { source: 'synthetic-835' },
+        }),
+      );
+
+      const statement = buildBai2Statement([{ refSuffix: `AUTOMATCH1${runId}`, amountCents: Math.round(uniqueAmount * 100) }]);
+      await withTenantContext(handle.db, ctxA.tenantId, (trx) => bankReconciliationService.importStatement(trx, ctxA, statement));
+
+      const result = await withTenantContext(handle.db, ctxA.tenantId, (trx) => bankReconciliationService.autoMatch(trx, ctxA));
+      expect(result.matched).toBeGreaterThanOrEqual(1);
+
+      const unmatched = await withTenantContext(handle.db, ctxA.tenantId, (trx) => bankReconciliationService.listUnmatched(trx, ctxA));
+      expect(unmatched.some((d) => d.bankReferenceNumber === `DEP-AUTOMATCH1${runId}`)).toBe(false);
+    });
+
+    it('manually matches or ignores a deposit that auto-match could not resolve', async () => {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      const claim = await acceptedClaim(handle, ctxA, 250);
+      const remittance = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        remittanceService.post(trx, ctxA, claim.id, {
+          remittanceAdviceNumber: 'RA-BANK-2',
+          payerPaidAmount: 250,
+          adjustmentAmount: 0,
+          patientResponsibilityAmount: 0,
+          denialReasonCode: null,
+          denialReasonText: null,
+          rawPayload: { source: 'synthetic-835' },
+        }),
+      );
+
+      const statement = buildBai2Statement([
+        { refSuffix: `MANUAL1${runId}`, amountCents: 25000 },
+        { refSuffix: `IGNORE1${runId}`, amountCents: 999 },
+      ]);
+      await withTenantContext(handle.db, ctxA.tenantId, (trx) => bankReconciliationService.importStatement(trx, ctxA, statement));
+
+      const unmatchedBefore = await withTenantContext(handle.db, ctxA.tenantId, (trx) => bankReconciliationService.listUnmatched(trx, ctxA));
+      const manualDeposit = unmatchedBefore.find((d) => d.bankReferenceNumber === `DEP-MANUAL1${runId}`)!;
+      const ignoreDeposit = unmatchedBefore.find((d) => d.bankReferenceNumber === `DEP-IGNORE1${runId}`)!;
+
+      const matched = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        bankReconciliationService.matchManually(trx, ctxA, manualDeposit.id, remittance.id),
+      );
+      expect(matched.status).toBe('matched');
+      expect(matched.matchedRemittanceId).toBe(remittance.id);
+
+      await expect(
+        withTenantContext(handle.db, ctxA.tenantId, (trx) => bankReconciliationService.matchManually(trx, ctxA, manualDeposit.id, remittance.id)),
+      ).rejects.toBeInstanceOf(ConflictError);
+
+      const ignored = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        bankReconciliationService.ignore(trx, ctxA, ignoreDeposit.id, 'Bank fee reversal, not a payer deposit'),
+      );
+      expect(ignored.status).toBe('ignored');
+    });
+
+    it('RLS blocks a raw cross-tenant query on bank deposits', async () => {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      const statement = buildBai2Statement([{ refSuffix: `RLSCHECK1${runId}`, amountCents: 4321 }]);
+      await withTenantContext(handle.db, ctxA.tenantId, (trx) => bankReconciliationService.importStatement(trx, ctxA, statement));
+
+      const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
+      const rows = await withTenantContext(handle.db, ctxB.tenantId, (trx) =>
+        trx.selectFrom('bank_deposits').selectAll().where('bank_reference_number', '=', `DEP-RLSCHECK1${runId}`).execute(),
+      );
+      expect(rows).toHaveLength(0);
+    });
   });
 });
