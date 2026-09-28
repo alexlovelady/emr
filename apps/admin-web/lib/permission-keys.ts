@@ -10,4 +10,6 @@ export const PERMISSION_KEYS = {
   USER_MANAGE: 'user.manage',
   ROLE_MANAGE: 'role.manage',
   APPOINTMENT_MANAGE: 'appointment.manage',
+  BILLING_RULE_MANAGE: 'billing_rule.manage',
+  BANK_RECONCILIATION_MANAGE: 'bank_reconciliation.manage',
 } as const;

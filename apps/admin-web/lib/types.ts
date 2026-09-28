@@ -50,6 +50,41 @@ export interface ResourceRow {
   resourceType: string;
 }
 
+export type BillingRuleType = 'code_requires_diagnosis_prefix' | 'code_forbidden_for_sex' | 'code_max_units';
+
+export interface BillingRuleRow {
+  id: string;
+  ruleType: BillingRuleType;
+  description: string;
+  parameters: Record<string, unknown>;
+  status: 'active' | 'inactive';
+  createdAt: string;
+}
+
+export interface BankDepositRow {
+  id: string;
+  accountNumber: string;
+  bankReferenceNumber: string | null;
+  transactionDate: string;
+  amount: string;
+  typeCode: string;
+  description: string | null;
+  status: 'unmatched' | 'matched' | 'ignored';
+}
+
+export interface ImportBankStatementResult {
+  importBatchId: string;
+  imported: number;
+  skipped: number;
+  warnings: string[];
+}
+
+export interface AutoMatchResult {
+  matched: number;
+  ambiguous: number;
+  remaining: number;
+}
+
 export interface PractitionerRow {
   id: string;
   workforceIdentityId: string;
