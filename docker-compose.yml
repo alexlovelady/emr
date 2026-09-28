@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: ehr_owner_dev_password
       POSTGRES_DB: ehr
     ports:
-      - "5432:5432"
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

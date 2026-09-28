@@ -4,6 +4,8 @@ import { Pool } from 'pg';
 import { getConfig } from '@ehr/config';
 import type { DB } from '@ehr/db';
 import { DomainEventBus, OutboxRelay } from '@ehr/outbox';
+import { BulkExportRelay } from '@ehr/bulk-export';
+import { S3ObjectStorageGateway } from '@ehr/object-storage';
 import { startTracing, createLogger, getMetrics } from '@ehr/observability';
 
 /**
@@ -68,6 +70,22 @@ async function main(): Promise<void> {
   relay.start();
   logger.info({ pollIntervalMs: env.OUTBOX_RELAY_POLL_INTERVAL_MS }, 'outbox relay started');
 
+  const objectStorage = new S3ObjectStorageGateway({
+    endpoint: env.OBJECT_STORAGE_ENDPOINT,
+    bucket: env.OBJECT_STORAGE_BUCKET,
+    region: env.OBJECT_STORAGE_REGION,
+    accessKeyId: env.OBJECT_STORAGE_ACCESS_KEY_ID,
+    secretAccessKey: env.OBJECT_STORAGE_SECRET_ACCESS_KEY,
+    forcePathStyle: env.OBJECT_STORAGE_FORCE_PATH_STYLE,
+    presignTtlSeconds: env.OBJECT_STORAGE_PRESIGN_TTL_SECONDS,
+  });
+  const bulkExportRelay = new BulkExportRelay(db, objectStorage, {
+    pollIntervalMs: env.BULK_EXPORT_RELAY_POLL_INTERVAL_MS,
+    fhirBaseUrl: `http://localhost:${env.INTEROP_FHIR_PORT}/fhir/r4`,
+  });
+  bulkExportRelay.start();
+  logger.info({ pollIntervalMs: env.BULK_EXPORT_RELAY_POLL_INTERVAL_MS }, 'bulk export relay started');
+
   const server = createServer((req, res) => {
     if (req.url === '/healthz') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -83,6 +101,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, 'apps/worker shutting down');
     relay.stop();
+    bulkExportRelay.stop();
     server.close();
     await db.destroy();
     process.exit(0);

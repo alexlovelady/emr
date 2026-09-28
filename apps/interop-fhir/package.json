@@ -15,6 +15,7 @@
   "dependencies": {
     "@ehr/api-contracts": "workspace:*",
     "@ehr/auth-adapter": "workspace:*",
+    "@ehr/bulk-export": "workspace:*",
     "@ehr/clinical": "workspace:*",
     "@ehr/config": "workspace:*",
     "@ehr/db": "workspace:*",
@@ -22,6 +23,7 @@
     "@ehr/domain-common": "workspace:*",
     "@ehr/fhir-mapping": "workspace:*",
     "@ehr/medication": "workspace:*",
+    "@ehr/object-storage": "workspace:*",
     "@ehr/observability": "workspace:*",
     "@ehr/patient": "workspace:*",
     "@nestjs/common": "^12.1.0",

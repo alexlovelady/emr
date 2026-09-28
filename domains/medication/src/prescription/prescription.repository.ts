@@ -113,6 +113,14 @@ export class PrescriptionRepository {
     return rows.map(toRow);
   }
 
+  /** Every prescription in the tenant, not scoped to one patient — backs bulk FHIR `$export`. */
+  async listAll(trx: Executor, tenantId: string, filter: { since?: Date } = {}): Promise<PrescriptionRow[]> {
+    let query = trx.selectFrom('prescriptions').selectAll().where('tenant_id', '=', tenantId);
+    if (filter.since) query = query.where('updated_at', '>=', filter.since);
+    const rows = await query.orderBy('id', 'asc').execute();
+    return rows.map(toRow);
+  }
+
   async setStatus(trx: Executor, tenantId: string, id: string, status: string, updatedBy: string): Promise<PrescriptionRow> {
     const row = await trx
       .updateTable('prescriptions')

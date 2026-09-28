@@ -74,9 +74,10 @@ export class EncounterRepository {
     return row ? toRow(row) : null;
   }
 
-  async list(trx: Executor, tenantId: string, filter: { patientId?: string } = {}): Promise<EncounterRow[]> {
+  async list(trx: Executor, tenantId: string, filter: { patientId?: string; since?: Date } = {}): Promise<EncounterRow[]> {
     let query = trx.selectFrom('encounters').selectAll().where('tenant_id', '=', tenantId);
     if (filter.patientId) query = query.where('patient_id', '=', filter.patientId);
+    if (filter.since) query = query.where('updated_at', '>=', filter.since);
     const rows = await query.orderBy('started_at', 'desc').execute();
     return rows.map(toRow);
   }

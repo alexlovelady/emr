@@ -24,6 +24,14 @@ export function buildCapabilityStatement(fhirBaseUrl: string): Record<string, un
             },
           ],
         },
+        /** System-level bulk export (HL7 Bulk Data Access IG) — see `BulkExportController`. */
+        extension: [
+          {
+            url: 'http://hl7.org/fhir/uv/bulkdata/StructureDefinition/capabilities',
+            valueCode: 'system-export',
+          },
+        ],
+        operation: [{ name: 'export', definition: 'http://hl7.org/fhir/uv/bulkdata/OperationDefinition/export' }],
         resource: [
           {
             type: 'Patient',

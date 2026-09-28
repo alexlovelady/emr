@@ -1,0 +1,32 @@
+{
+  "name": "@ehr/bulk-export",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint src test",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "test:tenant-isolation": "vitest run --config vitest.tenant-isolation.config.ts"
+  },
+  "dependencies": {
+    "@ehr/clinical": "workspace:*",
+    "@ehr/db": "workspace:*",
+    "@ehr/documents": "workspace:*",
+    "@ehr/fhir-mapping": "workspace:*",
+    "@ehr/medication": "workspace:*",
+    "@ehr/object-storage": "workspace:*",
+    "@ehr/patient": "workspace:*",
+    "kysely": "^0.28.17"
+  },
+  "devDependencies": {
+    "@ehr/testing": "workspace:*",
+    "pg": "^8.13.1",
+    "@types/pg": "^8.11.10",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

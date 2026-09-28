@@ -92,6 +92,14 @@ export class ObservationRepository {
     const rows = await query.orderBy('effective_at', 'desc').execute();
     return rows.map(toRow);
   }
+
+  /** Every observation in the tenant, not scoped to one patient — backs bulk FHIR `$export`. */
+  async listAll(trx: Executor, tenantId: string, filter: { since?: Date } = {}): Promise<ObservationRow[]> {
+    let query = trx.selectFrom('observations').selectAll().where('tenant_id', '=', tenantId);
+    if (filter.since) query = query.where('updated_at', '>=', filter.since);
+    const rows = await query.orderBy('id', 'asc').execute();
+    return rows.map(toRow);
+  }
 }
 
 function toRow(dbRow: Selectable<DB['observations']>): ObservationRow {

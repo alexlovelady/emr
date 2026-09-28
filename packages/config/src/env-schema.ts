@@ -57,6 +57,9 @@ export const envSchema = z.object({
   // --- Outbox relay ---
   OUTBOX_RELAY_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(1000),
   OUTBOX_RELAY_BATCH_SIZE: z.coerce.number().int().positive().default(50),
+
+  // --- Bulk FHIR $export relay ---
+  BULK_EXPORT_RELAY_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
 });
 
 export type Env = z.infer<typeof envSchema>;

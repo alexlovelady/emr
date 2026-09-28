@@ -19,6 +19,9 @@ build/
 .dev/
 .dev-test/
 
+# personal machine-local docker port remaps etc. — never force these on other contributors
+docker-compose.override.yml
+
 # logs
 *.log
 npm-debug.log*

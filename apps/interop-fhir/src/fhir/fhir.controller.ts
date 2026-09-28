@@ -49,6 +49,34 @@ export class FhirController {
     return buildCapabilityStatement(this.fhirBaseUrl());
   }
 
+  /**
+   * SMART App Launch's discovery document, published relative to the FHIR base URL per spec.
+   * `authorization_endpoint` is intentionally omitted — no interactive authorize/launch flow is
+   * implemented yet (client-credentials only); update this alongside whichever controller adds it.
+   */
+  @Get('.well-known/smart-configuration')
+  smartConfiguration(): Record<string, unknown> {
+    const baseUrl = this.fhirBaseUrl();
+    return {
+      issuer: baseUrl,
+      token_endpoint: `${baseUrl}/token`,
+      token_endpoint_auth_methods_supported: ['client_secret_post'],
+      grant_types_supported: ['client_credentials'],
+      scopes_supported: [
+        'patient/Patient.read',
+        'patient/Observation.read',
+        'patient/Encounter.read',
+        'patient/Condition.read',
+        'patient/AllergyIntolerance.read',
+        'patient/MedicationRequest.read',
+        'patient/DocumentReference.read',
+        'system/*.read',
+      ],
+      response_types_supported: [],
+      capabilities: ['client-confidential-symmetric', 'permission-v2'],
+    };
+  }
+
   @Get('Patient/:id')
   @RequireScope('patient/Patient.read')
   async getPatient(@Param('id') id: string, @Req() req: FastifyRequest): Promise<Record<string, unknown>> {

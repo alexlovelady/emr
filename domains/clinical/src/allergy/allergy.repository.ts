@@ -80,6 +80,14 @@ export class AllergyRepository {
       .execute();
     return rows.map(toRow);
   }
+  /** Every allergy in the tenant, not scoped to one patient — backs bulk FHIR `$export`. */
+  async listAll(trx: Executor, tenantId: string, filter: { since?: Date } = {}): Promise<AllergyRow[]> {
+    let query = trx.selectFrom('allergies').selectAll().where('tenant_id', '=', tenantId);
+    if (filter.since) query = query.where('updated_at', '>=', filter.since);
+    const rows = await query.orderBy('id', 'asc').execute();
+    return rows.map(toRow);
+  }
+
   /** Portal-visible "active allergies" (`@ehr/portal`). */
   async listActiveByPatient(trx: Executor, tenantId: string, patientId: string): Promise<AllergyRow[]> {
     const rows = await trx

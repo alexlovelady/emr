@@ -94,13 +94,10 @@ export class PatientRepository {
     return row ? toRow(row) : null;
   }
 
-  async list(trx: Executor, tenantId: string): Promise<PatientRow[]> {
-    const rows = await trx
-      .selectFrom('patients')
-      .selectAll()
-      .where('tenant_id', '=', tenantId)
-      .orderBy('created_at', 'asc')
-      .execute();
+  async list(trx: Executor, tenantId: string, filter: { since?: Date } = {}): Promise<PatientRow[]> {
+    let query = trx.selectFrom('patients').selectAll().where('tenant_id', '=', tenantId);
+    if (filter.since) query = query.where('updated_at', '>=', filter.since);
+    const rows = await query.orderBy('created_at', 'asc').execute();
     return rows.map(toRow);
   }
 

@@ -63,9 +63,10 @@ export class DocumentRepository {
     return row ? toRow(row) : null;
   }
 
-  async list(trx: Executor, tenantId: string, filter: { patientId?: string } = {}): Promise<DocumentRow[]> {
+  async list(trx: Executor, tenantId: string, filter: { patientId?: string; since?: Date } = {}): Promise<DocumentRow[]> {
     let query = trx.selectFrom('documents').selectAll().where('tenant_id', '=', tenantId);
     if (filter.patientId) query = query.where('patient_id', '=', filter.patientId);
+    if (filter.since) query = query.where('updated_at', '>=', filter.since);
     const rows = await query.orderBy('created_at', 'desc').execute();
     return rows.map(toRow);
   }

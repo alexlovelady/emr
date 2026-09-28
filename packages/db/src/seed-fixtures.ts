@@ -23,6 +23,7 @@ export const DEV_SMART_CLIENT_SCOPES = [
   'patient/AllergyIntolerance.read',
   'patient/MedicationRequest.read',
   'patient/DocumentReference.read',
+  'system/*.read',
 ];
 
 export const SYSTEM_ROLE_KEYS = {

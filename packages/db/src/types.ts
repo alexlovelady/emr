@@ -475,6 +475,16 @@ export interface SmartClientsTable extends CommonColumnsTable {
   allowed_scopes: string[];
 }
 
+export interface BulkExportJobsTable extends CommonColumnsTable {
+  requested_by_client_id: string;
+  resource_types: string[] | null;
+  since: Timestamp | null;
+  output_files: ColumnType<Array<{ type: string; storageKey: string; count: number }> | null, string | null, string | null>;
+  error: string | null;
+  started_at: Timestamp | null;
+  completed_at: Timestamp | null;
+}
+
 export interface ChargesTable extends CommonColumnsTable {
   patient_id: string;
   encounter_id: string;
@@ -817,6 +827,7 @@ export interface DB {
   hl7_messages: Hl7MessagesTable;
   external_candidates: ExternalCandidatesTable;
   smart_clients: SmartClientsTable;
+  bulk_export_jobs: BulkExportJobsTable;
   charges: ChargesTable;
   billing_rules: BillingRulesTable;
   referrals: ReferralsTable;

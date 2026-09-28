@@ -12,8 +12,10 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@ehr/bulk-export": "workspace:*",
     "@ehr/config": "workspace:*",
     "@ehr/db": "workspace:*",
+    "@ehr/object-storage": "workspace:*",
     "@ehr/observability": "workspace:*",
     "@ehr/outbox": "workspace:*",
     "kysely": "^0.28.17",
