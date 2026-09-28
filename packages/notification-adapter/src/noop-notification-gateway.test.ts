@@ -13,4 +13,11 @@ describe('NoopNotificationGateway', () => {
     const gateway = new NoopNotificationGateway();
     await expect(gateway.sendSms({ to: '+15555550100', body: 'You have a new secure message.' })).resolves.toBeUndefined();
   });
+
+  it('resolves makeCall without throwing', async () => {
+    const gateway = new NoopNotificationGateway();
+    await expect(
+      gateway.makeCall({ to: '+15555550100', message: 'This is a reminder about your appointment tomorrow at 2 PM.' }),
+    ).resolves.toBeUndefined();
+  });
 });
