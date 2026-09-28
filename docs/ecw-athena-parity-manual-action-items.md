@@ -40,9 +40,13 @@ implementation is an engineering task *after* the contract exists, not before. N
 - [ ] **EPCS identity-proofing + 2FA vendor** — required by DEA rule before controlled-substance
       e-prescribing can be enabled at all (e.g. Surescripts' own EPCS identity-proofing flow, or a
       third-party like Experian Health / LexisNexis for identity proofing).
-- [ ] **SMS/email delivery** — e.g. Twilio, SendGrid/Postmark — needed before `NoopNotificationGateway`
-      can send real appointment reminders/recalls. Low effort to contract, but still a real account +
-      billing relationship + compliance review (texts touching PHI need a BAA-covered vendor).
+- [ ] **Twilio (covers SMS + voice calls + email)** — Twilio owns SendGrid (acquired 2019), so this
+      is one vendor relationship / one BAA / one billing account for SMS, voice, and email, not
+      three separate contracts. Needed before `NoopNotificationGateway` can send real appointment
+      reminders/recalls. Low effort to contract, but still a real account + compliance review
+      (touching PHI needs the BAA-covered tier). Note: voice/call sending has no interface in the
+      codebase yet (`NotificationGateway` only has `sendEmail`/`sendSms`) — a real engineering
+      addition, not just a vendor swap, if automated reminder calls are wanted.
 - [ ] **Payment processor** — e.g. Stripe, a healthcare-specific processor (InstaMed, Rectangle
       Health) — needed before `NoopPaymentGateway` can process a real card. Healthcare-specific
       processors often bundle patient statement/portal-pay features athenahealth also offers.
