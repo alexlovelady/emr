@@ -3,6 +3,8 @@ import type { Kysely, Transaction } from 'kysely';
 import type { DB } from '@ehr/db';
 import { ConflictError, NotFoundError, type RequestContext } from '@ehr/domain-common';
 import { buildOutboxInsert } from '@ehr/outbox';
+import type { VideoVisitGateway } from '@ehr/video-adapter';
+import { NoopVideoVisitGateway } from '@ehr/video-adapter';
 import { ResourceRepository } from '../resource/resource.repository.js';
 import type { CreateAppointmentInput, CreateAppointmentSeriesInput, RecurrenceInput, RescheduleAppointmentInput } from './appointment.dto.js';
 import { AppointmentRepository, type AppointmentRow } from './appointment.repository.js';
@@ -29,6 +31,7 @@ export class AppointmentService {
   constructor(
     private readonly repo: AppointmentRepository = new AppointmentRepository(),
     private readonly resourceRepo: ResourceRepository = new ResourceRepository(),
+    private readonly videoGateway: VideoVisitGateway = new NoopVideoVisitGateway(),
   ) {}
 
   async create(trx: Executor, ctx: RequestContext, input: CreateAppointmentInput): Promise<AppointmentRow> {
@@ -101,7 +104,7 @@ export class AppointmentService {
     }
 
     const actorId = ctx.actor?.id ?? null;
-    const appointment = await this.repo.create(trx, {
+    let appointment = await this.repo.create(trx, {
       tenantId: ctx.tenantId,
       patientId: input.patientId,
       locationId: input.locationId,
@@ -110,11 +113,17 @@ export class AppointmentService {
       scheduledStart: input.scheduledStart,
       scheduledEnd: input.scheduledEnd,
       createdBy: actorId ?? ctx.tenantId,
+      visitType: input.visitType,
       ...(series ? { seriesId: series.seriesId, recurrenceRule: series.recurrenceRule } : {}),
     });
 
     if (resourceIds.length > 0) {
       await this.repo.assignResources(trx, ctx.tenantId, appointment.id, resourceIds);
+    }
+
+    if (appointment.visitType === 'telehealth') {
+      const videoVisit = await this.videoGateway.createVisit({ appointmentId: appointment.id });
+      appointment = await this.repo.attachVideoVisit(trx, ctx.tenantId, appointment.id, videoVisit);
     }
 
     await this.emit(trx, ctx, appointment, 'appointment.booked.v1', 1, {

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { CalendarDays, Stethoscope } from 'lucide-react';
+import { CalendarDays, Stethoscope, Video } from 'lucide-react';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/chart/empty-state';
@@ -57,6 +57,16 @@ export function TodayScheduleTable({ appointments, patientsById }: { appointment
                 <span className="flex items-center gap-1.5">
                   <Stethoscope className="h-3.5 w-3.5" /> {appt.appointmentType.replace(/_/g, ' ')}
                 </span>
+                {appt.visitType === 'telehealth' && appt.videoJoinUrlPractitioner && (
+                  <a
+                    href={appt.videoJoinUrlPractitioner}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-0.5 flex items-center gap-1.5 text-xs text-primary hover:underline"
+                  >
+                    <Video className="h-3 w-3" /> Join video visit
+                  </a>
+                )}
               </TableCell>
               {/* GET /practitioners requires PRACTITIONER_MANAGE — deferred, see README known trims */}
               <TableCell className="font-mono text-xs text-muted-foreground">{appt.practitionerId.slice(0, 8)}…</TableCell>

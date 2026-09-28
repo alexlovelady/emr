@@ -53,6 +53,7 @@
     "@ehr/tasks": "workspace:*",
     "@ehr/tenant": "workspace:*",
     "@ehr/terminology": "workspace:*",
+    "@ehr/video-adapter": "workspace:*",
     "@ehr/workforce": "workspace:*",
     "@nestjs/common": "^12.1.0",
     "@nestjs/core": "^12.1.0",

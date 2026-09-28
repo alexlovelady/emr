@@ -122,6 +122,11 @@ export function NewAppointmentDialog({
           )}
 
           <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="telehealth" className="h-4 w-4" />
+            Telehealth visit (generates a video join link)
+          </label>
+
+          <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" name="recurring" checked={recurring} onChange={(e) => setRecurring(e.target.checked)} className="h-4 w-4" />
             Book as a recurring series
           </label>

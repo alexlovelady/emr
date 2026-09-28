@@ -1,10 +1,11 @@
-import { Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Post, Query, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { getCurrentTransaction } from '@ehr/db';
 import { ForbiddenError, type RequestContext } from '@ehr/domain-common';
 import { Audited } from '@ehr/audit';
 import { PERMISSION_KEYS, RequirePermission } from '@ehr/authz';
 import { ZodValidationPipe } from '@ehr/api-contracts';
+import type { VideoVisitGateway } from '@ehr/video-adapter';
 import {
   CancelAppointmentSchema,
   CreateAppointmentSchema,
@@ -18,10 +19,15 @@ import {
   type RescheduleAppointmentInput,
 } from './appointment.dto.js';
 import { AppointmentService } from './appointment.service.js';
+import { VIDEO_VISIT_GATEWAY } from '../video-visit-gateway.token.js';
 
 @Controller('api/v1/appointments')
 export class AppointmentController {
-  constructor(private readonly service: AppointmentService) {}
+  private readonly service: AppointmentService;
+
+  constructor(@Inject(VIDEO_VISIT_GATEWAY) videoGateway: VideoVisitGateway) {
+    this.service = new AppointmentService(undefined, undefined, videoGateway);
+  }
 
   @Post()
   @RequirePermission(PERMISSION_KEYS.APPOINTMENT_MANAGE)

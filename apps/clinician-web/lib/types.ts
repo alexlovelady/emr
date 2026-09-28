@@ -163,6 +163,8 @@ export interface Appointment {
   scheduledStart: string;
   scheduledEnd: string;
   seriesId: string | null;
+  visitType: 'in_person' | 'telehealth';
+  videoJoinUrlPractitioner: string | null;
   status: string;
 }
 

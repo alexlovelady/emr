@@ -40,6 +40,8 @@ export interface Appointment {
   appointmentType: string;
   scheduledStart: string;
   scheduledEnd: string;
+  visitType: 'in_person' | 'telehealth';
+  videoJoinUrlPatient: string | null;
   status: string;
 }
 

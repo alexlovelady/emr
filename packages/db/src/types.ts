@@ -325,6 +325,10 @@ export interface AppointmentsTable extends CommonColumnsTable {
   series_id: string | null;
   recurrence_rule: ColumnType<Record<string, unknown> | null, string | null, string | null>;
   waitlisted_at: Timestamp | null;
+  visit_type: Generated<string>;
+  video_provider_visit_id: string | null;
+  video_join_url_practitioner: string | null;
+  video_join_url_patient: string | null;
 }
 
 export interface ResourcesTable extends CommonColumnsTable {

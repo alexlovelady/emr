@@ -18,6 +18,10 @@ export interface AppointmentRow {
   seriesId: string | null;
   recurrenceRule: Record<string, unknown> | null;
   waitlistedAt: Date | null;
+  visitType: string;
+  videoProviderVisitId: string | null;
+  videoJoinUrlPractitioner: string | null;
+  videoJoinUrlPatient: string | null;
   status: string;
   createdAt: Date;
   updatedAt: Date;
@@ -45,6 +49,7 @@ export class AppointmentRepository {
       seriesId?: string;
       recurrenceRule?: Record<string, unknown>;
       status?: string;
+      visitType?: string | undefined;
     },
   ): Promise<AppointmentRow> {
     const row = await trx
@@ -60,9 +65,32 @@ export class AppointmentRepository {
         status: input.status ?? 'scheduled',
         series_id: input.seriesId ?? null,
         recurrence_rule: input.recurrenceRule ? JSON.stringify(input.recurrenceRule) : null,
+        visit_type: input.visitType ?? 'in_person',
         created_by: input.createdBy,
         updated_by: input.createdBy,
       })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return toRow(row);
+  }
+
+  /** Populates the video-visit fields once a `VideoVisitGateway` has minted join links — only ever
+   * called right after `create()` for a `telehealth` booking, never patched by a client directly. */
+  async attachVideoVisit(
+    trx: Executor,
+    tenantId: string,
+    id: string,
+    videoVisit: { providerVisitId: string; practitionerJoinUrl: string; patientJoinUrl: string },
+  ): Promise<AppointmentRow> {
+    const row = await trx
+      .updateTable('appointments')
+      .set({
+        video_provider_visit_id: videoVisit.providerVisitId,
+        video_join_url_practitioner: videoVisit.practitionerJoinUrl,
+        video_join_url_patient: videoVisit.patientJoinUrl,
+      })
+      .where('tenant_id', '=', tenantId)
+      .where('id', '=', id)
       .returningAll()
       .executeTakeFirstOrThrow();
     return toRow(row);
@@ -243,6 +271,10 @@ function toRow(dbRow: Selectable<DB['appointments']>): AppointmentRow {
     seriesId: dbRow.series_id,
     recurrenceRule: dbRow.recurrence_rule,
     waitlistedAt: dbRow.waitlisted_at,
+    visitType: dbRow.visit_type,
+    videoProviderVisitId: dbRow.video_provider_visit_id,
+    videoJoinUrlPractitioner: dbRow.video_join_url_practitioner,
+    videoJoinUrlPatient: dbRow.video_join_url_patient,
     status: dbRow.status,
     createdAt: dbRow.created_at,
     updatedAt: dbRow.updated_at,

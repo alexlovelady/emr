@@ -20,6 +20,7 @@
     "@ehr/domain-common": "workspace:*",
     "@ehr/outbox": "workspace:*",
     "@ehr/tenant": "workspace:*",
+    "@ehr/video-adapter": "workspace:*",
     "@nestjs/common": "^12.1.0",
     "kysely": "^0.28.17",
     "zod": "^3.24.1"

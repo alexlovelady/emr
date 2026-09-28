@@ -245,4 +245,33 @@ describe('tenant isolation — appointments', () => {
     );
     expect(checkedIn.status).toBe('checked_in');
   });
+
+  it('an in_person booking (the default) never gets video join links', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const appt = await withTenantContext(handle.db, ctxA.tenantId, (trx) => appointmentService.getById(trx, ctxA, tenantAAppointmentId));
+    expect(appt.visitType).toBe('in_person');
+    expect(appt.videoJoinUrlPractitioner).toBeNull();
+    expect(appt.videoJoinUrlPatient).toBeNull();
+  });
+
+  it('a telehealth booking (Tier 2 platform gap) gets real join links from the video gateway', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const start = new Date(Date.now() + 50 * 3600_000);
+    const appointment = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      appointmentService.create(trx, ctxA, {
+        patientId: tenantAPatientId,
+        locationId: handle.seed.tenantA.locationId,
+        practitionerId: tenantAPractitionerId,
+        appointmentType: 'telehealth_visit',
+        scheduledStart: start,
+        scheduledEnd: new Date(start.getTime() + 1800_000),
+        visitType: 'telehealth',
+      }),
+    );
+    expect(appointment.visitType).toBe('telehealth');
+    expect(appointment.videoProviderVisitId).toBe(appointment.id);
+    expect(appointment.videoJoinUrlPractitioner).toContain(appointment.id);
+    expect(appointment.videoJoinUrlPatient).toContain(appointment.id);
+    expect(appointment.videoJoinUrlPractitioner).not.toBe(appointment.videoJoinUrlPatient);
+  });
 });

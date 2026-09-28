@@ -35,12 +35,14 @@ export class PortalChartService {
 
   async listAppointments(trx: Executor, ctx: RequestContext, patientId: string): Promise<AppointmentRow[]> {
     await this.assertAccess(trx, ctx, patientId);
-    return this.appointmentService.list(trx, ctx, { patientId });
+    const appointments = await this.appointmentService.list(trx, ctx, { patientId });
+    return appointments.map(stripPractitionerJoinUrl);
   }
 
   async bookAppointment(trx: Executor, ctx: RequestContext, patientId: string, input: PortalBookAppointmentInput): Promise<AppointmentRow> {
     await this.assertAccess(trx, ctx, patientId);
-    return this.appointmentService.create(trx, ctx, { patientId, ...input });
+    const appointment = await this.appointmentService.create(trx, ctx, { patientId, ...input });
+    return stripPractitionerJoinUrl(appointment);
   }
 
   /** Only ever cancels an appointment that both (a) the account has consent for and (b) actually
@@ -50,7 +52,8 @@ export class PortalChartService {
     await this.assertAccess(trx, ctx, patientId);
     const appointment = await this.appointmentService.getById(trx, ctx, appointmentId);
     if (appointment.patientId !== patientId) throw new NotFoundError('Appointment not found', { appointmentId });
-    return this.appointmentService.cancel(trx, ctx, appointmentId, reason);
+    const cancelled = await this.appointmentService.cancel(trx, ctx, appointmentId, reason);
+    return stripPractitionerJoinUrl(cancelled);
   }
 
   async listResults(trx: Executor, ctx: RequestContext, patientId: string): Promise<DiagnosticReportRow[]> {
@@ -97,4 +100,9 @@ export class PortalChartService {
     }
     await this.consentService.assertAccess(trx, ctx.tenantId, ctx.actor.id, patientId);
   }
+}
+
+/** The host-role video link is staff-only — a patient only ever needs their own participant link. */
+function stripPractitionerJoinUrl(appointment: AppointmentRow): AppointmentRow {
+  return { ...appointment, videoJoinUrlPractitioner: null };
 }

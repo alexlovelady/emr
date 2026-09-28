@@ -12,6 +12,8 @@ export const CreateAppointmentSchema = z.object({
   /** Explicit escape hatch for a practice that intentionally double-books — bypasses the
    * practitioner/resource overlap check instead of silently allowing it by default. */
   override: z.boolean().optional(),
+  /** `telehealth` mints a video visit (join links) via the configured `VideoVisitGateway`. */
+  visitType: z.enum(['in_person', 'telehealth']).optional(),
 });
 export type CreateAppointmentInput = z.infer<typeof CreateAppointmentSchema>;
 

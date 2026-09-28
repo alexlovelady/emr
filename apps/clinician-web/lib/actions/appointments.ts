@@ -26,6 +26,7 @@ export async function createAppointment(_prevState: ActionResult<Appointment> | 
           scheduledEnd: new Date(String(formData.get('scheduledEnd') ?? '')).toISOString(),
           resourceIds: parseResourceIds(formData),
           override: formData.get('override') === 'on',
+          visitType: formData.get('telehealth') === 'on' ? 'telehealth' : 'in_person',
           recurrence: {
             frequency: String(formData.get('recurrenceFrequency') ?? 'weekly'),
             count: Number(formData.get('recurrenceCount') ?? 2),
@@ -53,6 +54,7 @@ export async function createAppointment(_prevState: ActionResult<Appointment> | 
         scheduledEnd: new Date(String(formData.get('scheduledEnd') ?? '')).toISOString(),
         resourceIds: parseResourceIds(formData),
         override: formData.get('override') === 'on',
+        visitType: formData.get('telehealth') === 'on' ? 'telehealth' : 'in_person',
       },
     }),
   );
