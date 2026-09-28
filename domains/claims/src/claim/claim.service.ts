@@ -11,6 +11,7 @@ import type { CreateClaimInput } from './claim.dto.js';
 import { ClaimRepository, type ClaimRow } from './claim.repository.js';
 import { ClaimVersionRepository, type ClaimVersionRow } from './claim-version.repository.js';
 import { DenialRepository, type DenialRow } from '../denial/denial.repository.js';
+import { AppealRepository, type AppealRow } from '../appeal/appeal.repository.js';
 import { scrubClaim } from './scrub-claim.js';
 
 type Executor = Kysely<DB> | Transaction<DB>;
@@ -21,6 +22,7 @@ export interface ClaimTimeline {
   claim: ClaimRow;
   versions: ClaimVersionRow[];
   denials: DenialRow[];
+  appeals: AppealRow[];
 }
 
 /**
@@ -36,6 +38,7 @@ export class ClaimService {
     private readonly repo: ClaimRepository = new ClaimRepository(),
     private readonly versionRepo: ClaimVersionRepository = new ClaimVersionRepository(),
     private readonly denialRepo: DenialRepository = new DenialRepository(),
+    private readonly appealRepo: AppealRepository = new AppealRepository(),
     private readonly chargeRepo: ChargeRepository = new ChargeRepository(),
     private readonly encounterRepo: EncounterRepository = new EncounterRepository(),
     private readonly coverageRepo: CoverageRepository = new CoverageRepository(),
@@ -242,11 +245,12 @@ export class ClaimService {
 
   async timeline(trx: Executor, ctx: RequestContext, id: string): Promise<ClaimTimeline> {
     const claim = await this.getById(trx, ctx, id);
-    const [versions, denials] = await Promise.all([
+    const [versions, denials, appeals] = await Promise.all([
       this.versionRepo.listByClaim(trx, ctx.tenantId, id),
       this.denialRepo.listByClaim(trx, ctx.tenantId, id),
+      this.appealRepo.listByClaim(trx, ctx.tenantId, id),
     ]);
-    return { claim, versions, denials };
+    return { claim, versions, denials, appeals };
   }
 
   private async emit(trx: Executor, ctx: RequestContext, claim: ClaimRow, eventType: string, data: Record<string, unknown>): Promise<void> {
