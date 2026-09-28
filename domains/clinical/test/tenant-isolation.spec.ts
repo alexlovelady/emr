@@ -205,7 +205,7 @@ describe('tenant isolation — clinical', () => {
     const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
     const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
 
-    const problem = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+    const { problem } = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
       problemService.create(trx, ctxA, tenantAPatientId, { codeSystem: 'ICD-10', code: 'I10', displayName: 'Essential hypertension' }),
     );
     const allergy = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
@@ -231,7 +231,7 @@ describe('tenant isolation — clinical', () => {
     const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
     const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
 
-    const existingProblem = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+    const { problem: existingProblem } = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
       problemService.create(trx, ctxA, tenantAPatientId, { codeSystem: 'ICD-10', code: 'E11.9', displayName: 'Type 2 diabetes' }),
     );
 

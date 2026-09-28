@@ -3,6 +3,7 @@ import type { DB } from '@ehr/db';
 import { NotFoundError, type RequestContext } from '@ehr/domain-common';
 import { buildOutboxInsert } from '@ehr/outbox';
 import { PatientRepository } from '@ehr/patient';
+import { TerminologyService, type CodeValidation } from '@ehr/terminology';
 import type { CreateProblemInput } from './problem.dto.js';
 import { ProblemRepository, type ProblemRow } from './problem.repository.js';
 
@@ -12,11 +13,25 @@ export class ProblemService {
   constructor(
     private readonly repo: ProblemRepository = new ProblemRepository(),
     private readonly patientRepo: PatientRepository = new PatientRepository(),
+    private readonly terminology: TerminologyService = new TerminologyService(),
   ) {}
 
-  async create(trx: Executor, ctx: RequestContext, patientId: string, input: CreateProblemInput): Promise<ProblemRow> {
+  /**
+   * Phase M: `codeValidation` is advisory, per the plan's "warn, don't hard-block" — an
+   * unrecognized code never blocks recording the problem, and `codeValidation.checked` lets a
+   * caller tell "this code doesn't exist" apart from "ICD-10 hasn't been loaded at all" (see
+   * `@ehr/terminology`'s own doc comment).
+   */
+  async create(
+    trx: Executor,
+    ctx: RequestContext,
+    patientId: string,
+    input: CreateProblemInput,
+  ): Promise<{ problem: ProblemRow; codeValidation: CodeValidation }> {
     const patient = await this.patientRepo.findById(trx, ctx.tenantId, patientId);
     if (!patient) throw new NotFoundError('Patient not found', { patientId });
+
+    const codeValidation = await this.terminology.validateCode(trx, input.codeSystem, input.code);
 
     const actorId = ctx.actor?.id ?? null;
     const problem = await this.repo.create(trx, {
@@ -48,7 +63,7 @@ export class ProblemService {
       )
       .execute();
 
-    return problem;
+    return { problem, codeValidation };
   }
 
   async getById(trx: Executor, ctx: RequestContext, id: string): Promise<ProblemRow> {

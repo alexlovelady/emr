@@ -38,6 +38,9 @@ coverage/
 # generated (still committed selectively — see docs/api/openapi.json)
 *.generated.ts
 
+# downloaded reference data (RxNorm/ICD-10-CM) — see packages/terminology/README.md
+packages/terminology/data/
+
 # local object storage / db volumes
 .minio/
 .pgdata/

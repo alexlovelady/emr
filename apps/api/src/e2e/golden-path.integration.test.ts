@@ -257,7 +257,7 @@ describe('golden path — pilot-readiness safety cases', () => {
         ),
       ).rejects.toBeInstanceOf(ValidationError);
 
-      const problem = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      const { problem } = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
         problemService.create(trx, ctxA, encounterPatientId, { codeSystem: 'icd10', code: 'I10', displayName: 'Essential hypertension' }),
       );
 

@@ -684,6 +684,20 @@ export interface AuditEventsTable {
   created_at: GeneratedTimestamp;
 }
 
+/**
+ * Global system catalog — no tenant_id. Seeded once via `packages/terminology`'s loader from the
+ * downloaded RxNorm/ICD-10-CM flat files, same posture as `RolesTable` above. `search_vector` is a
+ * generated column (see migration 0037), not part of this interface — Kysely never writes to it.
+ */
+export interface TerminologyCodesTable {
+  id: Generated<string>;
+  system: string;
+  code: string;
+  display: string;
+  billable: boolean | null;
+  created_at: GeneratedTimestamp;
+}
+
 export interface DB {
   tenants: TenantsTable;
   organizations: OrganizationsTable;
@@ -744,4 +758,5 @@ export interface DB {
   idempotency_keys: IdempotencyKeysTable;
   outbox_events: OutboxEventsTable;
   audit_events: AuditEventsTable;
+  terminology_codes: TerminologyCodesTable;
 }

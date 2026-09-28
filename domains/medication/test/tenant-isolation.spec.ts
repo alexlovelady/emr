@@ -91,7 +91,7 @@ describe('tenant isolation — medications', () => {
       return encounter.id;
     });
 
-    const medication = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+    const { medication } = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
       medicationService.create(trx, ctxA, tenantAPatientId, {
         medicationName: 'Lisinopril',
         dose: '10mg',

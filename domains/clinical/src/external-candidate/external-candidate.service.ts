@@ -112,7 +112,7 @@ export class ExternalCandidateService {
   private async createResourceFromCandidate(trx: Executor, ctx: RequestContext, candidate: ExternalCandidateRow): Promise<string> {
     const payload = candidate.payload as Record<string, unknown>;
     if (candidate.resourceType === 'problem') {
-      const problem = await this.problemService.create(trx, ctx, candidate.patientId, {
+      const { problem } = await this.problemService.create(trx, ctx, candidate.patientId, {
         codeSystem: payload.codeSystem as string,
         code: payload.code as string,
         displayName: payload.displayName as string,
@@ -131,7 +131,7 @@ export class ExternalCandidateService {
       });
       return allergy.id;
     }
-    const medication = await this.medicationService.create(trx, ctx, candidate.patientId, {
+    const { medication } = await this.medicationService.create(trx, ctx, candidate.patientId, {
       medicationName: payload.medicationName as string,
       rxnormCode: (payload.rxnormCode as string | null | undefined) ?? null,
       dose: (payload.dose as string | null | undefined) ?? null,

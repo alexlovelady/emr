@@ -51,6 +51,7 @@
     "@ehr/scheduling": "workspace:*",
     "@ehr/tasks": "workspace:*",
     "@ehr/tenant": "workspace:*",
+    "@ehr/terminology": "workspace:*",
     "@ehr/workforce": "workspace:*",
     "@nestjs/common": "^12.1.0",
     "@nestjs/core": "^12.1.0",

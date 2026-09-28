@@ -3,6 +3,7 @@ import type { DB } from '@ehr/db';
 import { ConflictError, NotFoundError, type RequestContext } from '@ehr/domain-common';
 import { buildOutboxInsert } from '@ehr/outbox';
 import { PatientRepository } from '@ehr/patient';
+import { TerminologyService, RXNORM_SYSTEM, type CodeValidation } from '@ehr/terminology';
 import type { CreateMedicationInput } from './medication.dto.js';
 import { MedicationRepository, type MedicationRow } from './medication.repository.js';
 
@@ -14,11 +15,25 @@ export class MedicationService {
   constructor(
     private readonly repo: MedicationRepository = new MedicationRepository(),
     private readonly patientRepo: PatientRepository = new PatientRepository(),
+    private readonly terminology: TerminologyService = new TerminologyService(),
   ) {}
 
-  async create(trx: Executor, ctx: RequestContext, patientId: string, input: CreateMedicationInput): Promise<MedicationRow> {
+  /**
+   * Phase M: `codeValidation` is null when no `rxnormCode` was given at all (patient-reported/
+   * external-import medications often have none) — distinct from `{valid: false, checked: ...}`,
+   * which means a code WAS given and didn't match. "Warn, don't hard-block" per the plan: an
+   * unrecognized code never blocks recording the medication.
+   */
+  async create(
+    trx: Executor,
+    ctx: RequestContext,
+    patientId: string,
+    input: CreateMedicationInput,
+  ): Promise<{ medication: MedicationRow; codeValidation: CodeValidation | null }> {
     const patient = await this.patientRepo.findById(trx, ctx.tenantId, patientId);
     if (!patient) throw new NotFoundError('Patient not found', { patientId });
+
+    const codeValidation = input.rxnormCode ? await this.terminology.validateCode(trx, RXNORM_SYSTEM, input.rxnormCode) : null;
 
     const actorId = ctx.actor?.id ?? null;
     const medication = await this.repo.create(trx, {
@@ -54,7 +69,7 @@ export class MedicationService {
       )
       .execute();
 
-    return medication;
+    return { medication, codeValidation };
   }
 
   async getById(trx: Executor, ctx: RequestContext, id: string): Promise<MedicationRow> {

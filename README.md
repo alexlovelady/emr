@@ -650,6 +650,51 @@ and [`docs/adr/0006-clinician-web-bff-auth.md`](docs/adr/0006-clinician-web-bff-
   unknown email, an unknown tenant, a malformed refresh token, and a bad portal login now all
   return 401 with a real RFC7807 body instead of 500.
 
+### eCW/athena parity roadmap — Phase M (terminology service v1)
+
+**Partially built — blocked on an external download, not code.** Per the plan, this phase needs two
+downloaded government/NLM files that require an account/license click-through, not engineering
+work: the free RxNorm full release (NLM, requires a free UMLS Terminology Services account) and the
+free CMS ICD-10-CM code set. The ICD-10-CM file was obtained and loaded this pass; RxNorm's UMLS
+download service was intermittently unavailable and is still pending — flagged here rather than
+faked or silently skipped.
+
+- **New `packages/terminology`**: `TerminologyService.validateCode(trx, system, code)` and
+  `.searchConcepts(trx, system, query)` over a new global `terminology_codes` table (migration
+  `0037_terminology_codes.ts` — no tenant_id/RLS, same posture as the `roles` catalog), with a
+  generated `tsvector`/GIN index for real full-text search, same pattern as `search_documents`.
+  `validateCode`'s result carries a `checked` flag distinguishing "this code doesn't exist" from
+  "this code system hasn't been loaded yet" — the plan's "warn, don't hard-block" requirement means
+  those two cases must never look identical to a caller.
+- **Loaders for both file formats**, run via `pnpm --filter @ehr/terminology run seed`: ICD-10-CM's
+  fixed-width `icd10cm_order_<year>.txt` (loads both billable codes and non-billable category
+  headers, distinguished by a `billable` column) and RxNorm's pipe-delimited `RXNCONSO.RRF`
+  (filtered to `SAB=RXNORM`, `ISPREF=Y`, English, non-suppressed, and the 4 prescribable term types
+  — SCD/SBD/GPCK/BPCK — one preferred name per concept, not every synonym). **ICD-10-CM is loaded
+  and live**: 98,403 real codes from the FY2027 release. **RxNorm's loader is implemented and unit
+  tested against a hand-built fixture in the documented RRF format, but has never run against the
+  real multi-million-row file** — `validateCode('RxNorm', ...)` correctly reports `checked: false`
+  for every RxNorm code until that file is loaded and the seed script re-run.
+- **`GET /api/v1/terminology/search`/`/validate`**, gated on the same `PATIENT_READ_CLINICAL`
+  permission `domains/query`'s global search endpoint uses (reference data, not patient data, but
+  every real caller already needs that permission to be mid-way through adding a problem or
+  prescribing a medication).
+- **Wired as an advisory check, not a blocking one**, per the plan: `ProblemService.create()` and
+  `MedicationService.create()` (and therefore `PrescriptionService.create()`, which creates the
+  underlying medication) now call `validateCode` and return the result alongside the created
+  resource — `{problem, codeValidation}` / `{medication, codeValidation}` — without ever rejecting
+  the write. Blast radius: 3 call sites across `domains/clinical`/`domains/medication` updated to
+  destructure the new shape (same pattern as Phase K's `PrescriptionService` return-shape change).
+  **Frontend typeahead upgrade (the add-problem/prescribe dialogs) is not yet done this pass** — the
+  backend is real and curl-verified end to end (a real code validates, a bogus code doesn't but
+  still saves, an RxNorm code correctly reports `checked: false`), but the UI still uses raw text
+  code entry; a candidate for a follow-up once RxNorm data exists to make the medication side
+  actually useful.
+- **Real bug found and fixed while regenerating `docs/api/openapi.json`** for the new endpoints:
+  the spec had been stale since Phase K — `Allergy.codeSystem`/`.code` (added by migration `0036`)
+  were never reflected because nothing had re-run the generator since. Fixed as a side effect, not
+  a separate pass.
+
 ## Verification status
 
 Docker Desktop's backend would not start in the environment this was built in (its WSL2

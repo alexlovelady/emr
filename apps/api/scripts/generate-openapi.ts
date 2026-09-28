@@ -388,6 +388,8 @@ const document = {
     '/governed-queries/{name}/execute': post('Execute a governed query by name', 'Query'),
     '/search': get('Full-text search across indexed resources (tenant/sensitivity-scoped)', 'Query'),
     '/search/reindex': post('Reindex patients, documents, and claims for full-text search', 'Query'),
+    '/terminology/search': get('Typeahead search over a loaded terminology system (ICD-10, RxNorm)', 'Terminology'),
+    '/terminology/validate': get('Check whether a code exists in a loaded terminology system', 'Terminology'),
     '/patients/{patientId}/proxy-grants': {
       ...post('Grant a portal account proxy access to a patient', 'Consent', CreateProxyGrantSchema, 'CreateProxyGrant'),
       ...get('List a patient’s proxy grants', 'Consent', ['patientId']),

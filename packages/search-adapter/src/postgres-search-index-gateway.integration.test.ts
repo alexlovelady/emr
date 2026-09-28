@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { withTenantContext } from '@ehr/db';
 import { setupTestDb, requestContextFor, type TestDbHandle } from '@ehr/testing';
 import { PostgresSearchIndexGateway } from './postgres-search-index-gateway.js';
@@ -12,9 +12,21 @@ import { PostgresSearchIndexGateway } from './postgres-search-index-gateway.js';
 describe('PostgresSearchIndexGateway', () => {
   let handle: TestDbHandle;
   const gateway = new PostgresSearchIndexGateway();
+  // `search()` defaults to `limit 25` — every test here reuses the same fixed marker strings
+  // ("Jane Doe", "Qwerty", ...), so without cleanup, re-running this suite against the same
+  // persistent dev DB accumulates same-titled rows across runs until a fresh insert can rank
+  // outside the top 25 and the test starts failing nondeterministically. Track every resourceId
+  // this file creates and delete it afterward so the suite never accumulates.
+  const createdResourceIds: { tenantId: string; resourceType: string; resourceId: string }[] = [];
 
   beforeAll(async () => {
     handle = await setupTestDb();
+  });
+
+  afterEach(async () => {
+    for (const { tenantId, resourceType, resourceId } of createdResourceIds.splice(0)) {
+      await withTenantContext(handle.db, tenantId, (trx) => gateway.deleteDocument(trx, { tenantId, resourceType, resourceId }));
+    }
   });
 
   afterAll(() => handle.close());
@@ -35,6 +47,7 @@ describe('PostgresSearchIndexGateway', () => {
         body: 'MRN-778899 jane.doe@example.test',
       }),
     );
+    createdResourceIds.push({ tenantId: ctxA.tenantId, resourceType: 'Patient', resourceId });
 
     const results = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
       gateway.search(trx, { tenantId: ctxA.tenantId, query: 'Jane Doe', allowedContextTags: [] }),
@@ -59,6 +72,7 @@ describe('PostgresSearchIndexGateway', () => {
         body: 'unique searchable marker',
       }),
     );
+    createdResourceIds.push({ tenantId: ctxA.tenantId, resourceType: 'Patient', resourceId });
 
     const resultsAsB = await withTenantContext(handle.db, ctxB.tenantId, (trx) =>
       gateway.search(trx, { tenantId: ctxB.tenantId, query: 'Zztop', allowedContextTags: [] }),
@@ -82,6 +96,7 @@ describe('PostgresSearchIndexGateway', () => {
         body: 'sensitive marker term',
       }),
     );
+    createdResourceIds.push({ tenantId: ctxA.tenantId, resourceType: 'Document', resourceId });
 
     const withoutAccess = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
       gateway.search(trx, { tenantId: ctxA.tenantId, query: 'Zyxwvu', allowedContextTags: [] }),
@@ -122,6 +137,7 @@ describe('PostgresSearchIndexGateway', () => {
         body: 'updated',
       }),
     );
+    createdResourceIds.push({ tenantId: ctxA.tenantId, resourceType: 'Claim', resourceId });
 
     const results = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
       gateway.search(trx, { tenantId: ctxA.tenantId, query: 'Qwerty', allowedContextTags: [] }),
