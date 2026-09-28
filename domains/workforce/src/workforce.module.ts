@@ -11,5 +11,6 @@ import { RoleService } from './role/role.service.js';
 @Module({
   controllers: [UserController, PractitionerController, PractitionerRoleController, RoleController],
   providers: [UserService, PractitionerService, PractitionerRoleService, RoleService],
+  exports: [UserService, PractitionerService, PractitionerRoleService, RoleService],
 })
 export class WorkforceModule {}
