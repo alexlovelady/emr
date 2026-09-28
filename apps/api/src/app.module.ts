@@ -8,6 +8,7 @@ import { DocumentsModule } from '@ehr/documents';
 import { PatientModule } from '@ehr/patient';
 import { SchedulingModule } from '@ehr/scheduling';
 import { TasksModule } from '@ehr/tasks';
+import { ReferralsModule } from '@ehr/referrals';
 import { IntakeModule } from '@ehr/intake';
 import { ClinicalModule } from '@ehr/clinical';
 import { MedicationModule } from '@ehr/medication';
@@ -50,6 +51,7 @@ import { ProblemDetailsFilter } from './common/problem-details.filter.js';
     DocumentsModule,
     SchedulingModule,
     TasksModule,
+    ReferralsModule,
     IntakeModule,
     PatientModule,
     ClinicalModule,

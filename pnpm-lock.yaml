@@ -201,6 +201,9 @@ importers:
       '@ehr/query':
         specifier: workspace:*
         version: link:../../domains/query
+      '@ehr/referrals':
+        specifier: workspace:*
+        version: link:../../domains/referrals
       '@ehr/results':
         specifier: workspace:*
         version: link:../../domains/results
@@ -1541,6 +1544,61 @@ importers:
       '@ehr/search-adapter':
         specifier: workspace:*
         version: link:../../packages/search-adapter
+      '@nestjs/common':
+        specifier: ^12.1.0
+        version: 12.1.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
+      kysely:
+        specifier: ^0.28.17
+        version: 0.28.17
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      '@ehr/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
+      '@types/pg':
+        specifier: ^8.11.10
+        version: 8.23.1
+      fastify:
+        specifier: ^5.12.5
+        version: 5.12.5
+      pg:
+        specifier: ^8.13.1
+        version: 8.23.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@26.6.2)(supports-color@7.2.0)
+
+  domains/referrals:
+    dependencies:
+      '@ehr/api-contracts':
+        specifier: workspace:*
+        version: link:../../packages/api-contracts
+      '@ehr/audit':
+        specifier: workspace:*
+        version: link:../../packages/audit
+      '@ehr/authz':
+        specifier: workspace:*
+        version: link:../../packages/authz
+      '@ehr/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@ehr/domain-common':
+        specifier: workspace:*
+        version: link:../../packages/domain-common
+      '@ehr/outbox':
+        specifier: workspace:*
+        version: link:../../packages/outbox
+      '@ehr/patient':
+        specifier: workspace:*
+        version: link:../patient
+      '@ehr/workforce':
+        specifier: workspace:*
+        version: link:../workforce
       '@nestjs/common':
         specifier: ^12.1.0
         version: 12.1.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)

@@ -7,6 +7,7 @@ import {
   FlaskConical,
   MessageSquare,
   Pill,
+  Share2,
   Stethoscope,
   Upload,
 } from 'lucide-react';
@@ -22,6 +23,7 @@ import { IntakePanel } from '@/components/chart/intake-panel';
 import { MessagesPanel } from '@/components/chart/messages-panel';
 import { DocumentsPanel } from '@/components/chart/documents-panel';
 import { BillingPanel } from '@/components/chart/billing-panel';
+import { ReferralsPanel } from '@/components/chart/referrals-panel';
 import type {
   Allergy,
   Appeal,
@@ -41,6 +43,7 @@ import type {
   PaymentPlanWithInstallments,
   Prescription,
   Problem,
+  Referral,
   SignedNote,
 } from '@/lib/types';
 
@@ -77,6 +80,7 @@ interface ChartTabsProps {
   eligibilityChecks: EligibilityCheck[];
   ledger: PatientLedger | null;
   paymentPlans: PaymentPlanWithInstallments[];
+  referrals: Referral[];
 }
 
 export function ChartTabs({
@@ -100,6 +104,7 @@ export function ChartTabs({
   eligibilityChecks,
   ledger,
   paymentPlans,
+  referrals,
 }: ChartTabsProps) {
   const activeProblems = problems.filter((p) => p.status !== 'deleted' && p.clinicalStatus === 'active').length;
   const activeAllergies = allergies.filter((a) => a.status !== 'deleted').length;
@@ -149,6 +154,9 @@ export function ChartTabs({
               <TabsTrigger value="billing">
                 <DollarSign className="mr-1.5 h-3.5 w-3.5" /> Billing
               </TabsTrigger>
+              <TabsTrigger value="referrals">
+                <Share2 className="mr-1.5 h-3.5 w-3.5" /> Referrals
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="problems">
               <ProblemsPanel problems={problems} patientId={patientId} />
@@ -189,6 +197,9 @@ export function ChartTabs({
                 ledger={ledger}
                 paymentPlans={paymentPlans}
               />
+            </TabsContent>
+            <TabsContent value="referrals">
+              <ReferralsPanel referrals={referrals} patientId={patientId} />
             </TabsContent>
           </Tabs>
         </CardContent>

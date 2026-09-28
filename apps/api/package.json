@@ -49,6 +49,7 @@
     "@ehr/results": "workspace:*",
     "@ehr/search-adapter": "workspace:*",
     "@ehr/scheduling": "workspace:*",
+    "@ehr/referrals": "workspace:*",
     "@ehr/tasks": "workspace:*",
     "@ehr/tenant": "workspace:*",
     "@ehr/terminology": "workspace:*",

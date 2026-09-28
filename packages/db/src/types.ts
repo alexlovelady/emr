@@ -491,6 +491,17 @@ export interface BillingRulesTable extends CommonColumnsTable {
   parameters: JsonColumn<Record<string, unknown>>;
 }
 
+export interface ReferralsTable extends CommonColumnsTable {
+  patient_id: string;
+  referring_practitioner_id: string;
+  referred_to_practitioner_id: string | null;
+  external_provider_name: string | null;
+  specialty: string;
+  reason: string;
+  urgency: Generated<string>;
+  notes: string | null;
+}
+
 export interface ClaimsTable extends CommonColumnsTable {
   patient_id: string;
   encounter_id: string;
@@ -790,6 +801,7 @@ export interface DB {
   smart_clients: SmartClientsTable;
   charges: ChargesTable;
   billing_rules: BillingRulesTable;
+  referrals: ReferralsTable;
   claims: ClaimsTable;
   claim_versions: ClaimVersionsTable;
   denials: DenialsTable;

@@ -393,6 +393,20 @@ export interface Denial {
   status: 'open' | 'appealed' | 'resolved';
 }
 
+export interface Referral {
+  id: string;
+  patientId: string;
+  referringPractitionerId: string;
+  referredToPractitionerId: string | null;
+  externalProviderName: string | null;
+  specialty: string;
+  reason: string;
+  urgency: 'routine' | 'urgent' | 'stat';
+  notes: string | null;
+  status: 'pending' | 'sent' | 'scheduled' | 'completed' | 'declined' | 'cancelled';
+  createdAt: string;
+}
+
 export interface Appeal {
   id: string;
   claimId: string;
