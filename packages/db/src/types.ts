@@ -297,6 +297,8 @@ export interface CoveragesTable extends CommonColumnsTable {
   coverage_type: Generated<string>;
   effective_start: Timestamp;
   effective_end: Timestamp | null;
+  subscriber_relationship: Generated<string>;
+  subscriber_name: string | null;
 }
 
 export interface PatientMergeHistoryTable extends CommonColumnsTable {

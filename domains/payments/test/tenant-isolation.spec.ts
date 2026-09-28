@@ -47,6 +47,11 @@ describe('tenant isolation — payments', () => {
         chargeIds: [charge.id],
       }),
     );
+    // The scrubber requires a real eligibility check on file for an attached coverage before a
+    // claim can submit — see domains/claims/src/claim/scrub-claim.ts.
+    await withTenantContext(handleRef.db, ctxA.tenantId, (trx) =>
+      eligibilityService.check(trx, ctxA, tenantAPatientId, { coverageId: tenantACoverageId }),
+    );
     await withTenantContext(handleRef.db, ctxA.tenantId, (trx) => claimService.submit(trx, ctxA, claim.id));
     return withTenantContext(handleRef.db, ctxA.tenantId, (trx) => claimService.recordAcknowledgement(trx, ctxA, claim.id, 'accepted', null));
   }

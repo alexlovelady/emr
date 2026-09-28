@@ -4,7 +4,7 @@ import { ConflictError, NotFoundError, ValidationError, type RequestContext } fr
 import { buildOutboxInsert } from '@ehr/outbox';
 import { EncounterRepository } from '@ehr/clinical';
 import { ChargeRepository, type ChargeRow } from '@ehr/billing';
-import { CoverageRepository } from '@ehr/patient';
+import { CoverageRepository, PatientRepository } from '@ehr/patient';
 import { TaskService } from '@ehr/tasks';
 import type { ClearinghouseGateway } from '@ehr/clearinghouse-adapter';
 import type { CreateClaimInput } from './claim.dto.js';
@@ -39,6 +39,7 @@ export class ClaimService {
     private readonly chargeRepo: ChargeRepository = new ChargeRepository(),
     private readonly encounterRepo: EncounterRepository = new EncounterRepository(),
     private readonly coverageRepo: CoverageRepository = new CoverageRepository(),
+    private readonly patientRepo: PatientRepository = new PatientRepository(),
     private readonly taskService: TaskService = new TaskService(),
   ) {}
 
@@ -123,20 +124,27 @@ export class ClaimService {
     }
 
     const charges = await this.chargeRepo.listByClaim(trx, ctx.tenantId, id);
-    const issues = scrubClaim(Number(claim.totalChargeAmount), charges);
+    const [patient, encounter, coverage] = await Promise.all([
+      this.patientRepo.findById(trx, ctx.tenantId, claim.patientId),
+      this.encounterRepo.findById(trx, ctx.tenantId, claim.encounterId),
+      claim.coverageId ? this.coverageRepo.findById(trx, ctx.tenantId, claim.coverageId) : Promise.resolve(null),
+    ]);
+    if (!patient) throw new NotFoundError('Patient not found', { patientId: claim.patientId });
+    if (!encounter) throw new NotFoundError('Encounter not found', { encounterId: claim.encounterId });
+
+    const issues = await scrubClaim(trx, ctx.tenantId, {
+      totalChargeAmount: Number(claim.totalChargeAmount),
+      charges,
+      coverage,
+      patient,
+      encounterDate: encounter.startedAt,
+    });
     if (issues.length > 0) {
       throw new ValidationError('Claim failed scrubber validation', { issues });
     }
 
-    let payerName: string | null = null;
-    let memberId: string | null = null;
-    if (claim.coverageId) {
-      const coverage = await this.coverageRepo.findById(trx, ctx.tenantId, claim.coverageId);
-      if (coverage) {
-        payerName = coverage.payerName;
-        memberId = coverage.memberId;
-      }
-    }
+    const payerName = coverage?.payerName ?? null;
+    const memberId = coverage?.memberId ?? null;
 
     const receipt = await this.gateway.submitClaim({
       claimId: claim.id,

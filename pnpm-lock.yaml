@@ -873,6 +873,9 @@ importers:
       '@ehr/tasks':
         specifier: workspace:*
         version: link:../tasks
+      '@ehr/terminology':
+        specifier: workspace:*
+        version: link:../../packages/terminology
       '@nestjs/common':
         specifier: ^12.1.0
         version: 12.1.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)

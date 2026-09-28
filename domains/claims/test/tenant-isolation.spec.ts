@@ -212,4 +212,182 @@ describe('tenant isolation — claims', () => {
       withTenantContext(handle.db, ctxA.tenantId, (trx) => claimService.submit(trx, ctxA, tenantAClaimId)),
     ).rejects.toBeInstanceOf(ConflictError);
   });
+
+  describe('real pre-submission scrubbing (Athelas-parity pass)', () => {
+    async function createCoverage(overrides: Partial<{ status: string; effectiveStart: string; effectiveEnd: string | null }> = {}) {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      return withTenantContext(handle.db, ctxA.tenantId, async (trx) => {
+        const row = await trx
+          .insertInto('coverages')
+          .values({
+            tenant_id: ctxA.tenantId,
+            patient_id: tenantAPatientId,
+            payer_name: 'Acme Payer',
+            member_id: 'M-SCRUB-1',
+            coverage_type: 'primary',
+            effective_start: overrides.effectiveStart ?? '2024-01-01',
+            effective_end: overrides.effectiveEnd ?? null,
+            status: overrides.status ?? 'active',
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        return row.id;
+      });
+    }
+
+    async function insertEligibilityCheck(coverageId: string, isEligible: boolean) {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        trx
+          .insertInto('eligibility_checks')
+          .values({
+            tenant_id: ctxA.tenantId,
+            patient_id: tenantAPatientId,
+            coverage_id: coverageId,
+            is_eligible: isEligible,
+            raw_response: JSON.stringify({}),
+            status: 'checked',
+            created_by: ctxA.actor!.id,
+            updated_by: ctxA.actor!.id,
+          })
+          .execute(),
+      );
+    }
+
+    async function claimWithCoverage(coverageId: string, overrides: { code?: string; diagnosisCodes?: string[] } = {}) {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      const charge = await createCodedCharge(handle, ctxA, overrides);
+      return withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        claimService.create(trx, ctxA, tenantAPatientId, {
+          encounterId: tenantAEncounterId,
+          billingPractitionerId: tenantAPractitionerId,
+          coverageId,
+          chargeIds: [charge.id],
+        }),
+      );
+    }
+
+    it('blocks submission when the coverage has no eligibility check on file', async () => {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      const coverageId = await createCoverage();
+      const claim = await claimWithCoverage(coverageId);
+      await expect(
+        withTenantContext(handle.db, ctxA.tenantId, (trx) => claimService.submit(trx, ctxA, claim.id)),
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it('blocks submission when the coverage is not active', async () => {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      const coverageId = await createCoverage({ status: 'terminated' });
+      await insertEligibilityCheck(coverageId, true);
+      const claim = await claimWithCoverage(coverageId);
+      await expect(
+        withTenantContext(handle.db, ctxA.tenantId, (trx) => claimService.submit(trx, ctxA, claim.id)),
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it('blocks submission when the most recent eligibility check reports ineligible', async () => {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      const coverageId = await createCoverage();
+      await insertEligibilityCheck(coverageId, false);
+      const claim = await claimWithCoverage(coverageId);
+      await expect(
+        withTenantContext(handle.db, ctxA.tenantId, (trx) => claimService.submit(trx, ctxA, claim.id)),
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it('blocks submission on a diagnosis code not found in ICD-10-CM', async () => {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      const charge = await createCodedCharge(handle, ctxA, { diagnosisCodes: ['Z99.999999'] });
+      const claim = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        claimService.create(trx, ctxA, tenantAPatientId, {
+          encounterId: tenantAEncounterId,
+          billingPractitionerId: tenantAPractitionerId,
+          chargeIds: [charge.id],
+        }),
+      );
+      await expect(
+        withTenantContext(handle.db, ctxA.tenantId, (trx) => claimService.submit(trx, ctxA, claim.id)),
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it('blocks submission on a sex-restricted diagnosis conflicting with the patient', async () => {
+      // tenantAPatientId has no sexAtBirth recorded by default — insert a female-only pregnancy
+      // code against a patient explicitly recorded as male to prove the conflict actually fires.
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      const { patientId: malePatientId, encounterId: maleEncounterId } = await withTenantContext(handle.db, ctxA.tenantId, async (trx) => {
+        const patient = await trx
+          .insertInto('patients')
+          .values({
+            tenant_id: ctxA.tenantId,
+            given_name: 'SexConflict',
+            family_name: `Claims-${Date.now()}`,
+            date_of_birth: '1979-11-02',
+            sex_at_birth: 'M',
+            status: 'active',
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        const appointment = await trx
+          .insertInto('appointments')
+          .values({
+            tenant_id: ctxA.tenantId,
+            patient_id: patient.id,
+            location_id: handle.seed.tenantA.locationId,
+            practitioner_id: tenantAPractitionerId,
+            appointment_type: 'office_visit',
+            scheduled_start: new Date(Date.now() + 3600_000),
+            scheduled_end: new Date(Date.now() + 7200_000),
+            status: 'checked_in',
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        const encounter = await trx
+          .insertInto('encounters')
+          .values({
+            tenant_id: ctxA.tenantId,
+            patient_id: patient.id,
+            appointment_id: appointment.id,
+            location_id: handle.seed.tenantA.locationId,
+            practitioner_id: tenantAPractitionerId,
+            encounter_type: 'office_visit',
+            status: 'roomed',
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        return { patientId: patient.id, encounterId: encounter.id };
+      });
+      const charge = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        chargeService.create(trx, ctxA, malePatientId, {
+          encounterId: maleEncounterId,
+          billingPractitionerId: tenantAPractitionerId,
+          codeSystem: 'CPT',
+          code: '99213',
+          description: 'Office visit',
+          units: 1,
+          unitPrice: 150,
+          diagnosisCodes: ['O80'],
+        }),
+      ).then((c) => withTenantContext(handle.db, ctxA.tenantId, (trx) => chargeService.finalizeCoding(trx, ctxA, c.id, {})));
+      const claim = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        claimService.create(trx, ctxA, malePatientId, {
+          encounterId: maleEncounterId,
+          billingPractitionerId: tenantAPractitionerId,
+          chargeIds: [charge.id],
+        }),
+      );
+      await expect(
+        withTenantContext(handle.db, ctxA.tenantId, (trx) => claimService.submit(trx, ctxA, claim.id)),
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it('submits cleanly when the coverage is active, effective, and has a recent eligible check', async () => {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      const coverageId = await createCoverage();
+      await insertEligibilityCheck(coverageId, true);
+      const claim = await claimWithCoverage(coverageId);
+      const submitted = await withTenantContext(handle.db, ctxA.tenantId, (trx) => claimService.submit(trx, ctxA, claim.id));
+      expect(submitted.status).toBe('submitted');
+    });
+  });
 });
