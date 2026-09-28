@@ -8,3 +8,6 @@ export { scrubClaim } from './claim/scrub-claim.js';
 export { DenialService } from './denial/denial.service.js';
 export { DenialRepository, type DenialRow } from './denial/denial.repository.js';
 export { ResolveDenialSchema, type ResolveDenialInput } from './denial/denial.dto.js';
+export { AppealService } from './appeal/appeal.service.js';
+export { AppealRepository, type AppealRow } from './appeal/appeal.repository.js';
+export { CreateAppealSchema, DecideAppealSchema, type CreateAppealInput, type DecideAppealInput } from './appeal/appeal.dto.js';

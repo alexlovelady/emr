@@ -64,6 +64,17 @@ export class DenialRepository {
     return rows.map(toRow);
   }
 
+  async updateStatus(trx: Executor, tenantId: string, id: string, status: string, updatedBy: string): Promise<DenialRow> {
+    const row = await trx
+      .updateTable('denials')
+      .set({ status, updated_by: updatedBy, updated_at: new Date() })
+      .where('tenant_id', '=', tenantId)
+      .where('id', '=', id)
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return toRow(row);
+  }
+
   async resolve(trx: Executor, tenantId: string, id: string, resolutionNotes: string, updatedBy: string): Promise<DenialRow> {
     const row = await trx
       .updateTable('denials')

@@ -10,6 +10,7 @@ export type PromptTemplateId =
   | 'message-draft-v1'
   | 'coding-suggestion-v1'
   | 'denial-summary-v1'
+  | 'appeal-draft-v1'
   | 'task-summary-v1'
   | 'nl-to-cohort-dsl-v1';
 

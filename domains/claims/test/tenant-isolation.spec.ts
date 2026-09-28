@@ -6,6 +6,7 @@ import { NoopClearinghouseGateway } from '@ehr/clearinghouse-adapter';
 import { ChargeService } from '@ehr/billing';
 import { ClaimService } from '../src/claim/claim.service.js';
 import { DenialService } from '../src/denial/denial.service.js';
+import { AppealService } from '../src/appeal/appeal.service.js';
 
 /** EHR_BUILD_SPEC.md §18.2 — run via `pnpm test:tenant-isolation`, requires a live Postgres. */
 describe('tenant isolation — claims', () => {
@@ -13,6 +14,7 @@ describe('tenant isolation — claims', () => {
   const chargeService = new ChargeService();
   const claimService = new ClaimService(new NoopClearinghouseGateway());
   const denialService = new DenialService();
+  const appealService = new AppealService();
 
   let tenantAPatientId: string;
   let tenantAPractitionerId: string;
@@ -388,6 +390,119 @@ describe('tenant isolation — claims', () => {
       const claim = await claimWithCoverage(coverageId);
       const submitted = await withTenantContext(handle.db, ctxA.tenantId, (trx) => claimService.submit(trx, ctxA, claim.id));
       expect(submitted.status).toBe('submitted');
+    });
+  });
+
+  describe('denial appeal automation (Athelas-parity pass)', () => {
+    async function createDeniedClaim() {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      const charge = await createCodedCharge(handle, ctxA);
+      const claim = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        claimService.create(trx, ctxA, tenantAPatientId, {
+          encounterId: tenantAEncounterId,
+          billingPractitionerId: tenantAPractitionerId,
+          chargeIds: [charge.id],
+        }),
+      );
+      await withTenantContext(handle.db, ctxA.tenantId, (trx) => claimService.submit(trx, ctxA, claim.id));
+      await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        claimService.recordAcknowledgement(trx, ctxA, claim.id, 'rejected', { code: 'CO-50', description: 'Not medically necessary' }),
+      );
+      const timeline = await withTenantContext(handle.db, ctxA.tenantId, (trx) => claimService.timeline(trx, ctxA, claim.id));
+      return timeline.denials[timeline.denials.length - 1]!.id;
+    }
+
+    it('creates a draft appeal and rejects a second active appeal on the same denial', async () => {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      const denialId = await createDeniedClaim();
+
+      const appeal = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        appealService.create(trx, ctxA, denialId, { appealReason: 'The service was medically necessary per attached chart notes.' }),
+      );
+      expect(appeal.status).toBe('draft');
+
+      await expect(
+        withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+          appealService.create(trx, ctxA, denialId, { appealReason: 'A second, duplicate appeal attempt.' }),
+        ),
+      ).rejects.toBeInstanceOf(ConflictError);
+    });
+
+    it('submitting an appeal moves the denial to appealed and blocks a direct resolve', async () => {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      const denialId = await createDeniedClaim();
+      const appeal = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        appealService.create(trx, ctxA, denialId, { appealReason: 'The service was medically necessary.' }),
+      );
+
+      const submitted = await withTenantContext(handle.db, ctxA.tenantId, (trx) => appealService.submit(trx, ctxA, appeal.id));
+      expect(submitted.status).toBe('submitted');
+      expect(submitted.submittedAt).not.toBeNull();
+
+      const denial = await withTenantContext(handle.db, ctxA.tenantId, (trx) => denialService.getById(trx, ctxA, denialId));
+      expect(denial.status).toBe('appealed');
+
+      await expect(
+        withTenantContext(handle.db, ctxA.tenantId, (trx) => denialService.resolve(trx, ctxA, denialId, { resolutionNotes: 'Trying to resolve directly' })),
+      ).rejects.toBeInstanceOf(ConflictError);
+    });
+
+    it('a won appeal resolves the denial; a lost appeal reopens it for a fresh appeal', async () => {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+
+      const wonDenialId = await createDeniedClaim();
+      const wonAppeal = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        appealService.create(trx, ctxA, wonDenialId, { appealReason: 'Medically necessary.' }),
+      );
+      await withTenantContext(handle.db, ctxA.tenantId, (trx) => appealService.submit(trx, ctxA, wonAppeal.id));
+      const decidedWon = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        appealService.decide(trx, ctxA, wonAppeal.id, { outcome: 'won', decisionNotes: 'Payer overturned the denial.' }),
+      );
+      expect(decidedWon.status).toBe('won');
+      const wonDenial = await withTenantContext(handle.db, ctxA.tenantId, (trx) => denialService.getById(trx, ctxA, wonDenialId));
+      expect(wonDenial.status).toBe('resolved');
+
+      const lostDenialId = await createDeniedClaim();
+      const lostAppeal = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        appealService.create(trx, ctxA, lostDenialId, { appealReason: 'Medically necessary.' }),
+      );
+      await withTenantContext(handle.db, ctxA.tenantId, (trx) => appealService.submit(trx, ctxA, lostAppeal.id));
+      const decidedLost = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        appealService.decide(trx, ctxA, lostAppeal.id, { outcome: 'lost', decisionNotes: 'Payer upheld the denial.' }),
+      );
+      expect(decidedLost.status).toBe('lost');
+      const lostDenial = await withTenantContext(handle.db, ctxA.tenantId, (trx) => denialService.getById(trx, ctxA, lostDenialId));
+      expect(lostDenial.status).toBe('open');
+
+      const secondAppeal = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        appealService.create(trx, ctxA, lostDenialId, { appealReason: 'Escalating with additional documentation.' }),
+      );
+      expect(secondAppeal.status).toBe('draft');
+    });
+
+    it('cannot appeal a denial that is not open, and cross-tenant reads are blocked', async () => {
+      const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      const denialId = await createDeniedClaim();
+      await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        denialService.resolve(trx, ctxA, denialId, { resolutionNotes: 'Resolved without an appeal' }),
+      );
+
+      await expect(
+        withTenantContext(handle.db, ctxA.tenantId, (trx) => appealService.create(trx, ctxA, denialId, { appealReason: 'Too late.' })),
+      ).rejects.toBeInstanceOf(ConflictError);
+
+      const freshDenialId = await createDeniedClaim();
+      const appeal = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        appealService.create(trx, ctxA, freshDenialId, { appealReason: 'Reviewable from tenant A only.' }),
+      );
+
+      const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
+      await expect(
+        withTenantContext(handle.db, ctxB.tenantId, (trx) => appealService.getById(trx, ctxB, appeal.id)),
+      ).rejects.toBeInstanceOf(NotFoundError);
+
+      const rows = await withTenantContext(handle.db, ctxB.tenantId, (trx) => trx.selectFrom('appeals').selectAll().where('id', '=', appeal.id).execute());
+      expect(rows).toHaveLength(0);
     });
   });
 });

@@ -514,6 +514,16 @@ export interface DenialsTable extends CommonColumnsTable {
   task_id: string | null;
 }
 
+export interface AppealsTable extends CommonColumnsTable {
+  claim_id: string;
+  denial_id: string;
+  appeal_reason: string;
+  submitted_at: Timestamp | null;
+  decided_at: Timestamp | null;
+  decision_notes: string | null;
+  source_ai_generation_id: string | null;
+}
+
 export interface RemittancesTable extends CommonColumnsTable {
   claim_id: string;
   claim_version_id: string;
@@ -765,6 +775,7 @@ export interface DB {
   claims: ClaimsTable;
   claim_versions: ClaimVersionsTable;
   denials: DenialsTable;
+  appeals: AppealsTable;
   remittances: RemittancesTable;
   ledger_entries: LedgerEntriesTable;
   payment_plans: PaymentPlansTable;

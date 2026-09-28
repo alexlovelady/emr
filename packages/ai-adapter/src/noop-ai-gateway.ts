@@ -9,6 +9,7 @@ const TEMPLATE_LABELS: Record<PromptTemplateId, string> = {
   'message-draft-v1': 'Patient-message reply draft',
   'coding-suggestion-v1': 'Coding suggestions',
   'denial-summary-v1': 'Denial explanation',
+  'appeal-draft-v1': 'Appeal draft',
   'task-summary-v1': 'Task summary',
   'nl-to-cohort-dsl-v1': 'Cohort DSL candidate',
 };

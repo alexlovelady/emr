@@ -7,6 +7,7 @@ import { MessageDraftController } from './message-draft/message-draft.controller
 import { CodingSuggestionController } from './coding-suggestion/coding-suggestion.controller.js';
 import { ChargeCodingSuggestionController } from './coding-suggestion/charge-coding-suggestion.controller.js';
 import { DenialSummaryController } from './denial-summary/denial-summary.controller.js';
+import { AppealDraftController } from './appeal-draft/appeal-draft.controller.js';
 import { TaskSummaryController } from './task-summary/task-summary.controller.js';
 import { NlToCohortDslProposeController, NlToCohortDslExecuteController } from './nl-to-cohort-dsl/nl-to-cohort-dsl.controller.js';
 
@@ -20,6 +21,7 @@ import { NlToCohortDslProposeController, NlToCohortDslExecuteController } from '
     CodingSuggestionController,
     ChargeCodingSuggestionController,
     DenialSummaryController,
+    AppealDraftController,
     TaskSummaryController,
     NlToCohortDslProposeController,
     NlToCohortDslExecuteController,
