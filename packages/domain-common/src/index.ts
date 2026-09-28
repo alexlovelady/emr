@@ -4,6 +4,7 @@ export {
   DomainError,
   NotFoundError,
   ForbiddenError,
+  UnauthorizedError,
   ConflictError,
   ConcurrencyError,
   ValidationError,

@@ -638,6 +638,17 @@ and [`docs/adr/0006-clinician-web-bff-auth.md`](docs/adr/0006-clinician-web-bff-
   test/test:integration/test:tenant-isolation (114 tasks) green, plus a live restart of `apps/api`
   confirming a correct login, a wrong password, an unknown email, and an unknown tenant slug all
   produce byte-for-byte the same responses as before the refactor.
+- **Follow-up fix: authentication failures were returning HTTP 500, not 401** — found while
+  verifying the refactor above, pre-existing since `apps/api`'s very first commit, not introduced
+  by it. `InvalidCredentialsError`/`InvalidMfaCodeError`/`InvalidMfaChallengeError`/
+  `InvalidRefreshTokenError`/`InvalidPortalCredentialsError`/`InvalidPortalRegistrationError` all
+  extended plain `Error`, so `ProblemDetailsFilter`'s `classify()` fell through to its generic
+  `{status: 500}` branch instead of a real 4xx. Added `UnauthorizedError` (401) to
+  `packages/domain-common`'s error taxonomy and made every one of those classes extend it (plus
+  `InvalidAccessTokenError`/`InvalidPortalTokenError` for consistency, though those never actually
+  surface uncaught — the Fastify auth hooks swallow them). Live-verified: a wrong password, an
+  unknown email, an unknown tenant, a malformed refresh token, and a bad portal login now all
+  return 401 with a real RFC7807 body instead of 500.
 
 ## Verification status
 

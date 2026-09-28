@@ -15,6 +15,7 @@ import {
   type KeyMaterial,
   type PortalTokenIssuerConfig,
 } from '@ehr/auth-adapter';
+import { UnauthorizedError } from '@ehr/domain-common';
 import { DB_CONNECTION, ENV_CONFIG, KEY_MATERIAL } from '../common/tokens.js';
 import type { Env } from '@ehr/config';
 import { PortalAccountRepository } from './portal-account.repository.js';
@@ -30,8 +31,8 @@ export interface PortalRequestMeta {
   userAgent?: string;
 }
 
-export class InvalidPortalRegistrationError extends Error {}
-export class InvalidPortalCredentialsError extends Error {}
+export class InvalidPortalRegistrationError extends UnauthorizedError {}
+export class InvalidPortalCredentialsError extends UnauthorizedError {}
 
 /**
  * Portal registration/login/refresh/logout — the portal counterpart to `apps/api/src/auth`'s

@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { Kysely } from 'kysely';
 import { withTenantContext, type DB } from '@ehr/db';
 import { recordAuditEvent } from '@ehr/audit';
+import { UnauthorizedError } from '@ehr/domain-common';
 import { InvalidCredentialsError, type IdentityProvider, type MfaEnrollment, type PasswordCredentialProvider, type TokenPair } from '@ehr/auth-adapter';
 import { DB_CONNECTION, IDENTITY_PROVIDER } from '../common/tokens.js';
 
@@ -112,4 +113,4 @@ export class AuthService {
   }
 }
 
-export class InvalidMfaChallengeError extends Error {}
+export class InvalidMfaChallengeError extends UnauthorizedError {}

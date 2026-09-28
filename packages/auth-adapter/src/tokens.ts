@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { jwtVerify, SignJWT, type KeyLike } from 'jose';
+import { UnauthorizedError } from '@ehr/domain-common';
 import { JWT_ALG, type KeyMaterial } from './keys.js';
 
 export interface TokenIssuerConfig {
@@ -13,8 +14,11 @@ export interface AccessTokenClaims {
   tenantId: string;
 }
 
-export class InvalidAccessTokenError extends Error {}
-export class InvalidRefreshTokenError extends Error {}
+// Never surfaces past a route handler uncaught — the Fastify auth hooks that call
+// verifyAccessToken() always catch it and leave the request unauthenticated instead — but it
+// still extends UnauthorizedError for consistency with every other auth-failure error here.
+export class InvalidAccessTokenError extends UnauthorizedError {}
+export class InvalidRefreshTokenError extends UnauthorizedError {}
 
 export async function signAccessToken(
   claims: AccessTokenClaims,

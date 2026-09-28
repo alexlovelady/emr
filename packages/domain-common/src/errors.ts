@@ -34,6 +34,12 @@ export class ForbiddenError extends DomainError {
   readonly problemType = 'https://docs.ehr.internal/problems/forbidden';
 }
 
+/** Failed authentication — wrong password, unknown user, an expired/invalid MFA code, etc. */
+export class UnauthorizedError extends DomainError {
+  readonly httpStatus = 401;
+  readonly problemType = 'https://docs.ehr.internal/problems/unauthorized';
+}
+
 export class ConflictError extends DomainError {
   readonly httpStatus = 409;
   readonly problemType: string = 'https://docs.ehr.internal/problems/conflict';

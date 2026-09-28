@@ -1876,6 +1876,9 @@ importers:
       '@ehr/db':
         specifier: workspace:*
         version: link:../db
+      '@ehr/domain-common':
+        specifier: workspace:*
+        version: link:../domain-common
       argon2:
         specifier: ^0.41.1
         version: 0.41.1

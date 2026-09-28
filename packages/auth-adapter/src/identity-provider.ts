@@ -4,6 +4,7 @@ import { exportJWK } from 'jose';
 import type { Kysely } from 'kysely';
 import type { DB } from '@ehr/db';
 import { withSystemContext, withTenantContext } from '@ehr/db';
+import { UnauthorizedError } from '@ehr/domain-common';
 import type { KeyMaterial } from './keys.js';
 import {
   decodeRefreshToken,
@@ -36,8 +37,8 @@ export interface MfaEnrollment {
   otpauthUrl: string;
 }
 
-export class InvalidCredentialsError extends Error {}
-export class InvalidMfaCodeError extends Error {}
+export class InvalidCredentialsError extends UnauthorizedError {}
+export class InvalidMfaCodeError extends UnauthorizedError {}
 
 /**
  * ADR-0002's first-party stand-in for Auth0/Okta/Cognito. All token verification downstream goes

@@ -1,4 +1,5 @@
 import { jwtVerify, SignJWT, type KeyLike } from 'jose';
+import { UnauthorizedError } from '@ehr/domain-common';
 import { JWT_ALG, type KeyMaterial } from './keys.js';
 
 export interface PortalTokenIssuerConfig {
@@ -12,7 +13,10 @@ export interface PortalAccessTokenClaims {
   tenantId: string;
 }
 
-export class InvalidPortalTokenError extends Error {}
+// Never surfaces past a route handler uncaught — apps/api's portal-context.hook.ts always
+// catches it and leaves the request unauthenticated instead — but it still extends
+// UnauthorizedError for consistency with every other auth-failure error here.
+export class InvalidPortalTokenError extends UnauthorizedError {}
 
 /**
  * Deliberately separate from `tokens.ts`'s `signAccessToken`/`verifyAccessToken` rather than
