@@ -81,9 +81,12 @@ implementation is an engineering task *after* the contract exists, not before. N
 
 ## 4. Security & operational maturity requiring outside parties or real infra spend
 
-- [ ] AWS account + BAA (if migrating off Railway per `docs/adr/0001-railway-hosting.md`) — a
-      business/legal step (signing AWS's BAA) that gates a large engineering migration, not the
-      other way around.
+- [ ] Sign Railway's HIPAA/BAA plan (decision: stay on Railway for hosting rather than migrate to
+      AWS — see `docs/adr/0001-railway-hosting.md`; that ADR's "before any real PHI, a follow-up
+      ADR must revisit AWS migration" gate is satisfied by Railway's own BAA instead once signed).
+      Object storage already uses an S3-*compatible* interface (`packages/object-storage`,
+      Cloudflare R2 in any Railway-hosted environment) specifically so no AWS account is needed for
+      that either. AWS only re-enters the picture if a future scaling need outgrows Railway.
 - [ ] Cloud KMS / secrets-management service selection and procurement (e.g. AWS KMS/Secrets
       Manager, HashiCorp Vault Cloud) — a vendor/infra decision before the key-rotation engineering
       work in the roadmap can be finished.
