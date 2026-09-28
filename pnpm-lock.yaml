@@ -222,6 +222,9 @@ importers:
       '@ehr/terminology':
         specifier: workspace:*
         version: link:../../packages/terminology
+      '@ehr/transcription-adapter':
+        specifier: workspace:*
+        version: link:../../packages/transcription-adapter
       '@ehr/video-adapter':
         specifier: workspace:*
         version: link:../../packages/video-adapter
@@ -763,6 +766,9 @@ importers:
       '@ehr/tasks':
         specifier: workspace:*
         version: link:../tasks
+      '@ehr/transcription-adapter':
+        specifier: workspace:*
+        version: link:../../packages/transcription-adapter
       '@nestjs/common':
         specifier: ^12.1.0
         version: 12.1.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
@@ -2324,6 +2330,15 @@ importers:
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
+
+  packages/transcription-adapter:
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@26.6.2)(supports-color@7.2.0)
 
   packages/video-adapter:
     devDependencies:

@@ -10,11 +10,11 @@ import type { AiGeneration, CohortExecutionRow } from '@/lib/types';
  * same AiGeneration + provenance shape, reviewed via acceptAiGeneration/rejectAiGeneration below.
  */
 
-export async function proposeNoteDraft(encounterId: string, instructions?: string): Promise<ActionResult<AiGeneration>> {
+export async function proposeNoteDraft(encounterId: string, instructions?: string, audioDocumentId?: string): Promise<ActionResult<AiGeneration>> {
   return runAction(() =>
     callBackend<AiGeneration>(`/api/v1/encounters/${encounterId}/ai/note-draft`, {
       method: 'POST',
-      body: { instructions: instructions?.trim() || undefined },
+      body: { instructions: instructions?.trim() || undefined, audioDocumentId: audioDocumentId || undefined },
     }),
   );
 }

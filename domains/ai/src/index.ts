@@ -1,5 +1,6 @@
 export { AiModule } from './ai.module.js';
 export { AI_GATEWAY } from './ai-gateway.token.js';
+export { TRANSCRIPTION_GATEWAY } from './transcription-gateway.token.js';
 export { AiGenerationService } from './generation/ai-generation.service.js';
 export { AiGenerationRepository, toProvenance, type AiGenerationRow } from './generation/ai-generation.repository.js';
 export {
@@ -10,6 +11,7 @@ export {
   type AiProvenance,
 } from './generation/ai-generation.dto.js';
 export { AmbientNoteDraftSchema, type AmbientNoteDraftInput } from './ambient-note-draft/ambient-note-draft.dto.js';
+export { resolveAmbientAudioInput, type AmbientAudioResolution } from './ambient-note-draft/resolve-ambient-audio.js';
 export { EncounterSummarySchema, type EncounterSummaryInput } from './encounter-summary/encounter-summary.dto.js';
 export { ChartQaSchema, type ChartQaInput } from './chart-qa/chart-qa.dto.js';
 export { MessageDraftSchema, type MessageDraftInput } from './message-draft/message-draft.dto.js';

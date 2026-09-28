@@ -31,6 +31,7 @@
     "@ehr/query": "workspace:*",
     "@ehr/results": "workspace:*",
     "@ehr/tasks": "workspace:*",
+    "@ehr/transcription-adapter": "workspace:*",
     "@nestjs/common": "^12.1.0",
     "kysely": "^0.28.17",
     "zod": "^3.24.1"

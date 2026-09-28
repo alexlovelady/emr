@@ -15,6 +15,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ title: 'No file provided' }, { status: 400 });
   }
   const patientId = form.get('patientId');
+  const encounterId = form.get('encounterId');
   const documentCategory = form.get('documentCategory');
 
   try {
@@ -24,6 +25,7 @@ export async function POST(req: Request): Promise<NextResponse> {
         filename: file.name,
         contentType: file.type || 'application/octet-stream',
         ...(patientId ? { patientId: String(patientId) } : {}),
+        ...(encounterId ? { encounterId: String(encounterId) } : {}),
         ...(documentCategory ? { documentCategory: String(documentCategory) } : {}),
       },
     });

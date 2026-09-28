@@ -24,7 +24,8 @@ import { PAYMENT_GATEWAY as PAYMENTS_PAYMENT_GATEWAY } from '@ehr/payments';
 import { NoopVideoVisitGateway } from '@ehr/video-adapter';
 import { VIDEO_VISIT_GATEWAY } from '@ehr/scheduling';
 import { NoopAiGateway } from '@ehr/ai-adapter';
-import { AI_GATEWAY } from '@ehr/ai';
+import { AI_GATEWAY, TRANSCRIPTION_GATEWAY } from '@ehr/ai';
+import { NoopTranscriptionGateway } from '@ehr/transcription-adapter';
 import { DB_CONNECTION, KEY_MATERIAL, IDENTITY_PROVIDER, ENV_CONFIG } from '../common/tokens.js';
 
 const env = getConfig();
@@ -81,6 +82,7 @@ const db = createDb({ connectionString: env.APP_DATABASE_URL });
     { provide: PAYMENT_GATEWAY, useValue: new NoopPaymentGateway() },
     { provide: PAYMENTS_PAYMENT_GATEWAY, useValue: new NoopPaymentGateway() },
     { provide: AI_GATEWAY, useValue: new NoopAiGateway() },
+    { provide: TRANSCRIPTION_GATEWAY, useValue: new NoopTranscriptionGateway() },
     { provide: VIDEO_VISIT_GATEWAY, useValue: new NoopVideoVisitGateway() },
     { provide: PolicyEngine, useValue: new PolicyEngine() },
     Reflector,
@@ -100,6 +102,7 @@ const db = createDb({ connectionString: env.APP_DATABASE_URL });
     PAYMENT_GATEWAY,
     PAYMENTS_PAYMENT_GATEWAY,
     AI_GATEWAY,
+    TRANSCRIPTION_GATEWAY,
     VIDEO_VISIT_GATEWAY,
     PolicyEngine,
     Reflector,

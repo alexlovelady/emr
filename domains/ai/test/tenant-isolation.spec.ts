@@ -4,9 +4,13 @@ import { ConflictError, NotFoundError, ValidationError } from '@ehr/domain-commo
 import { NoopAiGateway } from '@ehr/ai-adapter';
 import { CohortDslSchema, CohortService } from '@ehr/query';
 import type { ObjectStorageGateway } from '@ehr/object-storage';
+import { DocumentRepository } from '@ehr/documents';
+import type { TranscriptionGateway } from '@ehr/transcription-adapter';
+import { NoopTranscriptionGateway } from '@ehr/transcription-adapter';
 import { setupTestDb, requestContextFor, type TestDbHandle } from '@ehr/testing';
 import { AiGenerationService } from '../src/generation/ai-generation.service.js';
 import { toProvenance } from '../src/generation/ai-generation.repository.js';
+import { resolveAmbientAudioInput } from '../src/ambient-note-draft/resolve-ambient-audio.js';
 
 /** EHR_BUILD_SPEC.md §18.2 — run via `pnpm test:tenant-isolation`, requires a live Postgres. */
 describe('tenant isolation — AI generations', () => {
@@ -180,5 +184,147 @@ describe('NL-to-cohort-DSL execute integration', () => {
     await expect(
       withTenantContext(handle.db, ctxB.tenantId, (trx) => aiGenerationService.getPendingById(trx, ctxB, generation.id)),
     ).rejects.toBeInstanceOf(NotFoundError);
+  });
+});
+
+/** Tier 2 platform gap: a real (audio-based) ambient scribe, layered onto the existing text-prompt
+ * `ambient_note_draft` feature. No real speech-to-text vendor is connected — `NoopTranscriptionGateway`
+ * always reports `available: false`, so this asserts the honest-failure path, not a fabricated one. */
+describe('resolveAmbientAudioInput (real ambient-scribe path)', () => {
+  let handle: TestDbHandle;
+  const documentRepo = new DocumentRepository();
+  let tenantAEncounterId: string;
+  let storedAudioDocumentId: string;
+  let pendingAudioDocumentId: string;
+
+  beforeAll(async () => {
+    handle = await setupTestDb();
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+
+    const patientId = await withTenantContext(handle.db, ctxA.tenantId, async (trx) => {
+      const patient = await trx
+        .insertInto('patients')
+        .values({
+          tenant_id: ctxA.tenantId,
+          given_name: 'Scribe',
+          family_name: `Test-${Date.now()}`,
+          date_of_birth: '1990-01-01',
+          status: 'active',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      return patient.id;
+    });
+
+    tenantAEncounterId = await withTenantContext(handle.db, ctxA.tenantId, async (trx) => {
+      const workforceIdentity = await trx
+        .insertInto('workforce_identities')
+        .values({ tenant_id: ctxA.tenantId, user_id: handle.seed.tenantA.adminUserId, organization_id: handle.seed.tenantA.organizationId, status: 'active' })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const practitioner = await trx
+        .insertInto('practitioners')
+        .values({ tenant_id: ctxA.tenantId, workforce_identity_id: workforceIdentity.id, display_name: 'Dr. Scribe Test', status: 'active' })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const appointment = await trx
+        .insertInto('appointments')
+        .values({
+          tenant_id: ctxA.tenantId,
+          patient_id: patientId,
+          location_id: handle.seed.tenantA.locationId,
+          practitioner_id: practitioner.id,
+          appointment_type: 'office_visit',
+          scheduled_start: new Date(Date.now() + 3600_000),
+          scheduled_end: new Date(Date.now() + 7200_000),
+          status: 'checked_in',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const encounter = await trx
+        .insertInto('encounters')
+        .values({
+          tenant_id: ctxA.tenantId,
+          patient_id: patientId,
+          appointment_id: appointment.id,
+          location_id: handle.seed.tenantA.locationId,
+          practitioner_id: practitioner.id,
+          encounter_type: 'office_visit',
+          status: 'roomed',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      return encounter.id;
+    });
+
+    await withTenantContext(handle.db, ctxA.tenantId, async (trx) => {
+      const runId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const pending = await documentRepo.create(trx, {
+        tenantId: ctxA.tenantId,
+        filename: 'visit-audio-pending.webm',
+        contentType: 'audio/webm',
+        storageKey: `ambient-audio-test/${runId}-pending`,
+        patientId,
+        encounterId: tenantAEncounterId,
+        documentCategory: 'ambient_audio',
+        createdBy: ctxA.actor!.id,
+      });
+      pendingAudioDocumentId = pending.id;
+
+      const stored = await documentRepo.create(trx, {
+        tenantId: ctxA.tenantId,
+        filename: 'visit-audio-stored.webm',
+        contentType: 'audio/webm',
+        storageKey: `ambient-audio-test/${runId}-stored`,
+        patientId,
+        encounterId: tenantAEncounterId,
+        documentCategory: 'ambient_audio',
+        createdBy: ctxA.actor!.id,
+      });
+      await documentRepo.markStored(trx, ctxA.tenantId, stored.id, 12345);
+      storedAudioDocumentId = stored.id;
+    });
+  });
+
+  afterAll(() => handle.close());
+
+  it('rejects an audio document that has not finished uploading', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    await expect(
+      withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        resolveAmbientAudioInput(trx, ctxA.tenantId, tenantAEncounterId, pendingAudioDocumentId, new NoopTranscriptionGateway(), documentRepo),
+      ),
+    ).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it('rejects an audio document that does not belong to this encounter', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    await expect(
+      withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        resolveAmbientAudioInput(trx, ctxA.tenantId, 'not-a-real-encounter-id', storedAudioDocumentId, new NoopTranscriptionGateway(), documentRepo),
+      ),
+    ).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it('with the Noop gateway (no real speech-to-text vendor), a stored recording still 409s rather than fabricating a transcript', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    await expect(
+      withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        resolveAmbientAudioInput(trx, ctxA.tenantId, tenantAEncounterId, storedAudioDocumentId, new NoopTranscriptionGateway(), documentRepo),
+      ),
+    ).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it('a real (stubbed-here) transcription gateway result flows through as the input text', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const fakeRealGateway: TranscriptionGateway = {
+      transcribeAudio: async () => ({ transcript: 'Patient reports improved symptoms since last visit.', confidence: 0.94, available: true }),
+    };
+    const result = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      resolveAmbientAudioInput(trx, ctxA.tenantId, tenantAEncounterId, storedAudioDocumentId, fakeRealGateway, documentRepo),
+    );
+    expect(result.inputText).toBe('Patient reports improved symptoms since last visit.');
+    expect(result.contextItems).toHaveLength(1);
+    expect(result.contextItems[0]!.ref).toBe(`Document/${storedAudioDocumentId}`);
   });
 });

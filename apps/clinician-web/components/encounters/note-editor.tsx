@@ -12,6 +12,7 @@ import { PERMISSION_KEYS } from '@/lib/permission-keys';
 import { amendNote, signNote, submitNoteForReview, updateNoteContent, voidNote } from '@/lib/actions/notes';
 import { proposeNoteDraft } from '@/lib/actions/ai-generations';
 import { AiProposeTrigger } from '@/components/ai/ai-propose-trigger';
+import { AmbientAudioNoteDraft } from '@/components/encounters/ambient-audio-note-draft';
 import type { Note } from '@/lib/types';
 
 const EDITABLE_STATUSES: Note['status'][] = ['draft', 'ready_for_review'];
@@ -24,6 +25,11 @@ export function NoteEditor({ note, encounterId }: { note: Note; encounterId: str
 
   const editable = EDITABLE_STATUSES.includes(note.status) && has(PERMISSION_KEYS.NOTE_CREATE);
   const dirty = JSON.stringify(content) !== JSON.stringify(note.content);
+
+  function applyDraft(text: string) {
+    const firstSection = Object.keys(content)[0];
+    if (firstSection) setContent((c) => ({ ...c, [firstSection]: text }));
+  }
 
   function run(action: () => Promise<{ ok: boolean; error?: string }>) {
     startTransition(async () => {
@@ -43,14 +49,10 @@ export function NoteEditor({ note, encounterId }: { note: Note; encounterId: str
       </div>
 
       {editable && note.status === 'draft' && (
-        <AiProposeTrigger
-          label="Draft with AI"
-          proposeFn={() => proposeNoteDraft(encounterId)}
-          onAccept={(text) => {
-            const firstSection = Object.keys(content)[0];
-            if (firstSection) setContent((c) => ({ ...c, [firstSection]: text }));
-          }}
-        />
+        <div className="space-y-2">
+          <AiProposeTrigger label="Draft with AI" proposeFn={() => proposeNoteDraft(encounterId)} onAccept={applyDraft} />
+          <AmbientAudioNoteDraft encounterId={encounterId} onAccept={applyDraft} />
+        </div>
       )}
 
       {Object.entries(content).map(([section, text]) => (
