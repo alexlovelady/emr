@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenantContext } from '@ehr/db';
 import { ConflictError, NotFoundError } from '@ehr/domain-common';
@@ -34,6 +35,12 @@ describe('tenant isolation — query platform', () => {
   let tenantAPractitionerId: string;
   let matchingPatientId: string;
   let nonMatchingPatientId: string;
+  // Unique per run (not a fixed literal like the old `QueryMatch-${Date.now()}`) — this dev DB's
+  // tenant A is shared and never reset between test runs, so `search_documents` accumulates one row
+  // per historical run; a repeated search term eventually exceeds the gateway's default 25-row limit
+  // and the current run's row falls out of the top-ranked results. See postgres-search-index-gateway
+  // .integration.test.ts's own Zztop/Qwerty/Plugh markers for the same established fix.
+  const patientSearchMarker = `Queryzzz${randomUUID().replace(/-/g, '')}`;
 
   beforeAll(async () => {
     handle = await setupTestDb();
@@ -58,7 +65,7 @@ describe('tenant isolation — query platform', () => {
         .values({
           tenant_id: ctxA.tenantId,
           given_name: 'Isolation',
-          family_name: `QueryMatch-${Date.now()}`,
+          family_name: patientSearchMarker,
           date_of_birth: isoDateYearsAgo(55),
           status: 'active',
         })
@@ -274,7 +281,7 @@ describe('tenant isolation — query platform', () => {
     });
 
     const patientResults = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
-      searchGateway.search(trx, { tenantId: ctxA.tenantId, query: 'QueryMatch', allowedContextTags: [] }),
+      searchGateway.search(trx, { tenantId: ctxA.tenantId, query: patientSearchMarker, allowedContextTags: [] }),
     );
     expect(patientResults.some((r) => r.resourceId === matchingPatientId)).toBe(true);
 
@@ -285,7 +292,7 @@ describe('tenant isolation — query platform', () => {
 
     const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
     const crossTenantResults = await withTenantContext(handle.db, ctxB.tenantId, (trx) =>
-      searchGateway.search(trx, { tenantId: ctxB.tenantId, query: 'QueryMatch', allowedContextTags: [] }),
+      searchGateway.search(trx, { tenantId: ctxB.tenantId, query: patientSearchMarker, allowedContextTags: [] }),
     );
     expect(crossTenantResults).toHaveLength(0);
   });
