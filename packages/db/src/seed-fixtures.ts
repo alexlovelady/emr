@@ -102,6 +102,10 @@ export const PERMISSION_KEYS = {
    * for a tenant admin to assign to a narrower role (e.g. a locum/resident) if they choose to. */
   PATIENT_READ_CARE_TEAM_SCOPED: 'patient.read.care_team_scoped',
   BREAKGLASS_REVIEW: 'breakglass.review',
+  /** Item 23: manage a tenant's own SSO/SAML/OIDC federation config
+   * (`packages/auth-adapter/src/sso.ts`). Distinct from the platform-wide `SECURITY_KEY_ROTATE` —
+   * this is per-tenant, like `TENANT_MANAGE`. */
+  SSO_MANAGE: 'sso.manage',
 } as const;
 
 export interface SeededTenant {

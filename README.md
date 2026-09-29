@@ -1062,6 +1062,61 @@ risk; the agreed scope for all three was "build the real mechanism, keep enforce
   integration: real encounters/appointments/problems/breakglass_grants against Postgres, plus a
   full 8-layer end-to-end override test) and `packages/alerting` (the new review-queue rule).
 
+### Remaining-gaps build-out — SSO/SAML/OIDC identity federation adapter shape
+
+Closes item 23. ADR-0002 already anticipated this: `IdentityProvider.resolveUser(tenantSlug, email)`
+was deliberately split from password verification (`PasswordCredentialProvider.checkPassword`) so "a
+future SAML/OIDC provider resolves the user from its own signed assertion and never needs
+`checkPassword` at all" — that seam existed but nothing used it. No real IdP is integrated (and none
+can be without choosing and contracting one), so this closes the shape only: the full federated-login
+request path is real and wired end to end, but cannot actually authenticate anyone until a real
+SAML/OIDC verifier is plugged in.
+
+- **`packages/auth-adapter/src/sso.ts`** (new) — `SsoAssertionVerifier` interface
+  (`verify(rawAssertion, config): Promise<VerifiedSsoAssertion>`) plus `NoopSsoAssertionVerifier`.
+  Unlike this repo's other `Noop*Gateway` stubs (which return an empty/successful result so a
+  downstream flow can be demoed, e.g. `NoopPaymentGateway` always succeeding), an identity verifier
+  that trivially "succeeded" would let anyone log in as anyone it named — so this one ALWAYS REJECTS,
+  fail-closed, regardless of input. It exists to prove the request path is real, not to authenticate
+  anyone.
+- **`packages/db/migrations/0057_tenant_sso_configs.ts`** (new) — one row per tenant (`protocol`,
+  `enabled` defaulting false, `issuer`, `clientId`, `metadataUrl`), tenant-scoped and RLS-enabled.
+  Nothing calls it until a tenant admin explicitly configures + enables one. New `sso.manage`
+  permission (tenant-scoped, like `tenant.manage` — no seeded role has it besides `platform_admin`)
+  gates `GET`/`PUT /api/v1/auth/sso/config`.
+- **`packages/db/migrations/0058_external_identities.ts`** (new) — links a verified assertion's
+  external subject id to an existing local `users` row. Deliberately **link-only, never
+  provisioning**: `FederatedIdentityProvider` only ever links to a `users` row that already exists
+  (JIT-matched by email on first login, then by this table's persisted link on every login after) —
+  it never creates a user or grants a permission, so enabling SSO for a tenant can never itself
+  expand who can log in, only how an already-provisioned person does it.
+- **`packages/auth-adapter/src/federated-identity-provider.ts`** (new) — `FederatedIdentityProvider`
+  is a sibling of `IdentityProvider`, not a second implementation of it: `resolveUser(tenantSlug,
+  email)`'s signature assumes the caller already knows the email, which isn't true for a federated
+  callback starting from an opaque provider-issued assertion. Everything downstream of identity
+  resolution (`issueTokens`, refresh, JWKS, MFA, key rotation) is already provider-agnostic and reused
+  as-is through the same `FirstPartyIdentityProvider` instance once `authenticate()` returns a
+  `ResolvedUser`. Every failure — unconfigured tenant, disabled config, no registered verifier, a
+  rejected assertion, no matching local user — is normalized to the exact same opaque
+  `SsoAuthenticationError` message, the same "don't reveal which reason" posture password login
+  already uses for wrong email vs. wrong password.
+- **New endpoint**: `POST /api/v1/auth/sso/callback` (`AuthController`, unauthenticated like
+  `login()`) — body `{tenantSlug, protocol, assertion}`; `assertion` is deliberately `z.unknown()`
+  since its real shape depends entirely on which protocol/IdP eventually verifies it. Reuses
+  `AuthService`'s exact MFA-gate/token-issuance/audit shape (`ssoLogin()` mirrors `login()`).
+- **Live-verified** against the running dev stack: enabled a real OIDC config for a tenant via
+  `PUT /api/v1/auth/sso/config`, confirmed `POST /api/v1/auth/sso/callback` fails closed with the
+  opaque 401 (proving the config lookup → verifier call path is real), confirmed a tenant with no
+  config at all gets the exact same opaque message (no information leak about which tenant has SSO
+  configured), and confirmed ordinary password login is completely unaffected throughout. 12 new
+  integration tests (`packages/auth-adapter`) against real Postgres cover: no-config, disabled-config,
+  no-registered-verifier, no-matching-user, first-login JIT-linking, link-reuse on a second login,
+  and cross-tenant isolation (a config enabled for tenant A can't authenticate against tenant B) —
+  plus 3 unit tests proving `NoopSsoAssertionVerifier` rejects every input shape. Full repo-wide
+  build/lint/typecheck green; the one test failure seen in a full-suite run
+  (`@ehr/query`'s tenant-isolation reindex test hitting its known pre-existing 5-second timeout under
+  heavy concurrent load) passed cleanly in isolation, confirming it's unrelated.
+
 ## Verification status
 
 Docker Desktop's backend would not start in the environment this was built in (its WSL2

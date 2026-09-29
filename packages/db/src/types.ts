@@ -472,6 +472,23 @@ export interface BreakglassGrantsTable extends CommonColumnsTable {
   reviewed_by: string | null;
 }
 
+/** Item 23 — see migration 0057's doc comment. */
+export interface TenantSsoConfigsTable extends CommonColumnsTable {
+  protocol: string;
+  enabled: Generated<boolean>;
+  issuer: string;
+  client_id: string | null;
+  metadata_url: string | null;
+}
+
+/** Item 23 — see migration 0058's doc comment. */
+export interface ExternalIdentitiesTable extends CommonColumnsTable {
+  user_id: string;
+  protocol: string;
+  external_subject_id: string;
+  linked_at: GeneratedTimestamp;
+}
+
 /** Global system table (no tenant_id RLS) — see migration 0053's doc comment. `tenant_id` is an
  * optional context column, not a scoping column. */
 export interface AlertsTable {
@@ -902,6 +919,8 @@ export interface DB {
   hl7_messages: Hl7MessagesTable;
   alerts: AlertsTable;
   breakglass_grants: BreakglassGrantsTable;
+  tenant_sso_configs: TenantSsoConfigsTable;
+  external_identities: ExternalIdentitiesTable;
   external_candidates: ExternalCandidatesTable;
   smart_clients: SmartClientsTable;
   smart_authorization_codes: SmartAuthorizationCodesTable;

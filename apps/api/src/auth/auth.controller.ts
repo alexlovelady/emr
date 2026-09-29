@@ -13,10 +13,12 @@ import {
   MfaChallengeSchema,
   MfaConfirmSchema,
   RefreshSchema,
+  SsoCallbackSchema,
   type LoginInput,
   type MfaChallengeInput,
   type MfaConfirmInput,
   type RefreshInput,
+  type SsoCallbackInput,
 } from './auth.dto.js';
 import { AuthService } from './auth.service.js';
 import { IDENTITY_PROVIDER } from '../common/tokens.js';
@@ -45,6 +47,21 @@ export class AuthController {
   @HttpCode(200)
   async login(@Body(new ZodValidationPipe(LoginSchema)) body: LoginInput, @Req() req: FastifyRequest) {
     return this.authService.login(body.tenantSlug, body.email, body.password, requestMeta(req));
+  }
+
+  /**
+   * Item 23's federated-login entry point — same unauthenticated/unaudited-by-decorator posture
+   * as `login()` (see the class doc comment and `AuthService`'s own audit-timing note), since no
+   * tenant/actor context exists yet. `SkipAuthz`, not a permission check: anyone reaching this
+   * with SSO disabled or no real verifier configured gets the same opaque failure `login()` gives
+   * a wrong password — see `SsoAuthenticationError`.
+   */
+  @Post('sso/callback')
+  @SkipAuthz()
+  @SkipAudit()
+  @HttpCode(200)
+  async ssoCallback(@Body(new ZodValidationPipe(SsoCallbackSchema)) body: SsoCallbackInput, @Req() req: FastifyRequest) {
+    return this.authService.ssoLogin(body.tenantSlug, body.protocol, body.assertion, requestMeta(req));
   }
 
   @Post('refresh')

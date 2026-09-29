@@ -3,8 +3,16 @@ import type { Kysely } from 'kysely';
 import { withTenantContext, type DB } from '@ehr/db';
 import { recordAuditEvent } from '@ehr/audit';
 import { UnauthorizedError } from '@ehr/domain-common';
-import { InvalidCredentialsError, type IdentityProvider, type MfaEnrollment, type PasswordCredentialProvider, type TokenPair } from '@ehr/auth-adapter';
-import { DB_CONNECTION, IDENTITY_PROVIDER } from '../common/tokens.js';
+import {
+  InvalidCredentialsError,
+  type FederatedIdentityProvider,
+  type IdentityProvider,
+  type MfaEnrollment,
+  type PasswordCredentialProvider,
+  type SsoProtocol,
+  type TokenPair,
+} from '@ehr/auth-adapter';
+import { DB_CONNECTION, FEDERATED_IDENTITY_PROVIDER, IDENTITY_PROVIDER } from '../common/tokens.js';
 
 export interface RequestMeta {
   requestId: string;
@@ -31,6 +39,7 @@ export type LoginResult = { mfaRequired: true; mfaPendingToken: string } | ({ mf
 export class AuthService {
   constructor(
     @Inject(IDENTITY_PROVIDER) private readonly identityProvider: IdentityProvider & PasswordCredentialProvider,
+    @Inject(FEDERATED_IDENTITY_PROVIDER) private readonly federatedIdentityProvider: FederatedIdentityProvider,
     @Inject(DB_CONNECTION) private readonly db: Kysely<DB>,
   ) {}
 
@@ -59,6 +68,27 @@ export class AuthService {
 
     const tokens = await this.identityProvider.issueTokens(userId, tenantId);
     await this.auditAuthEvent(tenantId, userId, 'auth.login', 'success', meta);
+    return { mfaRequired: false, ...tokens };
+  }
+
+  /**
+   * Item 23's federated-login entry point — same post-authentication shape as `login()` (MFA gate,
+   * token issuance, audit event) but identity comes from a verified SSO assertion instead of a
+   * password. No real IdP is wired in today (see `NoopSsoAssertionVerifier`), so this always fails
+   * closed via `FederatedIdentityProvider.authenticate()` until a tenant both configures a real
+   * verifier and enables it.
+   */
+  async ssoLogin(tenantSlug: string, protocol: SsoProtocol, rawAssertion: unknown, meta: RequestMeta): Promise<LoginResult> {
+    const { userId, tenantId, mfaEnrolled } = await this.federatedIdentityProvider.authenticate(tenantSlug, protocol, rawAssertion);
+
+    if (mfaEnrolled) {
+      const mfaPendingToken = await this.identityProvider.issueMfaPendingToken(userId, tenantId);
+      await this.auditAuthEvent(tenantId, userId, 'auth.sso_login.mfa_required', 'success', meta);
+      return { mfaRequired: true, mfaPendingToken };
+    }
+
+    const tokens = await this.identityProvider.issueTokens(userId, tenantId);
+    await this.auditAuthEvent(tenantId, userId, 'auth.sso_login', 'success', meta);
     return { mfaRequired: false, ...tokens };
   }
 

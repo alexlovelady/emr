@@ -4,7 +4,7 @@ import { Reflector } from '@nestjs/core';
 import { getConfig } from '@ehr/config';
 import { createDb } from '@ehr/db';
 import { PolicyEngine } from '@ehr/authz';
-import { createKeyRingStore, FirstPartyIdentityProvider } from '@ehr/auth-adapter';
+import { createKeyRingStore, FirstPartyIdentityProvider, FederatedIdentityProvider, NoopSsoAssertionVerifier } from '@ehr/auth-adapter';
 import { S3ObjectStorageGateway } from '@ehr/object-storage';
 import { OBJECT_STORAGE_GATEWAY } from '@ehr/documents';
 import { NoopLabOrderGateway } from '@ehr/lab-adapter';
@@ -26,7 +26,7 @@ import { VIDEO_VISIT_GATEWAY } from '@ehr/scheduling';
 import { NoopAiGateway } from '@ehr/ai-adapter';
 import { AI_GATEWAY, TRANSCRIPTION_GATEWAY } from '@ehr/ai';
 import { NoopTranscriptionGateway } from '@ehr/transcription-adapter';
-import { DB_CONNECTION, KEY_RING, IDENTITY_PROVIDER, ENV_CONFIG } from '../common/tokens.js';
+import { DB_CONNECTION, KEY_RING, IDENTITY_PROVIDER, FEDERATED_IDENTITY_PROVIDER, ENV_CONFIG } from '../common/tokens.js';
 
 const env = getConfig();
 const db = createDb({ connectionString: env.APP_DATABASE_URL });
@@ -68,6 +68,19 @@ const db = createDb({ connectionString: env.APP_DATABASE_URL });
         }),
     },
     {
+      // No real SAML/OIDC IdP is integrated (item 23, ADR-0002) — both protocols resolve to the
+      // fail-closed Noop verifier, so this provider exists and is fully wired, but cannot actually
+      // authenticate anyone until a real verifier replaces one of these entries. See
+      // `NoopSsoAssertionVerifier`'s own doc comment for why that's a deliberate security choice,
+      // not an oversight.
+      provide: FEDERATED_IDENTITY_PROVIDER,
+      useFactory: () =>
+        new FederatedIdentityProvider(db, {
+          oidc: new NoopSsoAssertionVerifier('oidc'),
+          saml: new NoopSsoAssertionVerifier('saml'),
+        }),
+    },
+    {
       provide: OBJECT_STORAGE_GATEWAY,
       useFactory: () =>
         new S3ObjectStorageGateway({
@@ -99,6 +112,7 @@ const db = createDb({ connectionString: env.APP_DATABASE_URL });
     DB_CONNECTION,
     KEY_RING,
     IDENTITY_PROVIDER,
+    FEDERATED_IDENTITY_PROVIDER,
     OBJECT_STORAGE_GATEWAY,
     LAB_ORDER_GATEWAY,
     ERX_GATEWAY,

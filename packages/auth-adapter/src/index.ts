@@ -43,3 +43,13 @@ export {
   type PortalTokenIssuerConfig,
   type PortalAccessTokenClaims,
 } from './portal-tokens.js';
+export {
+  NoopSsoAssertionVerifier,
+  SsoAuthenticationError,
+  type SsoProtocol,
+  type TenantSsoConfig,
+  type VerifiedSsoAssertion,
+  type SsoAssertionVerifier,
+} from './sso.js';
+export { TenantSsoConfigRepository, type TenantSsoConfigRow, type TenantSsoConfigUpsertInput } from './sso-config.repository.js';
+export { FederatedIdentityProvider } from './federated-identity-provider.js';

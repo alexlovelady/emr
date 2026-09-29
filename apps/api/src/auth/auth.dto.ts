@@ -34,3 +34,22 @@ export const BreakglassInvokeSchema = z.object({
   durationMinutes: z.number().int().positive().max(240).default(60),
 });
 export type BreakglassInvokeInput = z.infer<typeof BreakglassInvokeSchema>;
+
+/** Item 23 — `assertion` is deliberately `unknown`: its real shape depends entirely on which
+ * protocol/IdP eventually verifies it (an OIDC token-exchange result vs. a SAML Response document
+ * are nothing alike), and no real verifier exists yet to define one. */
+export const SsoCallbackSchema = z.object({
+  tenantSlug: z.string().min(1),
+  protocol: z.enum(['oidc', 'saml']),
+  assertion: z.unknown(),
+});
+export type SsoCallbackInput = z.infer<typeof SsoCallbackSchema>;
+
+export const SsoConfigUpsertSchema = z.object({
+  protocol: z.enum(['oidc', 'saml']),
+  enabled: z.boolean(),
+  issuer: z.string().min(1),
+  clientId: z.string().min(1).nullish(),
+  metadataUrl: z.string().url().nullish(),
+});
+export type SsoConfigUpsertInput = z.infer<typeof SsoConfigUpsertSchema>;
