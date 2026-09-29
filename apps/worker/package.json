@@ -12,10 +12,12 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@ehr/alerting": "workspace:*",
     "@ehr/bulk-export": "workspace:*",
     "@ehr/config": "workspace:*",
     "@ehr/db": "workspace:*",
     "@ehr/db-backup": "workspace:*",
+    "@ehr/notification-adapter": "workspace:*",
     "@ehr/object-storage": "workspace:*",
     "@ehr/observability": "workspace:*",
     "@ehr/outbox": "workspace:*",

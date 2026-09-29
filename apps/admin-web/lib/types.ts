@@ -52,6 +52,21 @@ export interface ResourceRow {
 
 export type BillingRuleType = 'code_requires_diagnosis_prefix' | 'code_forbidden_for_sex' | 'code_max_units';
 
+export interface AlertRow {
+  id: string;
+  ruleKey: string;
+  dedupeKey: string;
+  severity: 'critical' | 'warning' | 'info';
+  title: string;
+  detail: Record<string, unknown>;
+  status: 'open' | 'resolved';
+  tenantId: string | null;
+  openedAt: string;
+  resolvedAt: string | null;
+  resolvedBy: string | null;
+  updatedAt: string;
+}
+
 export interface BillingRuleRow {
   id: string;
   ruleType: BillingRuleType;

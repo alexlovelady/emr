@@ -80,6 +80,15 @@ export const envSchema = z.object({
   HL7_RETRY_BATCH_SIZE: z.coerce.number().int().positive().default(20),
   HL7_RETRY_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
   HL7_RETRY_BACKOFF_BASE_MS: z.coerce.number().int().positive().default(60_000),
+
+  // --- Operational alerting (packages/alerting, apps/worker) ---
+  ALERT_EVAL_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
+  ALERT_BACKUP_STALE_THRESHOLD_MS: z.coerce.number().int().positive().default(2 * 86_400_000),
+  ALERT_OUTBOX_LAG_THRESHOLD_SECONDS: z.coerce.number().int().positive().default(300),
+  ALERT_HL7_DEAD_LETTER_THRESHOLD: z.coerce.number().int().positive().default(5),
+  // Empty (the default) disables notification dispatch — alerts are still evaluated/persisted and
+  // readable via GET /api/v1/alerts either way; see AlertEvaluatorOptions.notifyEmail.
+  ALERT_NOTIFY_EMAIL: z.string().optional().or(z.literal('')),
 });
 
 export type Env = z.infer<typeof envSchema>;

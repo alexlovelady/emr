@@ -26,6 +26,7 @@ import { CoreModule } from './core/core.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { PortalAuthModule } from './portal-auth/portal-auth.module.js';
 import { TerminologyModule } from './terminology/terminology.module.js';
+import { AlertsModule } from './alerts/alerts.module.js';
 import { HealthController } from './health/health.controller.js';
 import { RequestTransactionInterceptor } from './common/request-transaction.interceptor.js';
 import { IdempotencyInterceptor } from './common/idempotency.interceptor.js';
@@ -64,6 +65,7 @@ import { ProblemDetailsFilter } from './common/problem-details.filter.js';
     QueryModule,
     AiModule,
     TerminologyModule,
+    AlertsModule,
   ],
   controllers: [HealthController],
   providers: [

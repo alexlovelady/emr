@@ -425,6 +425,8 @@ const document = {
       ExecuteCohortDslSchema,
       'ExecuteCohortDsl',
     ),
+    '/alerts': get('List operational alerts (requires alert.manage) — a ?status=open|resolved query filter is accepted but not shown here', 'Alerts'),
+    '/alerts/{id}/resolve': post('Manually acknowledge/resolve an open alert (requires alert.manage)', 'Alerts'),
   },
   components: {
     schemas: { ProblemDetail: problemDetail },

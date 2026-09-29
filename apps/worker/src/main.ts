@@ -6,6 +6,8 @@ import type { DB } from '@ehr/db';
 import { DomainEventBus, OutboxRelay } from '@ehr/outbox';
 import { BulkExportRelay } from '@ehr/bulk-export';
 import { DatabaseBackupJob, BackupScheduler } from '@ehr/db-backup';
+import { NoopNotificationGateway } from '@ehr/notification-adapter';
+import { AlertEvaluator, AlertScheduler, createBackupHealthRule, createOutboxBacklogRule, createHl7DeadLetterRule } from '@ehr/alerting';
 import { S3ObjectStorageGateway } from '@ehr/object-storage';
 import { startTracing, createLogger, getMetrics } from '@ehr/observability';
 
@@ -97,6 +99,23 @@ async function main(): Promise<void> {
   backupScheduler.start();
   logger.info({ intervalMs: env.BACKUP_INTERVAL_MS }, 'backup scheduler started');
 
+  // Item 18: wires packages/observability's existing metrics scaffolding to a real alerting
+  // mechanism — see packages/alerting's own doc comments for the full reasoning.
+  const alertEvaluator = new AlertEvaluator(
+    db,
+    [
+      createBackupHealthRule({ staleThresholdMs: env.ALERT_BACKUP_STALE_THRESHOLD_MS }),
+      createOutboxBacklogRule({ lagThresholdSeconds: env.ALERT_OUTBOX_LAG_THRESHOLD_SECONDS }),
+      createHl7DeadLetterRule({ countThreshold: env.ALERT_HL7_DEAD_LETTER_THRESHOLD }),
+    ],
+    new NoopNotificationGateway(),
+    undefined,
+    { ...(env.ALERT_NOTIFY_EMAIL ? { notifyEmail: env.ALERT_NOTIFY_EMAIL } : {}) },
+  );
+  const alertScheduler = new AlertScheduler(alertEvaluator, { intervalMs: env.ALERT_EVAL_INTERVAL_MS });
+  alertScheduler.start();
+  logger.info({ intervalMs: env.ALERT_EVAL_INTERVAL_MS }, 'alert scheduler started');
+
   const server = createServer((req, res) => {
     if (req.url === '/healthz') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -114,6 +133,7 @@ async function main(): Promise<void> {
     relay.stop();
     bulkExportRelay.stop();
     backupScheduler.stop();
+    alertScheduler.stop();
     server.close();
     await db.destroy();
     process.exit(0);

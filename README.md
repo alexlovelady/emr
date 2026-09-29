@@ -856,6 +856,69 @@ reprocessing.
   `Hl7RetryRelay`'s retry/backoff/dead-letter/claim-filtering mechanics via a fake reprocessor
   against real Postgres, plus a new dead-letter assertion in the existing ORU ingestion suite).
 
+### Remaining-gaps build-out — operational alerting
+
+Closes item 18 of the post-Tier-2 gap sweep. `docs/pilot-readiness-checklist.md` was explicit:
+"`packages/observability` has real OpenTelemetry metrics/tracing scaffolding, but no alerting
+pipeline is wired to anything." Three background systems already built in earlier items had zero
+human-facing visibility — a scheduled backup job (item 17) could fail silently forever, the outbox
+relay's own lag gauge was measured but never acted on, and HL7 dead-letters (item 15) had no
+aggregate view.
+
+- **New `packages/alerting`** — a fixed, in-code `AlertRule` catalog (same shape as
+  `domains/query`'s governed-query registry): each rule's `evaluate(db)` queries real data and
+  returns zero or more `AlertFinding`s. `AlertEvaluator` runs every rule, upserts one open `alerts`
+  row per distinct finding (deduped by rule+condition so re-evaluating an already-firing condition
+  updates the SAME row instead of spamming new ones — enforced by a real Postgres partial unique
+  index, `alerts_open_dedupe_idx`, not just an application-level check), auto-resolves an alert
+  whose condition has genuinely cleared, and dispatches exactly one notification — via the same
+  `NotificationGateway`/`NoopNotificationGateway` every other vendor boundary in this codebase
+  already stubs — the moment an alert newly opens, not on every re-evaluation of one already open.
+  `AlertScheduler` is a periodic trigger shaped like `packages/db-backup`'s `BackupScheduler`
+  (runs one evaluation immediately on `start()`, then every `ALERT_EVAL_INTERVAL_MS`).
+- **Three real rules**, each closing exactly the gap named above:
+  - `backup_health` — critical if the most recent `backup_runs` row failed; warning if the most
+    recent *succeeded* run is older than `ALERT_BACKUP_STALE_THRESHOLD_MS`.
+  - `outbox_backlog` — wires `apps/worker`'s existing `outbox_relay_lag_seconds`/
+    `outbox_pending_count` OTel gauges (measured on every collection tick, never acted on) to a
+    real warning, using the exact same "oldest pending row's age" query those gauges' own
+    collection callbacks already run.
+  - `hl7_dead_letter` — one alert per tenant (not one shared platform-wide alert) once that
+    tenant's dead-lettered HL7 count meets `ALERT_HL7_DEAD_LETTER_THRESHOLD`, so the finding routes
+    to the tenant whose interface engine or reference data actually needs fixing.
+- **New global `alerts` table** (migration `0053_alerts.ts`, no `withCommonColumns`/RLS — same
+  reasoning as `roles`/`backup_runs`: a rule evaluates conditions across the whole platform, not one
+  tenant's data; `tenant_id` is an optional context column on a finding, not a scoping column).
+- **New `GET /api/v1/alerts`** (optional `?status=open|resolved`) and
+  **`POST /api/v1/alerts/{id}/resolve`** (manual acknowledgement), gated on a new platform-level
+  `alert.manage` permission — reads/writes go through the same per-request transaction every other
+  route uses (no special system-context wrapping needed, since `alerts` has no RLS policy to
+  bypass), same pattern `RoleController` already uses for the equally-global `roles` table. New
+  `apps/admin-web` **Alerts** nav page: open alerts with a Resolve button (client component,
+  `useTransition` + `router.refresh()`, same shape as `LocationRowActions`' Deactivate button),
+  resolved alerts listed below for history. A manually-resolved alert whose underlying condition is
+  still firing reopens as a genuinely new alert on the next evaluation — manual ack silences one
+  instance, not the rule.
+- Wired into `apps/worker/src/main.ts` (where every other background scheduler/relay already
+  lives), stopped alongside them in the shutdown handler. New env vars: `ALERT_EVAL_INTERVAL_MS`
+  (60s), `ALERT_BACKUP_STALE_THRESHOLD_MS` (48h), `ALERT_OUTBOX_LAG_THRESHOLD_SECONDS` (300),
+  `ALERT_HL7_DEAD_LETTER_THRESHOLD` (5), `ALERT_NOTIFY_EMAIL` (empty by default — disables
+  notification dispatch; evaluation/persistence happen either way).
+- **Live-verified against the running dev stack with genuinely real conditions, not synthetic
+  test data**: this dev host has no `pg_dump` binary on `PATH` (a pre-existing, already-documented
+  gap from item 17), so the backup scheduler's real attempt failed with `spawn pg_dump ENOENT` —
+  the `backup_health` rule correctly opened a critical alert for it on the very next evaluation
+  tick. Separately, this session's own accumulated HL7 dead-letters (28 real rows from earlier
+  live verification of item 15) correctly triggered a per-tenant `hl7_dead_letter` warning.
+  Confirmed `GET /api/v1/alerts` returns both, `POST /api/v1/alerts/{id}/resolve` resolves one with
+  a real user id as `resolvedBy`, and — since the underlying backup failure was still the most
+  recent run — the SAME condition correctly reopened as a new alert on the following tick (manual
+  ack doesn't suppress a still-firing rule, by design). Full repo-wide lint/typecheck/build (168
+  tasks) and test/test:integration/test:tenant-isolation (134 tasks) all green, including 21 new
+  tests in `packages/alerting` (8 unit — evaluator orchestration and scheduler timing via fakes, no
+  real DB — plus 13 integration tests against real Postgres covering the repository's
+  upsert/resolve/recur semantics and all three rules).
+
 ## Verification status
 
 Docker Desktop's backend would not start in the environment this was built in (its WSL2

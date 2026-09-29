@@ -17,6 +17,7 @@
   "dependencies": {
     "@ehr/ai": "workspace:*",
     "@ehr/ai-adapter": "workspace:*",
+    "@ehr/alerting": "workspace:*",
     "@ehr/api-contracts": "workspace:*",
     "@ehr/audit": "workspace:*",
     "@ehr/auth-adapter": "workspace:*",

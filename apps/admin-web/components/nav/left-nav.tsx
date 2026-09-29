@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Boxes, Building2, Landmark, LogOut, MapPin, Scale, Settings, ShieldCheck, Stethoscope, Users, KeyRound } from 'lucide-react';
+import { Bell, Boxes, Building2, Landmark, LogOut, MapPin, Scale, Settings, ShieldCheck, Stethoscope, Users, KeyRound } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/components/providers/permissions-provider';
 import { PERMISSION_KEYS } from '@/lib/permission-keys';
@@ -17,6 +17,7 @@ const LINKS = [
   { href: '/bank-reconciliation', label: 'Bank reconciliation', icon: Landmark, permission: PERMISSION_KEYS.BANK_RECONCILIATION_MANAGE },
   { href: '/users', label: 'Users', icon: Users, permission: PERMISSION_KEYS.USER_MANAGE },
   { href: '/roles', label: 'Roles', icon: KeyRound, permission: PERMISSION_KEYS.ROLE_MANAGE },
+  { href: '/alerts', label: 'Alerts', icon: Bell, permission: PERMISSION_KEYS.ALERT_MANAGE },
 ] as const;
 
 function initials(email: string): string {

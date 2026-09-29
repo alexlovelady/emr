@@ -117,6 +117,9 @@ importers:
       '@ehr/ai-adapter':
         specifier: workspace:*
         version: link:../../packages/ai-adapter
+      '@ehr/alerting':
+        specifier: workspace:*
+        version: link:../../packages/alerting
       '@ehr/api-contracts':
         specifier: workspace:*
         version: link:../../packages/api-contracts
@@ -696,6 +699,9 @@ importers:
 
   apps/worker:
     dependencies:
+      '@ehr/alerting':
+        specifier: workspace:*
+        version: link:../../packages/alerting
       '@ehr/bulk-export':
         specifier: workspace:*
         version: link:../../packages/bulk-export
@@ -708,6 +714,9 @@ importers:
       '@ehr/db-backup':
         specifier: workspace:*
         version: link:../../packages/db-backup
+      '@ehr/notification-adapter':
+        specifier: workspace:*
+        version: link:../../packages/notification-adapter
       '@ehr/object-storage':
         specifier: workspace:*
         version: link:../../packages/object-storage
@@ -1944,6 +1953,31 @@ importers:
       vitest:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@26.6.2)(supports-color@7.2.0)
+
+  packages/alerting:
+    dependencies:
+      '@ehr/db':
+        specifier: workspace:*
+        version: link:../db
+      '@ehr/notification-adapter':
+        specifier: workspace:*
+        version: link:../notification-adapter
+      kysely:
+        specifier: ^0.28.17
+        version: 0.28.17
+    devDependencies:
+      '@ehr/testing':
+        specifier: workspace:*
+        version: link:../testing
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.4
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.4)(supports-color@7.2.0)
 
   packages/api-contracts:
     dependencies:

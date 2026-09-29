@@ -447,6 +447,23 @@ export interface PrescriptionRefillRequestsTable extends CommonColumnsTable {
   denial_reason: string | null;
 }
 
+/** Global system table (no tenant_id RLS) — see migration 0053's doc comment. `tenant_id` is an
+ * optional context column, not a scoping column. */
+export interface AlertsTable {
+  id: Generated<string>;
+  rule_key: string;
+  dedupe_key: string;
+  severity: string;
+  title: string;
+  detail: JsonColumn<Record<string, unknown>>;
+  status: Generated<string>;
+  tenant_id: string | null;
+  opened_at: GeneratedTimestamp;
+  resolved_at: Timestamp | null;
+  resolved_by: string | null;
+  updated_at: GeneratedTimestamp;
+}
+
 export interface Hl7MessagesTable extends CommonColumnsTable {
   message_control_id: string;
   message_type: string;
@@ -858,6 +875,7 @@ export interface DB {
   specimens: SpecimensTable;
   diagnostic_reports: DiagnosticReportsTable;
   hl7_messages: Hl7MessagesTable;
+  alerts: AlertsTable;
   external_candidates: ExternalCandidatesTable;
   smart_clients: SmartClientsTable;
   smart_authorization_codes: SmartAuthorizationCodesTable;

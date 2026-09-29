@@ -94,6 +94,7 @@ export const PERMISSION_KEYS = {
   MESSAGE_MANAGE: 'message.manage',
   AI_GENERATION_MANAGE: 'ai_generation.manage',
   SECURITY_KEY_ROTATE: 'security.key_rotate',
+  ALERT_MANAGE: 'alert.manage',
 } as const;
 
 export interface SeededTenant {
