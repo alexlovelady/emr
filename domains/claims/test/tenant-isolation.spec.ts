@@ -210,6 +210,41 @@ describe('tenant isolation — claims', () => {
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
+  it('lists denials and appeals by patient (joined through claims, no per-claim N+1)', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const charge = await createCodedCharge(handle, ctxA);
+    const claim = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      claimService.create(trx, ctxA, tenantAPatientId, {
+        encounterId: tenantAEncounterId,
+        billingPractitionerId: tenantAPractitionerId,
+        chargeIds: [charge.id],
+      }),
+    );
+    await withTenantContext(handle.db, ctxA.tenantId, (trx) => claimService.submit(trx, ctxA, claim.id));
+    await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      claimService.recordAcknowledgement(trx, ctxA, claim.id, 'rejected', { code: 'A1', description: 'Missing diagnosis pointer' }),
+    );
+    const timeline = await withTenantContext(handle.db, ctxA.tenantId, (trx) => claimService.timeline(trx, ctxA, claim.id));
+    const denialId = timeline.denials[0]!.id;
+    await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      appealService.create(trx, ctxA, denialId, { appealReason: 'Diagnosis pointer corrected — resubmitting for review.' }),
+    );
+
+    const denialsByPatient = await withTenantContext(handle.db, ctxA.tenantId, (trx) => denialService.listByPatient(trx, ctxA, tenantAPatientId));
+    expect(denialsByPatient.some((d) => d.id === denialId)).toBe(true);
+
+    const appealsByPatient = await withTenantContext(handle.db, ctxA.tenantId, (trx) => appealService.listByPatient(trx, ctxA, tenantAPatientId));
+    expect(appealsByPatient.some((a) => a.denialId === denialId)).toBe(true);
+
+    const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
+    await expect(
+      withTenantContext(handle.db, ctxB.tenantId, (trx) => denialService.listByPatient(trx, ctxB, tenantAPatientId)),
+    ).rejects.toBeInstanceOf(NotFoundError);
+    await expect(
+      withTenantContext(handle.db, ctxB.tenantId, (trx) => appealService.listByPatient(trx, ctxB, tenantAPatientId)),
+    ).rejects.toBeInstanceOf(NotFoundError);
+  });
+
   it('cannot submit a claim that is not draft or rejected', async () => {
     const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
     await expect(

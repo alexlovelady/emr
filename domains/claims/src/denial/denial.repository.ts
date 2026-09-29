@@ -64,6 +64,20 @@ export class DenialRepository {
     return rows.map(toRow);
   }
 
+  /** Denials have no `patient_id` of their own — joins through `claims` rather than making the
+   * caller flatten every claim's own timeline (the N+1 pattern this replaces). */
+  async listByPatient(trx: Executor, tenantId: string, patientId: string): Promise<DenialRow[]> {
+    const rows = await trx
+      .selectFrom('denials')
+      .innerJoin('claims', 'claims.id', 'denials.claim_id')
+      .selectAll('denials')
+      .where('denials.tenant_id', '=', tenantId)
+      .where('claims.patient_id', '=', patientId)
+      .orderBy('denials.denied_at', 'desc')
+      .execute();
+    return rows.map(toRow);
+  }
+
   async updateStatus(trx: Executor, tenantId: string, id: string, status: string, updatedBy: string): Promise<DenialRow> {
     const row = await trx
       .updateTable('denials')

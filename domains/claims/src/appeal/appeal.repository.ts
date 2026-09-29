@@ -75,6 +75,20 @@ export class AppealRepository {
     return rows.map(toRow);
   }
 
+  /** Appeals have no `patient_id` of their own — joins through `claims`, same reasoning as
+   * `DenialRepository.listByPatient()`. */
+  async listByPatient(trx: Executor, tenantId: string, patientId: string): Promise<AppealRow[]> {
+    const rows = await trx
+      .selectFrom('appeals')
+      .innerJoin('claims', 'claims.id', 'appeals.claim_id')
+      .selectAll('appeals')
+      .where('appeals.tenant_id', '=', tenantId)
+      .where('claims.patient_id', '=', patientId)
+      .orderBy('appeals.created_at', 'desc')
+      .execute();
+    return rows.map(toRow);
+  }
+
   async markSubmitted(trx: Executor, tenantId: string, id: string, updatedBy: string): Promise<AppealRow> {
     const row = await trx
       .updateTable('appeals')

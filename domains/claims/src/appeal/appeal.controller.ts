@@ -31,6 +31,18 @@ export class DenialAppealController {
   }
 }
 
+@Controller('api/v1/patients/:patientId/appeals')
+export class PatientAppealController {
+  constructor(private readonly service: AppealService) {}
+
+  @Get()
+  @RequirePermission(PERMISSION_KEYS.PATIENT_READ_CLINICAL)
+  @Audited('appeal.list_by_patient', 'Appeal')
+  async list(@Param('patientId') patientId: string, @Req() req: FastifyRequest) {
+    return this.service.listByPatient(getCurrentTransaction(), requireCtx(req), patientId);
+  }
+}
+
 @Controller('api/v1/appeals')
 export class AppealController {
   constructor(private readonly service: AppealService) {}

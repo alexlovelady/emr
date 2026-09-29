@@ -8,6 +8,18 @@ import { ZodValidationPipe } from '@ehr/api-contracts';
 import { ResolveDenialSchema, type ResolveDenialInput } from './denial.dto.js';
 import { DenialService } from './denial.service.js';
 
+@Controller('api/v1/patients/:patientId/denials')
+export class PatientDenialController {
+  constructor(private readonly service: DenialService) {}
+
+  @Get()
+  @RequirePermission(PERMISSION_KEYS.PATIENT_READ_CLINICAL)
+  @Audited('denial.list', 'Denial')
+  async list(@Param('patientId') patientId: string, @Req() req: FastifyRequest) {
+    return this.service.listByPatient(getCurrentTransaction(), requireCtx(req), patientId);
+  }
+}
+
 @Controller('api/v1/denials')
 export class DenialController {
   constructor(private readonly service: DenialService) {}

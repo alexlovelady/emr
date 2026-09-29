@@ -53,6 +53,8 @@ export default async function PatientChartPage({ params }: { params: Promise<{ i
     referrals,
     priorAuthorizations,
     externalCandidates,
+    denials,
+    appeals,
   ] = await Promise.all([
     callBackend<Patient>(`/api/v1/patients/${id}`),
     callBackend<Problem[]>(`/api/v1/patients/${id}/problems`),
@@ -75,15 +77,9 @@ export default async function PatientChartPage({ params }: { params: Promise<{ i
     callBackendOr<Referral[]>(`/api/v1/patients/${id}/referrals`, []),
     callBackendOr<PriorAuthorization[]>(`/api/v1/patients/${id}/prior-authorizations`, []),
     callBackendOr<ExternalCandidate[]>(`/api/v1/patients/${id}/external-candidates`, []),
+    callBackendOr<Denial[]>(`/api/v1/patients/${id}/denials`, []),
+    callBackendOr<Appeal[]>(`/api/v1/patients/${id}/appeals`, []),
   ]);
-
-  // No "list denials/appeals by patient" endpoint exists — both only surface per-claim via each
-  // claim's timeline (GET /claims/:id/timeline), so derive the patient-level lists from there.
-  const claimTimelines = await Promise.all(
-    claims.map((c) => callBackendOr<{ denials: Denial[]; appeals: Appeal[] } | null>(`/api/v1/claims/${c.id}/timeline`, null)),
-  );
-  const denials = claimTimelines.flatMap((t) => t?.denials ?? []);
-  const appeals = claimTimelines.flatMap((t) => t?.appeals ?? []);
 
   // The list endpoint returns bare plans (no installments) — same N+1-via-detail pattern as claim
   // timelines above, fine at this scale (a patient rarely has more than a couple of active plans).

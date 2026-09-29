@@ -1,6 +1,7 @@
 import type { Kysely, Transaction } from 'kysely';
 import type { DB } from '@ehr/db';
 import { ConflictError, NotFoundError, type RequestContext } from '@ehr/domain-common';
+import { PatientRepository } from '@ehr/patient';
 import { AppealRepository, type AppealRow } from './appeal.repository.js';
 import type { CreateAppealInput, DecideAppealInput } from './appeal.dto.js';
 import { DenialRepository } from '../denial/denial.repository.js';
@@ -21,6 +22,7 @@ export class AppealService {
   constructor(
     private readonly repo: AppealRepository = new AppealRepository(),
     private readonly denialRepo: DenialRepository = new DenialRepository(),
+    private readonly patientRepo: PatientRepository = new PatientRepository(),
   ) {}
 
   async create(trx: Executor, ctx: RequestContext, denialId: string, input: CreateAppealInput): Promise<AppealRow> {
@@ -54,6 +56,12 @@ export class AppealService {
 
   async listByDenial(trx: Executor, ctx: RequestContext, denialId: string): Promise<AppealRow[]> {
     return this.repo.listByDenial(trx, ctx.tenantId, denialId);
+  }
+
+  async listByPatient(trx: Executor, ctx: RequestContext, patientId: string): Promise<AppealRow[]> {
+    const patient = await this.patientRepo.findById(trx, ctx.tenantId, patientId);
+    if (!patient) throw new NotFoundError('Patient not found', { patientId });
+    return this.repo.listByPatient(trx, ctx.tenantId, patientId);
   }
 
   async submit(trx: Executor, ctx: RequestContext, id: string): Promise<AppealRow> {

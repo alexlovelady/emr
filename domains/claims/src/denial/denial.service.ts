@@ -2,18 +2,28 @@ import type { Kysely, Transaction } from 'kysely';
 import type { DB } from '@ehr/db';
 import { ConflictError, NotFoundError, type RequestContext } from '@ehr/domain-common';
 import { buildOutboxInsert } from '@ehr/outbox';
+import { PatientRepository } from '@ehr/patient';
 import type { ResolveDenialInput } from './denial.dto.js';
 import { DenialRepository, type DenialRow } from './denial.repository.js';
 
 type Executor = Kysely<DB> | Transaction<DB>;
 
 export class DenialService {
-  constructor(private readonly repo: DenialRepository = new DenialRepository()) {}
+  constructor(
+    private readonly repo: DenialRepository = new DenialRepository(),
+    private readonly patientRepo: PatientRepository = new PatientRepository(),
+  ) {}
 
   async getById(trx: Executor, ctx: RequestContext, id: string): Promise<DenialRow> {
     const denial = await this.repo.findById(trx, ctx.tenantId, id);
     if (!denial) throw new NotFoundError('Denial not found', { id });
     return denial;
+  }
+
+  async listByPatient(trx: Executor, ctx: RequestContext, patientId: string): Promise<DenialRow[]> {
+    const patient = await this.patientRepo.findById(trx, ctx.tenantId, patientId);
+    if (!patient) throw new NotFoundError('Patient not found', { patientId });
+    return this.repo.listByPatient(trx, ctx.tenantId, patientId);
   }
 
   async resolve(trx: Executor, ctx: RequestContext, id: string, input: ResolveDenialInput): Promise<DenialRow> {
