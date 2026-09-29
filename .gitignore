@@ -54,3 +54,8 @@ packages/terminology/data/
 # local object storage / db volumes
 .minio/
 .pgdata/
+
+# Playwright E2E test output
+test-results/
+playwright-report/
+blob-report/

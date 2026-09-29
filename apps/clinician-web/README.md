@@ -103,9 +103,14 @@ run alone. Run them sequentially, or `rm -rf .next` between a `build` and a subs
   place-order/prescribe forms still take a plain practitioner/location UUID text input instead of a
   picker — that's a data-entry UX upgrade, not the display bug this trim originally described, and
   remains open.
-- **No frontend automated tests** — no Playwright/Cypress/`@testing-library` precedent exists
-  anywhere in this repo yet. Verified manually end-to-end against live seeded data, including every
-  Phase A write path. Worth adding Playwright now that there's a real workflow surface to justify it.
+- ~~No frontend automated tests~~ — closed for this app: `pnpm test:e2e` (`playwright.config.ts`,
+  `tests/e2e/`) runs 5 real Playwright specs (login success/failure, patient list + server-side
+  search, opening a chart, switching every chart tab) against a live dev stack — `apps/api` and
+  Postgres must already be up and seeded, same precondition as `pnpm test:tenant-isolation`. Not
+  wired into `.github/workflows/ci.yml` yet: that needs the full stack (not just this app) running
+  non-interactively in CI, a shared-pipeline change left as a follow-up decision rather than made
+  unilaterally here. `apps/admin-web` and `apps/patient-portal` still have no E2E coverage — this
+  establishes the pattern, not full 3-app coverage.
 
 ## Known trims (new this pass — Phase A)
 
