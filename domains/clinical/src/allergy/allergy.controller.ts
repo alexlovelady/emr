@@ -1,11 +1,11 @@
-import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { getCurrentTransaction } from '@ehr/db';
 import { ForbiddenError, type RequestContext } from '@ehr/domain-common';
 import { Audited } from '@ehr/audit';
 import { PERMISSION_KEYS, RequirePermission } from '@ehr/authz';
 import { ZodValidationPipe } from '@ehr/api-contracts';
-import { CreateAllergySchema, type CreateAllergyInput } from './allergy.dto.js';
+import { CreateAllergySchema, UpdateAllergySchema, type CreateAllergyInput, type UpdateAllergyInput } from './allergy.dto.js';
 import { AllergyService } from './allergy.service.js';
 
 @Controller('api/v1/patients/:patientId/allergies')
@@ -36,6 +36,20 @@ export class AllergyDetailController {
   @Audited('allergy.read', 'Allergy')
   async getById(@Param('id') id: string, @Req() req: FastifyRequest) {
     return this.service.getById(getCurrentTransaction(), requireCtx(req), id);
+  }
+
+  @Put(':id')
+  @RequirePermission(PERMISSION_KEYS.ALLERGY_MANAGE)
+  @Audited('allergy.update', 'Allergy')
+  async update(@Param('id') id: string, @Body(new ZodValidationPipe(UpdateAllergySchema)) body: UpdateAllergyInput, @Req() req: FastifyRequest) {
+    return this.service.update(getCurrentTransaction(), requireCtx(req), id, body);
+  }
+
+  @Post(':id/resolve')
+  @RequirePermission(PERMISSION_KEYS.ALLERGY_MANAGE)
+  @Audited('allergy.resolve', 'Allergy')
+  async resolve(@Param('id') id: string, @Req() req: FastifyRequest) {
+    return this.service.resolve(getCurrentTransaction(), requireCtx(req), id);
   }
 }
 

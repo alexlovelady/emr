@@ -116,6 +116,8 @@ export interface Allergy {
   substance: string;
   reaction: string | null;
   severity: string | null;
+  onsetDate: string | null;
+  notes: string | null;
   status: string;
 }
 

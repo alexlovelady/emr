@@ -227,6 +227,41 @@ describe('tenant isolation — clinical', () => {
     expect(rawProblems).toHaveLength(0);
   });
 
+  it('updates an allergy, resolves it, and rejects a double-resolve', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const allergy = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      allergyService.create(trx, ctxA, tenantAPatientId, { substance: 'Latex', severity: 'mild' }),
+    );
+
+    const updated = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      allergyService.update(trx, ctxA, allergy.id, { reaction: 'Contact dermatitis', severity: 'moderate' }),
+    );
+    expect(updated.reaction).toBe('Contact dermatitis');
+    expect(updated.severity).toBe('moderate');
+
+    const resolved = await withTenantContext(handle.db, ctxA.tenantId, (trx) => allergyService.resolve(trx, ctxA, allergy.id));
+    expect(resolved.status).toBe('resolved');
+
+    await expect(withTenantContext(handle.db, ctxA.tenantId, (trx) => allergyService.resolve(trx, ctxA, allergy.id))).rejects.toBeInstanceOf(
+      ConflictError,
+    );
+  });
+
+  it('Tenant B cannot update or resolve a Tenant A allergy by known UUID', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
+    const allergy = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      allergyService.create(trx, ctxA, tenantAPatientId, { substance: 'Shellfish', severity: 'severe' }),
+    );
+
+    await expect(
+      withTenantContext(handle.db, ctxB.tenantId, (trx) => allergyService.update(trx, ctxB, allergy.id, { reaction: 'Hijacked' })),
+    ).rejects.toBeInstanceOf(NotFoundError);
+    await expect(withTenantContext(handle.db, ctxB.tenantId, (trx) => allergyService.resolve(trx, ctxB, allergy.id))).rejects.toBeInstanceOf(
+      NotFoundError,
+    );
+  });
+
   it('external-candidate reconciliation: import, accept, reject, and replace, isolated per tenant', async () => {
     const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
     const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);

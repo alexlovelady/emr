@@ -24,3 +24,29 @@ export async function createAllergy(_prevState: ActionResult<Allergy> | null, fo
   if (result.ok) revalidatePath(`/patients/${patientId}`);
   return result;
 }
+
+export async function updateAllergy(
+  id: string,
+  patientId: string,
+  input: { reaction?: string; severity?: string; onsetDate?: string; notes?: string },
+): Promise<ActionResult<Allergy>> {
+  const result = await runAction(() =>
+    callBackend<Allergy>(`/api/v1/allergies/${id}`, {
+      method: 'PUT',
+      body: {
+        reaction: input.reaction || undefined,
+        severity: input.severity || undefined,
+        onsetDate: input.onsetDate || undefined,
+        notes: input.notes || undefined,
+      },
+    }),
+  );
+  if (result.ok) revalidatePath(`/patients/${patientId}`);
+  return result;
+}
+
+export async function resolveAllergy(id: string, patientId: string): Promise<ActionResult<Allergy>> {
+  const result = await runAction(() => callBackend<Allergy>(`/api/v1/allergies/${id}/resolve`, { method: 'POST' }));
+  if (result.ok) revalidatePath(`/patients/${patientId}`);
+  return result;
+}

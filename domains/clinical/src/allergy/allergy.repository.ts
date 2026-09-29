@@ -88,6 +88,46 @@ export class AllergyRepository {
     return rows.map(toRow);
   }
 
+  async update(
+    trx: Executor,
+    tenantId: string,
+    id: string,
+    input: {
+      reaction?: string | null | undefined;
+      severity?: string | null | undefined;
+      onsetDate?: string | null | undefined;
+      notes?: string | null | undefined;
+      updatedBy: string;
+    },
+  ): Promise<AllergyRow> {
+    const row = await trx
+      .updateTable('allergies')
+      .set({
+        ...(input.reaction !== undefined ? { reaction: input.reaction } : {}),
+        ...(input.severity !== undefined ? { severity: input.severity } : {}),
+        ...(input.onsetDate !== undefined ? { onset_date: input.onsetDate } : {}),
+        ...(input.notes !== undefined ? { notes: input.notes } : {}),
+        updated_by: input.updatedBy,
+        updated_at: new Date(),
+      })
+      .where('tenant_id', '=', tenantId)
+      .where('id', '=', id)
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return toRow(row);
+  }
+
+  async setStatus(trx: Executor, tenantId: string, id: string, status: string, updatedBy: string): Promise<AllergyRow> {
+    const row = await trx
+      .updateTable('allergies')
+      .set({ status, updated_by: updatedBy, updated_at: new Date() })
+      .where('tenant_id', '=', tenantId)
+      .where('id', '=', id)
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return toRow(row);
+  }
+
   /** Portal-visible "active allergies" (`@ehr/portal`). */
   async listActiveByPatient(trx: Executor, tenantId: string, patientId: string): Promise<AllergyRow[]> {
     const rows = await trx
