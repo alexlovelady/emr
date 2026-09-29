@@ -8,9 +8,11 @@ import { ZodValidationPipe } from '@ehr/api-contracts';
 import {
   CreatePatientSchema,
   FindDuplicatesQuerySchema,
+  ListPatientsQuerySchema,
   MergePatientsSchema,
   type CreatePatientInput,
   type FindDuplicatesQuery,
+  type ListPatientsQuery,
   type MergePatientsInput,
 } from './patient.dto.js';
 import { PatientService } from './patient.service.js';
@@ -44,8 +46,8 @@ export class PatientController {
   @Get()
   @RequirePermission(PERMISSION_KEYS.PATIENT_READ_DEMOGRAPHICS)
   @Audited('patient.list', 'Patient')
-  async list(@Req() req: FastifyRequest) {
-    return this.service.list(getCurrentTransaction(), requireCtx(req));
+  async list(@Query(new ZodValidationPipe(ListPatientsQuerySchema)) query: ListPatientsQuery, @Req() req: FastifyRequest) {
+    return this.service.list(getCurrentTransaction(), requireCtx(req), query);
   }
 
   @Post(':id/merge')

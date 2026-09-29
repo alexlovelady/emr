@@ -94,10 +94,33 @@ export class PatientRepository {
     return row ? toRow(row) : null;
   }
 
-  async list(trx: Executor, tenantId: string, filter: { since?: Date } = {}): Promise<PatientRow[]> {
+  async list(
+    trx: Executor,
+    tenantId: string,
+    filter: {
+      since?: Date | undefined;
+      search?: string | undefined;
+      limit?: number | undefined;
+      offset?: number | undefined;
+    } = {},
+  ): Promise<PatientRow[]> {
     let query = trx.selectFrom('patients').selectAll().where('tenant_id', '=', tenantId);
     if (filter.since) query = query.where('updated_at', '>=', filter.since);
-    const rows = await query.orderBy('created_at', 'asc').execute();
+    if (filter.search) {
+      const term = `%${filter.search}%`;
+      query = query.where((eb) =>
+        eb.or([
+          eb('given_name', 'ilike', term),
+          eb('family_name', 'ilike', term),
+          eb(sql`${eb.ref('given_name')} || ' ' || ${eb.ref('family_name')}`, 'ilike', term),
+          eb(sql`${eb.ref('date_of_birth')}::text`, 'ilike', term),
+        ]),
+      );
+    }
+    query = query.orderBy('created_at', 'asc');
+    if (filter.limit !== undefined) query = query.limit(filter.limit);
+    if (filter.offset !== undefined) query = query.offset(filter.offset);
+    const rows = await query.execute();
     return rows.map(toRow);
   }
 

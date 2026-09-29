@@ -60,6 +60,39 @@ describe('tenant isolation — patients', () => {
     expect(patients.some((p) => p.id === tenantAPatientId)).toBe(false);
   });
 
+  it('list() search matches by name (case-insensitive) and by date of birth', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const patient = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      patientService.create(trx, ctxA, {
+        givenName: 'Zebulon',
+        familyName: `Quickbrown-${Date.now()}`,
+        dateOfBirth: '1955-11-02',
+      }),
+    );
+
+    const byGivenName = await withTenantContext(handle.db, ctxA.tenantId, (trx) => patientService.list(trx, ctxA, { search: 'zebulon' }));
+    expect(byGivenName.some((p) => p.id === patient.id)).toBe(true);
+
+    const byFamilyName = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      patientService.list(trx, ctxA, { search: patient.familyName.toUpperCase() }),
+    );
+    expect(byFamilyName.some((p) => p.id === patient.id)).toBe(true);
+
+    const byDob = await withTenantContext(handle.db, ctxA.tenantId, (trx) => patientService.list(trx, ctxA, { search: '1955-11-02' }));
+    expect(byDob.some((p) => p.id === patient.id)).toBe(true);
+
+    const noMatch = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      patientService.list(trx, ctxA, { search: 'no-such-patient-should-match-this' }),
+    );
+    expect(noMatch).toHaveLength(0);
+  });
+
+  it("Tenant B's search never returns a Tenant A patient", async () => {
+    const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
+    const patients = await withTenantContext(handle.db, ctxB.tenantId, (trx) => patientService.list(trx, ctxB, { search: 'Isolation' }));
+    expect(patients.some((p) => p.id === tenantAPatientId)).toBe(false);
+  });
+
   it("Tenant B cannot read Tenant A's identifiers or coverages for a guessed patient id", async () => {
     const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
     await expect(

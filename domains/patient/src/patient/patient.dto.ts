@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PaginationQuerySchema } from '@ehr/api-contracts';
 
 export const CreatePatientSchema = z.object({
   givenName: z.string().min(1).max(200),
@@ -43,6 +44,13 @@ export const UpdatePatientContactSchema = z.object({
   country: z.string().max(100).nullish(),
 });
 export type UpdatePatientContactInput = z.infer<typeof UpdatePatientContactSchema>;
+
+/** `search` matches against name (either order) or date of birth — same fields the client-side
+ * filter this replaces used to match on. Merged with the shared opt-in pagination shape. */
+export const ListPatientsQuerySchema = PaginationQuerySchema.extend({
+  search: z.string().max(200).optional(),
+});
+export type ListPatientsQuery = z.infer<typeof ListPatientsQuerySchema>;
 
 export const MergePatientsSchema = z.object({
   sourcePatientId: z.string().uuid(),

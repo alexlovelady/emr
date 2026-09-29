@@ -64,8 +64,12 @@ export class PatientService {
     return patient;
   }
 
-  async list(trx: Executor, ctx: RequestContext): Promise<PatientRow[]> {
-    return this.repo.list(trx, ctx.tenantId);
+  async list(
+    trx: Executor,
+    ctx: RequestContext,
+    filter: { search?: string | undefined; limit?: number | undefined; offset?: number | undefined } = {},
+  ): Promise<PatientRow[]> {
+    return this.repo.list(trx, ctx.tenantId, filter);
   }
 
   /** Contact fields only — never name/DOB. Applies directly, no separate staff-review queue (`@ehr/portal`'s trim of spec's "with review rules"). */
