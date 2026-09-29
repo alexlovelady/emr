@@ -7924,6 +7924,27 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "subscriberRelationship": {
+                    "type": "string",
+                    "enum": [
+                      "self",
+                      "spouse",
+                      "child",
+                      "other"
+                    ],
+                    "default": "self"
+                  },
+                  "subscriberName": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 300
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -8419,6 +8440,13 @@
                   },
                   "override": {
                     "type": "boolean"
+                  },
+                  "visitType": {
+                    "type": "string",
+                    "enum": [
+                      "in_person",
+                      "telehealth"
+                    ]
                   }
                 },
                 "required": [
@@ -8908,6 +8936,13 @@
                   },
                   "override": {
                     "type": "boolean"
+                  },
+                  "visitType": {
+                    "type": "string",
+                    "enum": [
+                      "in_person",
+                      "telehealth"
+                    ]
                   },
                   "recurrence": {
                     "type": "object",
@@ -32180,6 +32215,17 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "sourceAiGenerationId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "additionalProperties": false
@@ -41194,6 +41240,17 @@
                       {
                         "type": "string",
                         "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "audioDocumentId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid"
                       },
                       {
                         "type": "null"
