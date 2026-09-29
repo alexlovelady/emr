@@ -60,6 +60,27 @@ export class PractitionerRoleRepository {
       .execute();
     return rows.map(toRow);
   }
+
+  async findById(trx: Executor, tenantId: string, id: string): Promise<PractitionerRoleRow | null> {
+    const row = await trx
+      .selectFrom('practitioner_roles')
+      .selectAll()
+      .where('tenant_id', '=', tenantId)
+      .where('id', '=', id)
+      .executeTakeFirst();
+    return row ? toRow(row) : null;
+  }
+
+  async revoke(trx: Executor, tenantId: string, id: string, revokedBy: string): Promise<PractitionerRoleRow> {
+    const row = await trx
+      .updateTable('practitioner_roles')
+      .set({ status: 'revoked', effective_end: new Date(), updated_by: revokedBy, updated_at: new Date() })
+      .where('tenant_id', '=', tenantId)
+      .where('id', '=', id)
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return toRow(row);
+  }
 }
 
 function toRow(dbRow: Selectable<DB['practitioner_roles']>): PractitionerRoleRow {

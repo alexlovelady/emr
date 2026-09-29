@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { NewPractitionerDialog } from '@/components/practitioners/new-practitioner-dialog';
 import { PractitionerRowActions } from '@/components/practitioners/practitioner-row-actions';
-import type { LocationRow, OrganizationRow, PractitionerRow, RoleRow, UserRow } from '@/lib/types';
+import type { LocationRow, OrganizationRow, PractitionerRoleRow, PractitionerRow, RoleRow, UserRow } from '@/lib/types';
 
 export default async function PractitionersPage() {
   const [practitioners, users, organizations, locations, roles] = await Promise.all([
@@ -15,6 +15,14 @@ export default async function PractitionersPage() {
     callBackend<RoleRow[]>('/api/v1/roles'),
   ]);
   const orgName = (id: string) => organizations.find((o) => o.id === id)?.name ?? id;
+
+  // No "assignments for these practitioners" bulk endpoint — same N+1-via-detail pattern already
+  // used elsewhere at this scale (e.g. patient claim timelines, payment plans).
+  const assignmentsByPractitioner = new Map<string, PractitionerRoleRow[]>(
+    await Promise.all(
+      practitioners.map(async (p) => [p.id, await callBackend<PractitionerRoleRow[]>(`/api/v1/practitioners/${p.id}/location-roles`)] as const),
+    ),
+  );
 
   return (
     <div className="space-y-6">
@@ -56,7 +64,12 @@ export default async function PractitionersPage() {
                     <TableCell>{p.taxonomyCode ?? '—'}</TableCell>
                     <TableCell>{p.status}</TableCell>
                     <TableCell>
-                      <PractitionerRowActions practitioner={p} locations={locations} roles={roles} />
+                      <PractitionerRowActions
+                        practitioner={p}
+                        locations={locations}
+                        roles={roles}
+                        assignments={assignmentsByPractitioner.get(p.id) ?? []}
+                      />
                     </TableCell>
                   </TableRow>
                 ))}

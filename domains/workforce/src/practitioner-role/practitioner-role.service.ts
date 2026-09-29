@@ -1,6 +1,6 @@
 import type { Kysely, Transaction } from 'kysely';
 import type { DB } from '@ehr/db';
-import { NotFoundError, type RequestContext } from '@ehr/domain-common';
+import { ConflictError, NotFoundError, type RequestContext } from '@ehr/domain-common';
 import { buildOutboxInsert } from '@ehr/outbox';
 import { LocationRepository } from '@ehr/tenant';
 import { PractitionerRepository } from '../practitioner/practitioner.repository.js';
@@ -68,5 +68,36 @@ export class PractitionerRoleService {
     const practitioner = await this.practitionerRepo.findById(trx, ctx.tenantId, practitionerId);
     if (!practitioner) throw new NotFoundError('Practitioner not found', { practitionerId });
     return this.repo.listByPractitioner(trx, ctx.tenantId, practitionerId);
+  }
+
+  async revoke(trx: Executor, ctx: RequestContext, practitionerId: string, id: string): Promise<PractitionerRoleRow> {
+    const assignment = await this.repo.findById(trx, ctx.tenantId, id);
+    if (!assignment || assignment.practitionerId !== practitionerId) {
+      throw new NotFoundError('Location-role assignment not found', { practitionerId, id });
+    }
+    if (assignment.status !== 'active') {
+      throw new ConflictError(`Assignment is already ${assignment.status}`, { id, status: assignment.status });
+    }
+    const actorId = ctx.actor?.id ?? null;
+    const revoked = await this.repo.revoke(trx, ctx.tenantId, id, actorId ?? ctx.tenantId);
+
+    await trx
+      .insertInto('outbox_events')
+      .values(
+        buildOutboxInsert({
+          event_type: 'practitioner_role.revoked.v1',
+          tenant_id: ctx.tenantId,
+          aggregate_type: 'practitioner_role',
+          aggregate_id: revoked.id,
+          aggregate_version: revoked.version,
+          actor_id: actorId,
+          correlation_id: ctx.correlationId,
+          causation_id: null,
+          data: { practitionerId, locationId: revoked.locationId },
+        }),
+      )
+      .execute();
+
+    return revoked;
   }
 }

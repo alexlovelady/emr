@@ -74,6 +74,51 @@ export class LocationService {
       throw new ConflictError('Location is not active', { id, status: location.status });
     }
     const actorId = ctx.actor?.id ?? null;
-    return this.repo.setStatus(trx, ctx.tenantId, id, 'inactive', actorId ?? ctx.tenantId);
+    const updated = await this.repo.setStatus(trx, ctx.tenantId, id, 'inactive', actorId ?? ctx.tenantId);
+    await this.revokeActivePractitionerRoles(trx, ctx, id, actorId);
+    return updated;
+  }
+
+  /**
+   * A deactivated location must not keep silently granting access through a stale
+   * practitioner-role assignment. `@ehr/workforce` (which owns `practitioner_roles`) already
+   * depends on `@ehr/tenant` for `LocationRepository` — importing it back here would be a package
+   * cycle, so this queries the table directly with raw Kysely, same reasoning as
+   * `PrescriptionService.checkInteractions()`'s direct `allergies` query in `@ehr/medication`.
+   */
+  private async revokeActivePractitionerRoles(trx: Executor, ctx: RequestContext, locationId: string, actorId: string | null): Promise<void> {
+    const active = await trx
+      .selectFrom('practitioner_roles')
+      .select(['id', 'practitioner_id as practitionerId', 'version'])
+      .where('tenant_id', '=', ctx.tenantId)
+      .where('location_id', '=', locationId)
+      .where('status', '=', 'active')
+      .execute();
+
+    for (const assignment of active) {
+      await trx
+        .updateTable('practitioner_roles')
+        .set({ status: 'revoked', effective_end: new Date(), updated_by: actorId ?? ctx.tenantId, updated_at: new Date() })
+        .where('tenant_id', '=', ctx.tenantId)
+        .where('id', '=', assignment.id)
+        .execute();
+
+      await trx
+        .insertInto('outbox_events')
+        .values(
+          buildOutboxInsert({
+            event_type: 'practitioner_role.revoked.v1',
+            tenant_id: ctx.tenantId,
+            aggregate_type: 'practitioner_role',
+            aggregate_id: assignment.id,
+            aggregate_version: Number(assignment.version) + 1,
+            actor_id: actorId,
+            correlation_id: ctx.correlationId,
+            causation_id: null,
+            data: { practitionerId: assignment.practitionerId, locationId, reason: 'location_deactivated' },
+          }),
+        )
+        .execute();
+    }
   }
 }

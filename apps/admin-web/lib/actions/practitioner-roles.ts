@@ -19,3 +19,11 @@ export async function assignPractitionerLocationRole(
   if (result.ok) revalidatePath('/practitioners');
   return result;
 }
+
+export async function revokePractitionerLocationRole(practitionerId: string, id: string): Promise<ActionResult<PractitionerRoleRow>> {
+  const result = await runAction(() =>
+    callBackend<PractitionerRoleRow>(`/api/v1/practitioners/${practitionerId}/location-roles/${id}/revoke`, { method: 'POST' }),
+  );
+  if (result.ok) revalidatePath('/practitioners');
+  return result;
+}

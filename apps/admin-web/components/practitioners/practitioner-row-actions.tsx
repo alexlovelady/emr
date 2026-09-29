@@ -11,7 +11,8 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
 import { updatePractitioner, deactivatePractitioner } from '@/lib/actions/practitioners';
 import { assignPractitionerLocationRole } from '@/lib/actions/practitioner-roles';
-import type { LocationRow, PractitionerRow, RoleRow } from '@/lib/types';
+import { PractitionerAssignmentsDialog } from '@/components/practitioners/practitioner-assignments-dialog';
+import type { LocationRow, PractitionerRoleRow, PractitionerRow, RoleRow } from '@/lib/types';
 
 function EditPractitionerDialog({ practitioner }: { practitioner: PractitionerRow }) {
   const router = useRouter();
@@ -158,10 +159,12 @@ export function PractitionerRowActions({
   practitioner,
   locations,
   roles,
+  assignments,
 }: {
   practitioner: PractitionerRow;
   locations: LocationRow[];
   roles: RoleRow[];
+  assignments: PractitionerRoleRow[];
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -176,6 +179,7 @@ export function PractitionerRowActions({
 
   return (
     <div className="flex justify-end gap-2">
+      <PractitionerAssignmentsDialog practitioner={practitioner} assignments={assignments} locations={locations} roles={roles} />
       <AssignLocationDialog practitioner={practitioner} locations={locations} roles={roles} />
       <EditPractitionerDialog practitioner={practitioner} />
       {practitioner.status === 'active' && (

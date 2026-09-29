@@ -64,4 +64,55 @@ describe('tenant isolation — organizations & locations', () => {
     // Deferred to the phase that adds the webhook gateway (spec §18.2's 4th assertion).
     expect(true).toBe(true);
   });
+
+  it('deactivating a location cascades to revoke every active practitioner-role assignment there', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const org = await withTenantContext(handle.db, ctxA.tenantId, (trx) => orgService.create(trx, ctxA, { name: `Cascade Org ${Date.now()}` }));
+    const location = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      locationService.create(trx, ctxA, { name: `Cascade Location ${Date.now()}`, organizationId: org.id }),
+    );
+
+    const assignmentId = await withTenantContext(handle.db, ctxA.tenantId, async (trx) => {
+      const workforceIdentity = await trx
+        .insertInto('workforce_identities')
+        .values({
+          tenant_id: ctxA.tenantId,
+          user_id: handle.seed.tenantA.adminUserId,
+          organization_id: org.id,
+          status: 'active',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const practitioner = await trx
+        .insertInto('practitioners')
+        .values({
+          tenant_id: ctxA.tenantId,
+          workforce_identity_id: workforceIdentity.id,
+          display_name: `Dr. Cascade Test ${Date.now()}`,
+          status: 'active',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const assignment = await trx
+        .insertInto('practitioner_roles')
+        .values({
+          tenant_id: ctxA.tenantId,
+          practitioner_id: practitioner.id,
+          location_id: location.id,
+          role_id: handle.seed.roles.staffRoleId,
+          status: 'active',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      return assignment.id;
+    });
+
+    await withTenantContext(handle.db, ctxA.tenantId, (trx) => locationService.deactivate(trx, ctxA, location.id));
+
+    const assignmentAfter = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      trx.selectFrom('practitioner_roles').selectAll().where('id', '=', assignmentId).executeTakeFirstOrThrow(),
+    );
+    expect(assignmentAfter.status).toBe('revoked');
+    expect(assignmentAfter.effective_end).not.toBeNull();
+  });
 });

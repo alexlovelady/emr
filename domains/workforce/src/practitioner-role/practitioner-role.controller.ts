@@ -29,6 +29,13 @@ export class PractitionerRoleController {
   async list(@Param('practitionerId') practitionerId: string, @Req() req: FastifyRequest) {
     return this.service.listByPractitioner(getCurrentTransaction(), requireCtx(req), practitionerId);
   }
+
+  @Post(':id/revoke')
+  @RequirePermission(PERMISSION_KEYS.PRACTITIONER_MANAGE)
+  @Audited('practitioner_role.revoke', 'PractitionerRole')
+  async revoke(@Param('practitionerId') practitionerId: string, @Param('id') id: string, @Req() req: FastifyRequest) {
+    return this.service.revoke(getCurrentTransaction(), requireCtx(req), practitionerId, id);
+  }
 }
 
 function requireCtx(req: FastifyRequest): RequestContext {
