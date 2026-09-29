@@ -69,4 +69,8 @@ export class PractitionerService {
     const actorId = ctx.actor?.id ?? null;
     return this.repo.setStatus(trx, ctx.tenantId, id, 'inactive', actorId ?? ctx.tenantId);
   }
+
+  async listNames(trx: Executor, ctx: RequestContext, ids: string[]): Promise<{ id: string; displayName: string }[]> {
+    return this.repo.listNamesByIds(trx, ctx.tenantId, ids);
+  }
 }

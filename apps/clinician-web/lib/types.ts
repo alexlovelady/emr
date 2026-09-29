@@ -170,6 +170,13 @@ export interface Appointment {
   status: string;
 }
 
+/** Display name only — from the low-permission `POST /practitioners/names` lookup, not the
+ * admin-tier practitioner list. */
+export interface PractitionerName {
+  id: string;
+  displayName: string;
+}
+
 export interface Resource {
   id: string;
   locationId: string;

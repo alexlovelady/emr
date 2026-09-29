@@ -19,7 +19,15 @@ const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'outline' | 'destru
   waitlisted: 'warning',
 };
 
-export function TodayScheduleTable({ appointments, patientsById }: { appointments: Appointment[]; patientsById: Map<string, Patient> }) {
+export function TodayScheduleTable({
+  appointments,
+  patientsById,
+  practitionerNameById,
+}: {
+  appointments: Appointment[];
+  patientsById: Map<string, Patient>;
+  practitionerNameById: Map<string, string>;
+}) {
   if (appointments.length === 0) {
     return <EmptyState icon={CalendarDays} message="No appointments scheduled for today." />;
   }
@@ -68,8 +76,7 @@ export function TodayScheduleTable({ appointments, patientsById }: { appointment
                   </a>
                 )}
               </TableCell>
-              {/* GET /practitioners requires PRACTITIONER_MANAGE — deferred, see README known trims */}
-              <TableCell className="font-mono text-xs text-muted-foreground">{appt.practitionerId.slice(0, 8)}…</TableCell>
+              <TableCell className="text-muted-foreground">{practitionerNameById.get(appt.practitionerId) ?? 'Unknown practitioner'}</TableCell>
               <TableCell>
                 <Badge variant={STATUS_VARIANT[appt.status] ?? 'outline'}>{appt.status.replace(/_/g, ' ')}</Badge>
               </TableCell>

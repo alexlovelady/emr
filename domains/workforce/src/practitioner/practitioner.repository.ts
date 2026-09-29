@@ -127,6 +127,20 @@ export class PractitionerRepository {
     const withOrg = await this.findById(trx, tenantId, id);
     return withOrg!;
   }
+
+  /** Display name only, no NPI/taxonomy/org — a lower-permission lookup any clinical user can call
+   * to resolve a practitionerId shown elsewhere (e.g. the schedule table), without needing the
+   * admin-tier PRACTITIONER_MANAGE permission the full list()/getById() endpoints require. */
+  async listNamesByIds(trx: Executor, tenantId: string, ids: string[]): Promise<{ id: string; displayName: string }[]> {
+    if (ids.length === 0) return [];
+    const rows = await trx
+      .selectFrom('practitioners')
+      .select(['id', 'display_name'])
+      .where('tenant_id', '=', tenantId)
+      .where('id', 'in', ids)
+      .execute();
+    return rows.map((r) => ({ id: r.id, displayName: r.display_name }));
+  }
 }
 
 function toRow(dbRow: Selectable<DB['practitioners']>, organizationId: string): PractitionerRow {

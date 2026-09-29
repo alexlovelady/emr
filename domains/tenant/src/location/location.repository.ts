@@ -108,6 +108,15 @@ export class LocationRepository {
       .executeTakeFirstOrThrow();
     return toRow(row);
   }
+
+  /** Name only, no address/org — a lower-permission lookup any clinical user can call to resolve a
+   * locationId shown elsewhere, without needing the admin-tier LOCATION_MANAGE the full list()/
+   * getById() endpoints require. */
+  async listNamesByIds(trx: Executor, tenantId: string, ids: string[]): Promise<{ id: string; name: string }[]> {
+    if (ids.length === 0) return [];
+    const rows = await trx.selectFrom('locations').select(['id', 'name']).where('tenant_id', '=', tenantId).where('id', 'in', ids).execute();
+    return rows;
+  }
 }
 
 function toRow(dbRow: Selectable<DB['locations']>): LocationRow {

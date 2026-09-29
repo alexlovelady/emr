@@ -4,7 +4,7 @@ import { getCurrentTransaction } from '@ehr/db';
 import { ForbiddenError, type RequestContext } from '@ehr/domain-common';
 import { Audited } from '@ehr/audit';
 import { PERMISSION_KEYS, RequirePermission } from '@ehr/authz';
-import { PaginationQuerySchema, ZodValidationPipe, type PaginationQuery } from '@ehr/api-contracts';
+import { ListByIdsSchema, PaginationQuerySchema, ZodValidationPipe, type ListByIdsInput, type PaginationQuery } from '@ehr/api-contracts';
 import { CreateLocationSchema, UpdateLocationSchema, type CreateLocationInput, type UpdateLocationInput } from './location.dto.js';
 import { LocationService } from './location.service.js';
 
@@ -24,6 +24,15 @@ export class LocationController {
   @Audited('location.read', 'Location')
   async getById(@Param('id') id: string, @Req() req: FastifyRequest) {
     return this.service.getById(getCurrentTransaction(), requireCtx(req), id);
+  }
+
+  /** Names only — a lower bar (PATIENT_READ_CLINICAL) than the admin-tier LOCATION_MANAGE the full
+   * list/getById require, so a plain clinician can resolve a locationId shown elsewhere. */
+  @Post('names')
+  @RequirePermission(PERMISSION_KEYS.PATIENT_READ_CLINICAL)
+  @Audited('location.names.list', 'Location')
+  async listNames(@Body(new ZodValidationPipe(ListByIdsSchema)) body: ListByIdsInput, @Req() req: FastifyRequest) {
+    return this.service.listNames(getCurrentTransaction(), requireCtx(req), body.ids);
   }
 
   @Get()

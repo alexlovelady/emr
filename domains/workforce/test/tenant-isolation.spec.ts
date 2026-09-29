@@ -6,6 +6,7 @@ import { SYSTEM_ROLE_KEYS } from '@ehr/db';
 import { UserService } from '../src/user/user.service.js';
 import { PractitionerRoleService } from '../src/practitioner-role/practitioner-role.service.js';
 import { RoleService } from '../src/role/role.service.js';
+import { PractitionerService } from '../src/practitioner/practitioner.service.js';
 
 /** EHR_BUILD_SPEC.md §18.2 — run via `pnpm test:tenant-isolation`, requires a live Postgres. */
 describe('tenant isolation — users', () => {
@@ -181,5 +182,52 @@ describe('bulk role-grant listing', () => {
     const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
     const grants = await withTenantContext(handle.db, ctxB.tenantId, (trx) => roleService.listGrantsForUsers(trx, ctxB, [tenantAUser.id]));
     expect(grants).toHaveLength(0);
+  });
+});
+
+describe('practitioner name lookup (low-permission)', () => {
+  let handle: TestDbHandle;
+  const practitionerService = new PractitionerService();
+
+  beforeAll(async () => {
+    handle = await setupTestDb();
+  });
+
+  afterAll(() => handle.close());
+
+  async function createPractitioner(ctx: ReturnType<typeof requestContextFor>, displayName: string) {
+    return withTenantContext(handle.db, ctx.tenantId, async (trx) => {
+      const workforceIdentity = await trx
+        .insertInto('workforce_identities')
+        .values({ tenant_id: ctx.tenantId, user_id: ctx.actor?.id ?? handle.seed.tenantA.adminUserId, organization_id: handle.seed.tenantA.organizationId, status: 'active' })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const practitioner = await trx
+        .insertInto('practitioners')
+        .values({ tenant_id: ctx.tenantId, workforce_identity_id: workforceIdentity.id, display_name: displayName, status: 'active' })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      return practitioner.id;
+    });
+  }
+
+  it('resolves display names for the given ids only', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const wantedId = await createPractitioner(ctxA, `Dr. Wanted ${Date.now()}`);
+    const otherId = await createPractitioner(ctxA, `Dr. Not Requested ${Date.now()}`);
+
+    const names = await withTenantContext(handle.db, ctxA.tenantId, (trx) => practitionerService.listNames(trx, ctxA, [wantedId]));
+    expect(names).toHaveLength(1);
+    expect(names[0]!.id).toBe(wantedId);
+    expect(names.some((n) => n.id === otherId)).toBe(false);
+  });
+
+  it("Tenant B's lookup returns nothing for a Tenant A practitioner id", async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const tenantAPractitionerId = await createPractitioner(ctxA, `Dr. Isolation ${Date.now()}`);
+
+    const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
+    const names = await withTenantContext(handle.db, ctxB.tenantId, (trx) => practitionerService.listNames(trx, ctxB, [tenantAPractitionerId]));
+    expect(names).toHaveLength(0);
   });
 });

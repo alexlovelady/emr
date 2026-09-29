@@ -136,4 +136,24 @@ describe('tenant isolation — organizations & locations', () => {
     expect(assignmentAfter.status).toBe('revoked');
     expect(assignmentAfter.effective_end).not.toBeNull();
   });
+
+  it('listNames() resolves only the requested ids, isolated per tenant', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const org = await withTenantContext(handle.db, ctxA.tenantId, (trx) => orgService.create(trx, ctxA, { name: `Names Org ${Date.now()}` }));
+    const wanted = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      locationService.create(trx, ctxA, { name: `Wanted Location ${Date.now()}`, organizationId: org.id }),
+    );
+    const other = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      locationService.create(trx, ctxA, { name: `Other Location ${Date.now()}`, organizationId: org.id }),
+    );
+
+    const names = await withTenantContext(handle.db, ctxA.tenantId, (trx) => locationService.listNames(trx, ctxA, [wanted.id]));
+    expect(names).toHaveLength(1);
+    expect(names[0]!.id).toBe(wanted.id);
+    expect(names.some((n) => n.id === other.id)).toBe(false);
+
+    const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
+    const crossTenant = await withTenantContext(handle.db, ctxB.tenantId, (trx) => locationService.listNames(trx, ctxB, [wanted.id]));
+    expect(crossTenant).toHaveLength(0);
+  });
 });

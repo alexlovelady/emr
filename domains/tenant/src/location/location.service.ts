@@ -121,4 +121,8 @@ export class LocationService {
         .execute();
     }
   }
+
+  async listNames(trx: Executor, ctx: RequestContext, ids: string[]): Promise<{ id: string; name: string }[]> {
+    return this.repo.listNamesByIds(trx, ctx.tenantId, ids);
+  }
 }

@@ -2,7 +2,7 @@ import { callBackend, callBackendOr } from '@/lib/api-proxy';
 import { Card, CardContent } from '@/components/ui/card';
 import { TodayScheduleTable } from '@/components/schedule/today-schedule-table';
 import { NewAppointmentDialog } from '@/components/schedule/new-appointment-dialog';
-import type { Appointment, Location, Patient, Resource } from '@/lib/types';
+import type { Appointment, Location, Patient, PractitionerName, Resource } from '@/lib/types';
 
 function todayUtcRange(): { scheduledFrom: string; scheduledTo: string } {
   const now = new Date();
@@ -26,6 +26,16 @@ export default async function SchedulePage() {
   const knownPatients = new Map(allPatients.map((p) => [p.id, p]));
   const patientsById = new Map(uniquePatientIds.map((id) => [id, knownPatients.get(id)]).filter((e): e is [string, Patient] => !!e[1]));
 
+  // PractitionerService.listNames() is gated on PATIENT_READ_CLINICAL (not the admin-tier
+  // PRACTITIONER_MANAGE the full practitioner list/getById require), so scheduling staff who can
+  // see this page at all can resolve the names it needs.
+  const uniquePractitionerIds = [...new Set(appointments.map((a) => a.practitionerId))];
+  const practitionerNames =
+    uniquePractitionerIds.length > 0
+      ? await callBackendOr<PractitionerName[]>('/api/v1/practitioners/names', [], { method: 'POST', body: { ids: uniquePractitionerIds } })
+      : [];
+  const practitionerNameById = new Map(practitionerNames.map((p) => [p.id, p.displayName]));
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -40,7 +50,7 @@ export default async function SchedulePage() {
       </div>
       <Card>
         <CardContent className="pt-6">
-          <TodayScheduleTable appointments={appointments} patientsById={patientsById} />
+          <TodayScheduleTable appointments={appointments} patientsById={patientsById} practitionerNameById={practitionerNameById} />
         </CardContent>
       </Card>
     </div>

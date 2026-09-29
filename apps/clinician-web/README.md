@@ -92,14 +92,17 @@ run alone. Run them sequentially, or `rm -rf .next` between a `build` and a subs
 
 ## Known trims (from the golden-path pass, still true)
 
-- **Patient search is client-side over the full tenant patient list** — `GET /patients` has no
-  server-side search/filter parameter today. Fine at pilot-tenant scale; revisit if a tenant's
-  patient count grows large enough to make the full-list fetch itself slow.
-- **Practitioner and location names are not resolved anywhere** — `GET /practitioners` and
-  `GET /locations` both require admin-level permissions (`PRACTITIONER_MANAGE`/`LOCATION_MANAGE`) a
-  plain clinician account won't hold. The schedule table shows a truncated practitioner-id badge
-  instead of a name, and the new-appointment/place-order/prescribe forms take a plain practitioner/
-  location UUID text input instead of a picker.
+- ~~Patient search is client-side over the full tenant patient list~~ — closed: `GET /patients`
+  now takes `search` (name either order, or date of birth) plus opt-in `limit`/`offset`, and the
+  patients page/search box use it server-side.
+- **Practitioner and location names are resolved on the schedule table, but data-entry forms still
+  take a raw UUID** — `GET /practitioners` and `GET /locations` require admin-level permissions
+  (`PRACTITIONER_MANAGE`/`LOCATION_MANAGE`) a plain clinician account won't hold, so a new
+  lower-permission `POST /practitioners/names` / `POST /locations/names` lookup (gated on
+  `PATIENT_READ_CLINICAL`) now resolves display names for the schedule table. The new-appointment/
+  place-order/prescribe forms still take a plain practitioner/location UUID text input instead of a
+  picker — that's a data-entry UX upgrade, not the display bug this trim originally described, and
+  remains open.
 - **No frontend automated tests** — no Playwright/Cypress/`@testing-library` precedent exists
   anywhere in this repo yet. Verified manually end-to-end against live seeded data, including every
   Phase A write path. Worth adding Playwright now that there's a real workflow surface to justify it.

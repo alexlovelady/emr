@@ -4,7 +4,7 @@ import { getCurrentTransaction } from '@ehr/db';
 import { ForbiddenError, type RequestContext } from '@ehr/domain-common';
 import { Audited } from '@ehr/audit';
 import { PERMISSION_KEYS, RequirePermission } from '@ehr/authz';
-import { PaginationQuerySchema, ZodValidationPipe, type PaginationQuery } from '@ehr/api-contracts';
+import { ListByIdsSchema, PaginationQuerySchema, ZodValidationPipe, type ListByIdsInput, type PaginationQuery } from '@ehr/api-contracts';
 import {
   CreatePractitionerSchema,
   UpdatePractitionerSchema,
@@ -32,6 +32,16 @@ export class PractitionerController {
   @Audited('practitioner.read', 'Practitioner')
   async getById(@Param('id') id: string, @Req() req: FastifyRequest) {
     return this.service.getById(getCurrentTransaction(), requireCtx(req), id);
+  }
+
+  /** Display names only — a lower bar (PATIENT_READ_CLINICAL, already held by any clinical staff
+   * account) than the admin-tier PRACTITIONER_MANAGE the full list/getById require, so a plain
+   * clinician can resolve a practitionerId shown elsewhere (e.g. the schedule table) to a name. */
+  @Post('names')
+  @RequirePermission(PERMISSION_KEYS.PATIENT_READ_CLINICAL)
+  @Audited('practitioner.names.list', 'Practitioner')
+  async listNames(@Body(new ZodValidationPipe(ListByIdsSchema)) body: ListByIdsInput, @Req() req: FastifyRequest) {
+    return this.service.listNames(getCurrentTransaction(), requireCtx(req), body.ids);
   }
 
   @Get()
