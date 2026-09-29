@@ -248,6 +248,15 @@ export interface Prescription {
   status: string;
 }
 
+export interface PendingRefillRequest {
+  id: string;
+  prescriptionId: string;
+  patientId: string;
+  medicationName: string;
+  pharmacyName: string;
+  requestedAt: string;
+}
+
 export interface InteractionFinding {
   severity: string;
   description: string;

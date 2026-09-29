@@ -276,4 +276,34 @@ describe('tenant isolation — medications', () => {
       withTenantContext(handle.db, ctxA.tenantId, (trx) => prescriptionService.cancel(trx, ctxA, prescription.id)),
     ).rejects.toBeInstanceOf(ConflictError);
   });
+
+  it('lists a pending refill request in the tenant-wide queue, and drops it once decided', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const { prescription } = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      prescriptionService.create(trx, ctxA, tenantAPatientId, ordinaryRxInput({ refillsAuthorized: 1 }), false),
+    );
+    const refillRequest = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      prescriptionService.requestRefill(trx, ctxA, prescription.id),
+    );
+
+    const pendingBefore = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      prescriptionService.listPendingRefillRequests(trx, ctxA),
+    );
+    const found = pendingBefore.find((r) => r.id === refillRequest.id);
+    expect(found).toBeDefined();
+    expect(found?.patientId).toBe(tenantAPatientId);
+    expect(found?.pharmacyName).toBe('Synthetic Test Pharmacy #1');
+
+    await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      prescriptionService.respondToRefill(trx, ctxA, refillRequest.id, { approved: true, denialReason: null }),
+    );
+    const pendingAfter = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      prescriptionService.listPendingRefillRequests(trx, ctxA),
+    );
+    expect(pendingAfter.find((r) => r.id === refillRequest.id)).toBeUndefined();
+
+    const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
+    const tenantBPending = await withTenantContext(handle.db, ctxB.tenantId, (trx) => prescriptionService.listPendingRefillRequests(trx, ctxB));
+    expect(tenantBPending).toHaveLength(0);
+  });
 });

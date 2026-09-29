@@ -60,7 +60,10 @@ export async function requestRefill(id: string, patientId: string): Promise<Acti
 
 export async function approveRefill(id: string, patientId: string): Promise<ActionResult<unknown>> {
   const result = await runAction(() => callBackend(`/api/v1/prescription-refill-requests/${id}/approve`, { method: 'POST' }));
-  if (result.ok) revalidatePath(`/patients/${patientId}`);
+  if (result.ok) {
+    revalidatePath(`/patients/${patientId}`);
+    revalidatePath('/refill-requests');
+  }
   return result;
 }
 
@@ -68,6 +71,9 @@ export async function denyRefill(id: string, patientId: string, denialReason: st
   const result = await runAction(() =>
     callBackend(`/api/v1/prescription-refill-requests/${id}/deny`, { method: 'POST', body: { denialReason } }),
   );
-  if (result.ok) revalidatePath(`/patients/${patientId}`);
+  if (result.ok) {
+    revalidatePath(`/patients/${patientId}`);
+    revalidatePath('/refill-requests');
+  }
   return result;
 }

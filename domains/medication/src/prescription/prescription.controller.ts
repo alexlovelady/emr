@@ -97,6 +97,13 @@ export class RefillRequestController {
     this.service = new PrescriptionService(gateway, interactionGateway);
   }
 
+  @Get()
+  @RequirePermission(PERMISSION_KEYS.MEDICATION_PRESCRIBE)
+  @Audited('prescription_refill_request.list_pending', 'PrescriptionRefillRequest')
+  async listPending(@Req() req: FastifyRequest) {
+    return this.service.listPendingRefillRequests(getCurrentTransaction(), requireCtx(req));
+  }
+
   @Post(':id/approve')
   @RequirePermission(PERMISSION_KEYS.MEDICATION_PRESCRIBE)
   @Audited('prescription_refill_request.approve', 'PrescriptionRefillRequest')

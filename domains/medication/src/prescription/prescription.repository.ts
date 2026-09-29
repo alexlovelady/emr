@@ -39,6 +39,17 @@ export interface PrescriptionRefillRequestRow {
   version: number;
 }
 
+/** Enriches a pending refill request with the fields a review queue needs to display without a
+ * second round-trip per row — same "join once, not N+1" reasoning as every other queue in this app. */
+export interface PendingRefillRequestRow {
+  id: string;
+  prescriptionId: string;
+  patientId: string;
+  medicationName: string;
+  pharmacyName: string;
+  requestedAt: Date;
+}
+
 type Executor = Kysely<DB> | Transaction<DB>;
 
 export class PrescriptionRepository {
@@ -159,6 +170,28 @@ export class PrescriptionRepository {
       .returningAll()
       .executeTakeFirstOrThrow();
     return toRefillRequestRow(row);
+  }
+
+  /** Tenant-wide pending refill request queue, oldest first — mirrors the results-inbox/coding-queue
+   * "review queue" pattern rather than requiring a clinician to already know which patient asked. */
+  async listPending(trx: Executor, tenantId: string): Promise<PendingRefillRequestRow[]> {
+    const rows = await trx
+      .selectFrom('prescription_refill_requests')
+      .innerJoin('prescriptions', 'prescriptions.id', 'prescription_refill_requests.prescription_id')
+      .innerJoin('medications', 'medications.id', 'prescriptions.medication_id')
+      .select([
+        'prescription_refill_requests.id as id',
+        'prescription_refill_requests.prescription_id as prescriptionId',
+        'prescriptions.patient_id as patientId',
+        'medications.medication_name as medicationName',
+        'prescriptions.pharmacy_name as pharmacyName',
+        'prescription_refill_requests.requested_at as requestedAt',
+      ])
+      .where('prescription_refill_requests.tenant_id', '=', tenantId)
+      .where('prescription_refill_requests.status', '=', 'pending')
+      .orderBy('prescription_refill_requests.requested_at', 'asc')
+      .execute();
+    return rows;
   }
 
   async findRefillRequestById(trx: Executor, tenantId: string, id: string): Promise<PrescriptionRefillRequestRow | null> {

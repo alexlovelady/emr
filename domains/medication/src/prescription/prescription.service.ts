@@ -11,6 +11,7 @@ import { MedicationRepository } from '../medication/medication.repository.js';
 import type { CreatePrescriptionInput } from './prescription.dto.js';
 import {
   PrescriptionRepository,
+  type PendingRefillRequestRow,
   type PrescriptionRefillRequestRow,
   type PrescriptionRow,
 } from './prescription.repository.js';
@@ -207,6 +208,10 @@ export class PrescriptionService {
       )
       .execute();
     return refillRequest;
+  }
+
+  async listPendingRefillRequests(trx: Executor, ctx: RequestContext): Promise<PendingRefillRequestRow[]> {
+    return this.repo.listPending(trx, ctx.tenantId);
   }
 
   async respondToRefill(
