@@ -580,6 +580,21 @@ export interface CohortExecutionRow {
   status: string;
 }
 
+export interface ExternalCandidate {
+  id: string;
+  patientId: string;
+  originType: 'c-cda' | 'fhir' | 'hl7';
+  sourceDocumentId: string;
+  resourceType: 'problem' | 'allergy' | 'medication';
+  payload: Record<string, unknown>;
+  replacesResourceId: string | null;
+  createdResourceId: string | null;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  status: 'pending' | 'accepted' | 'rejected' | 'duplicate' | 'replaced';
+  createdAt: string;
+}
+
 export interface PriorAuthorization {
   id: string;
   patientId: string;

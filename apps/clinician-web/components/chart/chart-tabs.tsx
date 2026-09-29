@@ -5,6 +5,7 @@ import {
   DollarSign,
   FileText,
   FlaskConical,
+  Inbox,
   MessageSquare,
   Pill,
   Share2,
@@ -26,6 +27,7 @@ import { DocumentsPanel } from '@/components/chart/documents-panel';
 import { BillingPanel } from '@/components/chart/billing-panel';
 import { ReferralsPanel } from '@/components/chart/referrals-panel';
 import { PriorAuthorizationsPanel } from '@/components/chart/prior-authorizations-panel';
+import { ExternalCandidatesPanel } from '@/components/chart/external-candidates-panel';
 import type {
   Allergy,
   Appeal,
@@ -36,6 +38,7 @@ import type {
   DiagnosticReport,
   DocumentItem,
   EligibilityCheck,
+  ExternalCandidate,
   IntakeFormResponse,
   IntakeFormTemplate,
   MedicationItem,
@@ -85,6 +88,7 @@ interface ChartTabsProps {
   paymentPlans: PaymentPlanWithInstallments[];
   referrals: Referral[];
   priorAuthorizations: PriorAuthorization[];
+  externalCandidates: ExternalCandidate[];
 }
 
 export function ChartTabs({
@@ -110,11 +114,13 @@ export function ChartTabs({
   paymentPlans,
   referrals,
   priorAuthorizations,
+  externalCandidates,
 }: ChartTabsProps) {
   const activeProblems = problems.filter((p) => p.status !== 'deleted' && p.clinicalStatus === 'active').length;
   const activeAllergies = allergies.filter((a) => a.status !== 'deleted').length;
   const activeMeds = medications.filter((m) => m.status !== 'deleted' && m.status === 'active').length;
   const pendingResults = results.filter((r) => r.reviewStatus !== 'reviewed').length;
+  const pendingExternalCandidates = externalCandidates.filter((c) => c.status === 'pending').length;
 
   return (
     <div className="space-y-5">
@@ -165,6 +171,14 @@ export function ChartTabs({
               <TabsTrigger value="prior-auth">
                 <ShieldCheck className="mr-1.5 h-3.5 w-3.5" /> Prior Auth
               </TabsTrigger>
+              <TabsTrigger value="external-records">
+                <Inbox className="mr-1.5 h-3.5 w-3.5" /> External Records
+                {pendingExternalCandidates > 0 && (
+                  <span className="ml-1.5 rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-destructive-foreground">
+                    {pendingExternalCandidates}
+                  </span>
+                )}
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="problems">
               <ProblemsPanel problems={problems} patientId={patientId} />
@@ -211,6 +225,15 @@ export function ChartTabs({
             </TabsContent>
             <TabsContent value="prior-auth">
               <PriorAuthorizationsPanel priorAuthorizations={priorAuthorizations} coverages={coverages} patientId={patientId} />
+            </TabsContent>
+            <TabsContent value="external-records">
+              <ExternalCandidatesPanel
+                candidates={externalCandidates}
+                patientId={patientId}
+                problems={problems}
+                allergies={allergies}
+                medications={medications}
+              />
             </TabsContent>
           </Tabs>
         </CardContent>

@@ -41,4 +41,5 @@ export const PERMISSION_KEYS = {
   AI_GENERATION_MANAGE: 'ai_generation.manage',
   COHORT_MANAGE: 'cohort.manage',
   REPORT_QUERY_POPULATION: 'report.query.population',
+  EXTERNAL_CANDIDATE_MANAGE: 'external_candidate.manage',
 } as const;
