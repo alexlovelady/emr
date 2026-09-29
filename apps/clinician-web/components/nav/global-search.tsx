@@ -55,7 +55,7 @@ export function GlobalSearch() {
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
-        placeholder="Search patients, documents, claims…"
+        placeholder="Search patients, notes, results, tasks…"
         className="pl-8"
       />
       {open && results !== null && (
@@ -64,18 +64,30 @@ export function GlobalSearch() {
             <p className="p-3 text-sm text-muted-foreground">No results.</p>
           ) : (
             <ul className="max-h-80 divide-y divide-border overflow-y-auto">
-              {results.map((r) => (
-                <li key={`${r.resourceType}-${r.resourceId}`}>
-                  <Link
-                    href={hrefFor(r)}
-                    onClick={() => setOpen(false)}
-                    className="flex items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-accent"
-                  >
+              {results.map((r) => {
+                const href = hrefFor(r);
+                const content = (
+                  <>
                     <span className="truncate">{r.title}</span>
                     <span className="shrink-0 text-xs text-muted-foreground">{r.resourceType}</span>
-                  </Link>
-                </li>
-              ))}
+                  </>
+                );
+                return (
+                  <li key={`${r.resourceType}-${r.resourceId}`}>
+                    {href === '#' ? (
+                      <div className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-muted-foreground">{content}</div>
+                    ) : (
+                      <Link
+                        href={href}
+                        onClick={() => setOpen(false)}
+                        className="flex items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-accent"
+                      >
+                        {content}
+                      </Link>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

@@ -8,7 +8,17 @@ import { PostgresSearchIndexGateway } from '@ehr/search-adapter';
 import { CohortService } from '../src/cohort/cohort.service.js';
 import { CohortDslSchema } from '../src/cohort/cohort.dto.js';
 import { GOVERNED_QUERIES } from '../src/governed-query/governed-query.registry.js';
-import { reindexPatients, reindexDocuments, reindexClaims } from '../src/search/reindex.js';
+import {
+  reindexPatients,
+  reindexDocuments,
+  reindexClaims,
+  reindexNotes,
+  reindexDiagnosticReports,
+  reindexTasks,
+  reindexReferrals,
+  reindexPractitioners,
+  reindexLocations,
+} from '../src/search/reindex.js';
 
 function isoDateYearsAgo(years: number): string {
   const d = new Date();
@@ -499,6 +509,142 @@ describe('tenant isolation — query platform', () => {
     const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
     const crossTenantResults = await withTenantContext(handle.db, ctxB.tenantId, (trx) =>
       searchGateway.search(trx, { tenantId: ctxB.tenantId, query: patientSearchMarker, allowedContextTags: [] }),
+    );
+    expect(crossTenantResults).toHaveLength(0);
+  });
+
+  it('reindexes notes/diagnostic-reports/tasks/referrals/practitioners/locations too (spec §9 full coverage)', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const marker = `Fulltextzzz${randomUUID().replace(/-/g, '')}`;
+
+    const { noteId, reportId, taskId, referralId, practitionerId, locationId } = await withTenantContext(
+      handle.db,
+      ctxA.tenantId,
+      async (trx) => {
+        const appointment = await trx
+          .insertInto('appointments')
+          .values({
+            tenant_id: ctxA.tenantId,
+            patient_id: matchingPatientId,
+            location_id: handle.seed.tenantA.locationId,
+            practitioner_id: tenantAPractitionerId,
+            appointment_type: 'office_visit',
+            scheduled_start: daysAgo(1),
+            scheduled_end: daysAgo(1),
+            status: 'checked_in',
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        const encounter = await trx
+          .insertInto('encounters')
+          .values({
+            tenant_id: ctxA.tenantId,
+            patient_id: matchingPatientId,
+            appointment_id: appointment.id,
+            location_id: handle.seed.tenantA.locationId,
+            practitioner_id: tenantAPractitionerId,
+            encounter_type: 'office_visit',
+            started_at: daysAgo(1),
+            status: 'signed',
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+
+        const note = await trx
+          .insertInto('notes')
+          .values({
+            tenant_id: ctxA.tenantId,
+            patient_id: matchingPatientId,
+            encounter_id: encounter.id,
+            note_type: 'progress_note',
+            content: JSON.stringify({ assessment: marker }),
+            status: 'draft',
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+
+        const report = await trx
+          .insertInto('diagnostic_reports')
+          .values({
+            tenant_id: ctxA.tenantId,
+            patient_id: matchingPatientId,
+            encounter_id: encounter.id,
+            display_name: marker,
+            status: 'final',
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+
+        const task = await trx
+          .insertInto('tasks')
+          .values({ tenant_id: ctxA.tenantId, patient_id: matchingPatientId, task_type: 'follow_up', title: marker, priority: 'normal', status: 'open' })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+
+        const referral = await trx
+          .insertInto('referrals')
+          .values({
+            tenant_id: ctxA.tenantId,
+            patient_id: matchingPatientId,
+            referring_practitioner_id: tenantAPractitionerId,
+            specialty: marker,
+            reason: 'full-text coverage test',
+            status: 'pending',
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+
+        const workforceIdentity = await trx
+          .insertInto('workforce_identities')
+          .values({ tenant_id: ctxA.tenantId, user_id: handle.seed.tenantA.adminUserId, organization_id: handle.seed.tenantA.organizationId, status: 'active' })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        const practitioner = await trx
+          .insertInto('practitioners')
+          .values({ tenant_id: ctxA.tenantId, workforce_identity_id: workforceIdentity.id, display_name: marker, status: 'active' })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+
+        const location = await trx
+          .insertInto('locations')
+          .values({ tenant_id: ctxA.tenantId, organization_id: handle.seed.tenantA.organizationId, name: marker, time_zone: 'America/New_York', status: 'active' })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+
+        return {
+          noteId: note.id,
+          reportId: report.id,
+          taskId: task.id,
+          referralId: referral.id,
+          practitionerId: practitioner.id,
+          locationId: location.id,
+        };
+      },
+    );
+
+    await withTenantContext(handle.db, ctxA.tenantId, async (trx) => {
+      await reindexNotes(trx, ctxA.tenantId, searchGateway);
+      await reindexDiagnosticReports(trx, ctxA.tenantId, searchGateway);
+      await reindexTasks(trx, ctxA.tenantId, searchGateway);
+      await reindexReferrals(trx, ctxA.tenantId, searchGateway);
+      await reindexPractitioners(trx, ctxA.tenantId, searchGateway);
+      await reindexLocations(trx, ctxA.tenantId, searchGateway);
+    });
+
+    const results = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      searchGateway.search(trx, { tenantId: ctxA.tenantId, query: marker, allowedContextTags: [] }),
+    );
+    const resourceIds = results.map((r) => r.resourceId);
+    expect(resourceIds).toContain(noteId);
+    expect(resourceIds).toContain(reportId);
+    expect(resourceIds).toContain(taskId);
+    expect(resourceIds).toContain(referralId);
+    expect(resourceIds).toContain(practitionerId);
+    expect(resourceIds).toContain(locationId);
+
+    const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
+    const crossTenantResults = await withTenantContext(handle.db, ctxB.tenantId, (trx) =>
+      searchGateway.search(trx, { tenantId: ctxB.tenantId, query: marker, allowedContextTags: [] }),
     );
     expect(crossTenantResults).toHaveLength(0);
   });
