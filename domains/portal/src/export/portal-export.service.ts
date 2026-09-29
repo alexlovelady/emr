@@ -8,15 +8,26 @@ import { MedicationRepository } from '@ehr/medication';
 import { DiagnosticReportRepository } from '@ehr/results';
 import type { ObjectStorageGateway } from '@ehr/object-storage';
 import { ExportRequestRepository, type ExportRequestRow } from './export-request.repository.js';
+import { generateCcdXml } from './ccd-generator.js';
+import { generateRecordsPdf } from './pdf-generator.js';
+import type { ExportFormat } from './portal-export.dto.js';
 
 type Executor = Kysely<DB> | Transaction<DB>;
 
+const CONTENT_TYPES: Record<ExportFormat, string> = {
+  json: 'application/json',
+  pdf: 'application/pdf',
+  'ccd-xml': 'application/xml',
+};
+const EXTENSIONS: Record<ExportFormat, string> = { json: 'json', pdf: 'pdf', 'ccd-xml': 'xml' };
+
 /**
  * Fulfilled synchronously — no async job queue exists (same reasoning as Phase 4's FHIR
- * bulk-export deferral, migration `0031`'s doc comment). Assembles a JSON bundle rather than a
- * full C-CDA/PDF — a documented trim of the delivery *format*, not the delivery mechanism: this is
- * a real, complete, downloadable record (demographics + active problems/allergies/medications +
- * signed notes + released results).
+ * bulk-export deferral, migration `0031`'s doc comment). Item 25 closed the remaining "JSON only"
+ * gap: `format` now also produces a real PDF clinical summary or a structurally real C-CDA (CCD)
+ * XML document — see `pdf-generator.ts`/`ccd-generator.ts` for what each honestly does and doesn't
+ * claim. `json` (the original, still the default) remains a plain dump of the same underlying data
+ * for a caller that wants raw structured access rather than a human/interop document format.
  */
 export class PortalExportService {
   constructor(
@@ -31,7 +42,7 @@ export class PortalExportService {
     private readonly diagnosticReportRepo: DiagnosticReportRepository = new DiagnosticReportRepository(),
   ) {}
 
-  async requestExport(trx: Executor, ctx: RequestContext, patientId: string): Promise<{ request: ExportRequestRow; downloadUrl: string }> {
+  async requestExport(trx: Executor, ctx: RequestContext, patientId: string, format: ExportFormat = 'json'): Promise<{ request: ExportRequestRow; downloadUrl: string }> {
     const portalAccountId = requirePortalActorId(ctx);
     await this.consentService.assertAccess(trx, ctx.tenantId, portalAccountId, patientId);
 
@@ -45,12 +56,23 @@ export class PortalExportService {
     ]);
     if (!patient) throw new NotFoundError('Patient not found', { patientId });
 
-    const bundle = { generatedAt: new Date().toISOString(), patient, problems, allergies, medications, notes, results };
+    const generatedAt = new Date();
+    let body: string | Buffer;
+    if (format === 'pdf') {
+      body = await generateRecordsPdf({ generatedAt, patient, problems, allergies, medications, notes, results });
+    } else if (format === 'ccd-xml') {
+      const tenant = await trx.selectFrom('tenants').select('name').where('id', '=', ctx.tenantId).executeTakeFirst();
+      body = generateCcdXml({ generatedAt, custodianName: tenant?.name ?? 'Unknown organization', patient, problems, allergies, medications, results });
+    } else {
+      const bundle = { generatedAt: generatedAt.toISOString(), patient, problems, allergies, medications, notes, results };
+      body = JSON.stringify(bundle, null, 2);
+    }
+
     const { storageKey } = await this.storageGateway.putObject({
       tenantId: ctx.tenantId,
-      filename: `patient-${patientId}-export-${Date.now()}.json`,
-      contentType: 'application/json',
-      body: JSON.stringify(bundle, null, 2),
+      filename: `patient-${patientId}-export-${Date.now()}.${EXTENSIONS[format]}`,
+      contentType: CONTENT_TYPES[format],
+      body,
     });
 
     const request = await this.repo.create(trx, {
@@ -58,6 +80,7 @@ export class PortalExportService {
       patientId,
       requestedByPortalAccountId: portalAccountId,
       storageKey,
+      format,
       status: 'completed',
     });
     const downloadUrl = await this.storageGateway.getDownloadUrl({ storageKey });

@@ -1,4 +1,4 @@
-import { Controller, Get, Inject, Param, Post, Req } from '@nestjs/common';
+import { Controller, Get, Inject, Param, Post, Query, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { getCurrentTransaction } from '@ehr/db';
 import { ForbiddenError, type RequestContext } from '@ehr/domain-common';
@@ -6,7 +6,9 @@ import { Audited } from '@ehr/audit';
 import { SkipAuthz } from '@ehr/authz';
 import { OBJECT_STORAGE_GATEWAY } from '@ehr/documents';
 import type { ObjectStorageGateway } from '@ehr/object-storage';
+import { ZodValidationPipe } from '@ehr/api-contracts';
 import { PortalExportService } from './portal-export.service.js';
+import { ExportFormatSchema, type ExportFormat } from './portal-export.dto.js';
 
 @Controller('api/v1/portal')
 @SkipAuthz()
@@ -19,8 +21,12 @@ export class PortalExportController {
 
   @Post('patients/:patientId/export-requests')
   @Audited('portal_export.request', 'ExportRequest')
-  async requestExport(@Param('patientId') patientId: string, @Req() req: FastifyRequest) {
-    return this.service.requestExport(getCurrentTransaction(), requirePortalCtx(req), patientId);
+  async requestExport(
+    @Param('patientId') patientId: string,
+    @Query('format', new ZodValidationPipe(ExportFormatSchema)) format: ExportFormat,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.service.requestExport(getCurrentTransaction(), requirePortalCtx(req), patientId, format);
   }
 
   @Get('patients/:patientId/export-requests')

@@ -813,6 +813,8 @@ export interface ExportRequestsTable extends CommonColumnsTable {
   patient_id: string;
   requested_by_portal_account_id: string;
   storage_key: string | null;
+  /** Item 25 — 'json' | 'pdf' | 'ccd-xml'. See migration 0061's doc comment. */
+  format: Generated<string>;
 }
 
 export interface AiGenerationsTable extends CommonColumnsTable {

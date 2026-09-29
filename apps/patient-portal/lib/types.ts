@@ -176,6 +176,8 @@ export interface ExportRequest {
   patientId: string;
   requestedByPortalAccountId: string;
   storageKey: string | null;
+  /** Item 25 — 'json' | 'pdf' | 'ccd-xml'. */
+  format: string;
   status: string;
   createdAt: string;
 }

@@ -11,6 +11,7 @@ import { PortalPaymentService } from '../src/payment/portal-payment.service.js';
 import { PortalSessionService } from '../src/session/portal-session.service.js';
 import { PortalSchedulingService } from '../src/scheduling/portal-scheduling.service.js';
 import { SmartLaunchService } from '../src/smart-launch/smart-launch.service.js';
+import { PortalExportService } from '../src/export/portal-export.service.js';
 
 /** EHR_BUILD_SPEC.md §18.2 — run via `pnpm test:tenant-isolation`, requires a live Postgres. */
 describe('tenant isolation — portal', () => {
@@ -472,5 +473,95 @@ describe('SmartLaunchService (SMART standalone launch consent)', () => {
         }),
       ),
     ).rejects.toBeInstanceOf(NotFoundError);
+  });
+});
+
+/** Item 25 — records export gained real PDF/CCD-XML output alongside the original JSON dump. */
+describe('PortalExportService formats (item 25)', () => {
+  let handle: TestDbHandle;
+  let patientId: string;
+  let portalAccountId: string;
+  const puts: { contentType: string; body: string | Buffer; filename: string }[] = [];
+  const capturingStorageGateway: ObjectStorageGateway = {
+    getUploadUrl: async () => ({ url: 'https://example.test/upload', storageKey: 'k' }),
+    getDownloadUrl: async () => 'https://example.test/download',
+    headObject: async () => null,
+    putObject: async (params) => {
+      puts.push({ contentType: params.contentType, body: params.body, filename: params.filename });
+      return { storageKey: `exports/${randomUUID()}` };
+    },
+  };
+  const exportService = new PortalExportService(capturingStorageGateway);
+
+  beforeAll(async () => {
+    handle = await setupTestDb();
+    const consentService = new ConsentService();
+    const ctxA = handle.seed.tenantA;
+
+    patientId = await withTenantContext(handle.db, ctxA.tenantId, async (trx) => {
+      const patient = await trx
+        .insertInto('patients')
+        .values({ tenant_id: ctxA.tenantId, given_name: 'Export', family_name: `Formats-${Date.now()}`, date_of_birth: '1975-08-20', status: 'active' })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      await trx
+        .insertInto('problems')
+        .values({ tenant_id: ctxA.tenantId, patient_id: patient.id, code_system: 'ICD-10-CM', code: 'E11.9', display_name: 'Type 2 diabetes', clinical_status: 'active', status: 'active' })
+        .execute();
+      await trx
+        .insertInto('allergies')
+        .values({ tenant_id: ctxA.tenantId, patient_id: patient.id, substance: 'Penicillin', reaction: 'Hives', status: 'active' })
+        .execute();
+      await trx
+        .insertInto('medications')
+        .values({ tenant_id: ctxA.tenantId, patient_id: patient.id, medication_name: 'Metformin', dose: '500mg', frequency: 'BID', entry_source: 'clinician_entered', status: 'active' })
+        .execute();
+      return patient.id;
+    });
+    portalAccountId = await withTenantContext(handle.db, ctxA.tenantId, async (trx) => {
+      const account = await trx
+        .insertInto('portal_accounts')
+        .values({ tenant_id: ctxA.tenantId, email: `export-formats-${randomUUID()}@example.com`, password_hash: 'not-a-real-hash', status: 'active' })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      return account.id;
+    });
+    await withTenantContext(handle.db, ctxA.tenantId, (trx) => consentService.createSelfGrant(trx, ctxA.tenantId, patientId, portalAccountId));
+  });
+
+  afterAll(() => handle.close());
+
+  function ctx() {
+    return requestContextFor(handle.seed.tenantA.tenantId, portalAccountId, { actor: { id: portalAccountId, type: 'patient' } }) as Parameters<
+      PortalExportService['requestExport']
+    >[1];
+  }
+
+  it('defaults to JSON when no format is given (backward compatible)', async () => {
+    const { request } = await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) => exportService.requestExport(trx, ctx(), patientId));
+    expect(request.format).toBe('json');
+    const put = puts.at(-1)!;
+    expect(put.contentType).toBe('application/json');
+    expect(JSON.parse(put.body as string).problems).toHaveLength(1);
+  });
+
+  it('produces a real PDF when format=pdf', async () => {
+    const { request } = await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) => exportService.requestExport(trx, ctx(), patientId, 'pdf'));
+    expect(request.format).toBe('pdf');
+    const put = puts.at(-1)!;
+    expect(put.contentType).toBe('application/pdf');
+    expect((put.body as Buffer).subarray(0, 5).toString('ascii')).toBe('%PDF-');
+  });
+
+  it('produces a real, well-formed CCD XML document when format=ccd-xml, using the tenant name as custodian', async () => {
+    const { request } = await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) => exportService.requestExport(trx, ctx(), patientId, 'ccd-xml'));
+    expect(request.format).toBe('ccd-xml');
+    const put = puts.at(-1)!;
+    expect(put.contentType).toBe('application/xml');
+    const xml = put.body as string;
+    expect(xml).toContain('<?xml version="1.0"');
+    expect(xml).toContain('Type 2 diabetes');
+    expect(xml).toContain('Penicillin');
+    expect(xml).toContain('Metformin');
   });
 });

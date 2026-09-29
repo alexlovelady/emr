@@ -7,6 +7,7 @@ export interface ExportRequestRow {
   patientId: string;
   requestedByPortalAccountId: string;
   storageKey: string | null;
+  format: string;
   status: string;
   createdAt: Date;
   updatedAt: Date;
@@ -18,7 +19,7 @@ type Executor = Kysely<DB> | Transaction<DB>;
 export class ExportRequestRepository {
   async create(
     trx: Executor,
-    input: { tenantId: string; patientId: string; requestedByPortalAccountId: string; storageKey: string; status: string },
+    input: { tenantId: string; patientId: string; requestedByPortalAccountId: string; storageKey: string; format: string; status: string },
   ): Promise<ExportRequestRow> {
     const row = await trx
       .insertInto('export_requests')
@@ -27,6 +28,7 @@ export class ExportRequestRepository {
         patient_id: input.patientId,
         requested_by_portal_account_id: input.requestedByPortalAccountId,
         storage_key: input.storageKey,
+        format: input.format,
         status: input.status,
         created_by: input.requestedByPortalAccountId,
         updated_by: input.requestedByPortalAccountId,
@@ -65,6 +67,7 @@ function toRow(dbRow: Selectable<DB['export_requests']>): ExportRequestRow {
     patientId: dbRow.patient_id,
     requestedByPortalAccountId: dbRow.requested_by_portal_account_id,
     storageKey: dbRow.storage_key,
+    format: dbRow.format,
     status: dbRow.status,
     createdAt: dbRow.created_at,
     updatedAt: dbRow.updated_at,

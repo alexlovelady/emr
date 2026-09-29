@@ -1162,6 +1162,51 @@ this closes it now that the rest of the launch machinery (standalone launch, key
   typecheck/test/test:integration/test:tenant-isolation green aside from the same known pre-existing
   `@ehr/query` flaky timeout (confirmed passing in isolation).
 
+### Remaining-gaps build-out — real C-CDA/PDF records export
+
+Closes item 25. The patient portal's "Download my records" already produced a real, complete
+bundle (demographics + active problems/allergies/medications + signed notes + released results) —
+the documented gap was the delivery *format* (a bare JSON dump), not missing data.
+
+- **`domains/portal/src/export/ccd-generator.ts`** (new) — a structurally real HL7 CDA R2 document
+  following the C-CDA "Continuity of Care Document" (CCD) template: real document- and
+  section-level `templateId`s, LOINC section codes, and real patient clinical data throughout, not
+  a fabricated sample. Honestly scoped: it has NOT been run against the official C-CDA/NIST
+  validation tooling (a licensed/hosted validator this environment has no path to), so full
+  national-standard conformance isn't claimed — same honesty bar as `packages/dose-utils`. A code
+  under a system this generator doesn't have a real HL7 OID for (any string is accepted by the
+  existing DTOs) gets an honest `nullFlavor="OTH"` + original text rather than a fabricated OID.
+  Deliberately has no Immunizations section (no immunization domain/table exists anywhere in this
+  repo — an honest omission) and no clinical-notes section (CCD has no such section; notes remain
+  available via JSON/PDF instead).
+- **`domains/portal/src/export/pdf-generator.ts`** (new) — a real, human-readable PDF clinical
+  summary via `pdfkit` (pure JS, no headless-browser/native-binary dependency — this repo already
+  has one documented binary-dependency pain point, `packages/db-backup`'s `pg_dump`, not worth a
+  second). Includes signed notes, which CCD's rigid schema has no place for.
+- **`packages/db/migrations/0061_export_requests_format.ts`** — `export_requests.format` (`'json'`
+  default) records which format a request produced; every existing/future JSON-only caller is
+  unaffected.
+- **`POST .../export-requests?format=json|pdf|ccd-xml`** (`domains/portal`) — `format` defaults to
+  `json`, so the existing endpoint contract is unchanged for any caller that doesn't pass it.
+  `apps/patient-portal`'s "Download my records" panel now offers all three as separate buttons.
+- **Verified**: 9 new unit tests (`ccd-generator.test.ts` validates real well-formed XML via
+  `fast-xml-parser`, confirms the CCD templateId/LOINC document code, confirms a recognized code
+  system maps to its real OID, confirms an unrecognized one honestly falls back instead of
+  fabricating one, confirms no Immunizations section exists; `pdf-generator.test.ts` confirms real
+  `%PDF-` magic bytes) plus 3 new integration tests against real Postgres
+  (`domains/portal/test/tenant-isolation.spec.ts`) exercising `PortalExportService.requestExport`
+  end to end for all three formats with real clinical data (a real problem, allergy, and
+  medication), confirming the right content-type/format is recorded and the real generated
+  bytes/XML contain that real data. **Could not complete a live HTTP round-trip through this
+  environment's object-storage step**: this sandbox has no path to pull the `minio/minio` image
+  (`docker compose up minio` fails with a registry access-denied error, a sandbox-level constraint,
+  not a defect in this feature — the same class of gap this README's own "Verification status"
+  section already documents for Docker Desktop itself) — so end-to-end HTTP verification relies on
+  the real-Postgres integration tests above instead, which exercise the exact same service method
+  end to end aside from the final S3 `putObject` call. Full repo-wide build/lint/typecheck/test/
+  test:integration/test:tenant-isolation green (262 tasks) aside from the same known pre-existing
+  `@ehr/query` flaky timeout.
+
 ## Verification status
 
 Docker Desktop's backend would not start in the environment this was built in (its WSL2
