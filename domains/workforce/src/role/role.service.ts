@@ -3,7 +3,7 @@ import type { DB } from '@ehr/db';
 import { ConflictError, NotFoundError, ValidationError, type RequestContext } from '@ehr/domain-common';
 import { PERMISSION_KEYS } from '@ehr/authz';
 import { buildOutboxInsert } from '@ehr/outbox';
-import type { AssignRoleInput, CreateRoleInput, GrantPermissionInput } from './role.dto.js';
+import type { AssignRoleInput, CreateRoleInput, GrantPermissionInput, UpdateRoleInput } from './role.dto.js';
 import { RoleRepository, type RoleRow, type UserRoleGrant, type UserRoleRow } from './role.repository.js';
 import { UserRepository } from '../user/user.repository.js';
 
@@ -25,6 +25,22 @@ export class RoleService {
     const existing = await this.repo.findByKey(trx, input.key);
     if (existing) throw new ConflictError('A role with this key already exists', { key: input.key });
     return this.repo.createRole(trx, input);
+  }
+
+  /** System (seeded) roles are never renameable — their keys are hardcoded elsewhere
+   * (SYSTEM_ROLE_KEYS.PLATFORM_ADMIN/STAFF, permission-catalog UI, etc.) and roles are a global
+   * catalog shared by every tenant, so renaming one isn't a tenant-scoped, reversible action. */
+  async updateRole(trx: Executor, id: string, input: UpdateRoleInput): Promise<RoleRow> {
+    const role = await this.repo.findById(trx, id);
+    if (!role) throw new NotFoundError('Role not found', { id });
+    if (role.isSystem) throw new ConflictError('System roles cannot be renamed', { id, key: role.key });
+
+    if (input.key && input.key !== role.key) {
+      const existing = await this.repo.findByKey(trx, input.key);
+      if (existing) throw new ConflictError('A role with this key already exists', { key: input.key });
+    }
+
+    return this.repo.update(trx, id, input);
   }
 
   async listPermissions(trx: Executor, roleId: string): Promise<string[]> {

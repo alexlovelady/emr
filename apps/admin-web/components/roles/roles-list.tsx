@@ -7,6 +7,7 @@ import { ChevronDown, ChevronUp, ShieldCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ALL_PERMISSION_KEYS } from '@/lib/permission-catalog';
 import { grantRolePermission, revokeRolePermission } from '@/lib/actions/roles';
+import { EditRoleDialog } from '@/components/roles/edit-role-dialog';
 import type { RoleRow } from '@/lib/types';
 
 function RolePermissionChecklist({ roleId, permissions }: { roleId: string; permissions: string[] }) {
@@ -53,7 +54,7 @@ export function RolesList({ roles, permissionsByRole }: { roles: RoleRow[]; perm
               <div className="text-sm font-medium">{r.displayName}</div>
               <div className="text-xs text-muted-foreground">{r.key}</div>
             </div>
-            {r.isSystem && <Badge variant="outline">system</Badge>}
+            {r.isSystem ? <Badge variant="outline">system</Badge> : <EditRoleDialog role={r} />}
             <span className="text-xs text-muted-foreground">{permissionsByRole[i]!.length} permissions</span>
             {expanded === r.id ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
           </button>

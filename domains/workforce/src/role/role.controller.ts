@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { getCurrentTransaction } from '@ehr/db';
 import { ForbiddenError, type RequestContext } from '@ehr/domain-common';
@@ -10,10 +10,12 @@ import {
   CreateRoleSchema,
   GrantPermissionSchema,
   ListUserRoleGrantsSchema,
+  UpdateRoleSchema,
   type AssignRoleInput,
   type CreateRoleInput,
   type GrantPermissionInput,
   type ListUserRoleGrantsInput,
+  type UpdateRoleInput,
 } from './role.dto.js';
 import { RoleService } from './role.service.js';
 
@@ -33,6 +35,13 @@ export class RoleController {
   @Audited('role.create', 'Role')
   async createRole(@Body(new ZodValidationPipe(CreateRoleSchema)) body: CreateRoleInput) {
     return this.service.createRole(getCurrentTransaction(), body);
+  }
+
+  @Patch('roles/:id')
+  @RequirePermission(PERMISSION_KEYS.ROLE_MANAGE)
+  @Audited('role.update', 'Role')
+  async updateRole(@Param('id') id: string, @Body(new ZodValidationPipe(UpdateRoleSchema)) body: UpdateRoleInput) {
+    return this.service.updateRole(getCurrentTransaction(), id, body);
   }
 
   @Get('roles/:id/permissions')

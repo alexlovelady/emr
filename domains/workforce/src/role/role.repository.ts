@@ -55,6 +55,22 @@ export class RoleRepository {
     return toRoleRow(row);
   }
 
+  /** Callers must check `isSystem` themselves before calling this (see RoleService.updateRole()) —
+   * this method has no `is_system` guard of its own, since the "never rename a seeded role" rule
+   * is a business decision, not a database-integrity one. */
+  async update(trx: Executor, id: string, input: { key?: string | undefined; displayName?: string | undefined }): Promise<RoleRow> {
+    const row = await trx
+      .updateTable('roles')
+      .set({
+        ...(input.key !== undefined ? { key: input.key } : {}),
+        ...(input.displayName !== undefined ? { display_name: input.displayName } : {}),
+      })
+      .where('id', '=', id)
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return toRoleRow(row);
+  }
+
   async listPermissions(trx: Executor, roleId: string): Promise<string[]> {
     const rows = await trx.selectFrom('role_permissions').select('permission_key').where('role_id', '=', roleId).execute();
     return rows.map((r) => r.permission_key);

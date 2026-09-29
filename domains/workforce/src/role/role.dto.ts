@@ -15,6 +15,18 @@ export const CreateRoleSchema = z.object({
 });
 export type CreateRoleInput = z.infer<typeof CreateRoleSchema>;
 
+/** Custom (non-system) roles only — see RoleService.updateRole()'s isSystem guard. */
+export const UpdateRoleSchema = z.object({
+  key: z
+    .string()
+    .min(1)
+    .max(100)
+    .regex(/^[a-z0-9_]+$/, 'key must be lowercase letters, digits, and underscores only')
+    .optional(),
+  displayName: z.string().min(1).max(200).optional(),
+});
+export type UpdateRoleInput = z.infer<typeof UpdateRoleSchema>;
+
 export const GrantPermissionSchema = z.object({
   permissionKey: z.string().min(1).max(100),
 });

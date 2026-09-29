@@ -231,3 +231,63 @@ describe('practitioner name lookup (low-permission)', () => {
     expect(names).toHaveLength(0);
   });
 });
+
+describe('role update (key/display name)', () => {
+  let handle: TestDbHandle;
+  const roleService = new RoleService();
+
+  beforeAll(async () => {
+    handle = await setupTestDb();
+  });
+
+  afterAll(() => handle.close());
+
+  it('updates a custom role’s key and display name', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const created = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      roleService.createRole(trx, { key: `custom_role_${Date.now()}`, displayName: 'Original Name' }),
+    );
+
+    const newKey = `renamed_role_${Date.now()}`;
+    const updated = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      roleService.updateRole(trx, created.id, { key: newKey, displayName: 'Renamed Role' }),
+    );
+    expect(updated.key).toBe(newKey);
+    expect(updated.displayName).toBe('Renamed Role');
+    expect(updated.isSystem).toBe(false);
+  });
+
+  it('refuses to rename a system role', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const staffRole = await withTenantContext(handle.db, ctxA.tenantId, (trx) => roleService.list(trx)).then((roles) =>
+      roles.find((r) => r.key === SYSTEM_ROLE_KEYS.STAFF),
+    );
+    expect(staffRole).toBeDefined();
+
+    await expect(
+      withTenantContext(handle.db, ctxA.tenantId, (trx) => roleService.updateRole(trx, staffRole!.id, { displayName: 'Hijacked' })),
+    ).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it('refuses to rename a custom role to an already-taken key', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const keyA = `taken_key_${Date.now()}`;
+    await withTenantContext(handle.db, ctxA.tenantId, (trx) => roleService.createRole(trx, { key: keyA, displayName: 'Role A' }));
+    const roleB = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      roleService.createRole(trx, { key: `role_b_${Date.now()}`, displayName: 'Role B' }),
+    );
+
+    await expect(
+      withTenantContext(handle.db, ctxA.tenantId, (trx) => roleService.updateRole(trx, roleB.id, { key: keyA })),
+    ).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it('404s updating a role that does not exist', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    await expect(
+      withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        roleService.updateRole(trx, '00000000-0000-0000-0000-000000000000', { displayName: 'Ghost' }),
+      ),
+    ).rejects.toBeInstanceOf(NotFoundError);
+  });
+});
