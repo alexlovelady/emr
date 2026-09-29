@@ -489,6 +489,17 @@ export interface SmartAuthorizationCodesTable extends CommonColumnsTable {
   consumed_at: Timestamp | null;
 }
 
+/** System-operational, not tenant data — see migration 0051's doc comment. */
+export interface BackupRunsTable {
+  id: Generated<string>;
+  started_at: GeneratedTimestamp;
+  completed_at: Timestamp | null;
+  status: string;
+  storage_key: string | null;
+  size_bytes: string | null;
+  error: string | null;
+}
+
 export interface AiRateLimitCountersTable extends CommonColumnsTable {
   window_date: Timestamp;
   count: number;
@@ -849,6 +860,7 @@ export interface DB {
   smart_authorization_codes: SmartAuthorizationCodesTable;
   bulk_export_jobs: BulkExportJobsTable;
   ai_rate_limit_counters: AiRateLimitCountersTable;
+  backup_runs: BackupRunsTable;
   charges: ChargesTable;
   billing_rules: BillingRulesTable;
   referrals: ReferralsTable;

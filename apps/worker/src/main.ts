@@ -5,6 +5,7 @@ import { getConfig } from '@ehr/config';
 import type { DB } from '@ehr/db';
 import { DomainEventBus, OutboxRelay } from '@ehr/outbox';
 import { BulkExportRelay } from '@ehr/bulk-export';
+import { DatabaseBackupJob, BackupScheduler } from '@ehr/db-backup';
 import { S3ObjectStorageGateway } from '@ehr/object-storage';
 import { startTracing, createLogger, getMetrics } from '@ehr/observability';
 
@@ -86,6 +87,16 @@ async function main(): Promise<void> {
   bulkExportRelay.start();
   logger.info({ pollIntervalMs: env.BULK_EXPORT_RELAY_POLL_INTERVAL_MS }, 'bulk export relay started');
 
+  // Closes docs/runbooks/backup-restore.md's "no real backup schedule exists" known gap — see
+  // packages/db-backup's own doc comments for the full reasoning.
+  const backupJob = new DatabaseBackupJob(db, objectStorage, {
+    connectionString: env.DATABASE_URL,
+    pgDumpPath: env.BACKUP_PG_DUMP_PATH,
+  });
+  const backupScheduler = new BackupScheduler(backupJob, { intervalMs: env.BACKUP_INTERVAL_MS });
+  backupScheduler.start();
+  logger.info({ intervalMs: env.BACKUP_INTERVAL_MS }, 'backup scheduler started');
+
   const server = createServer((req, res) => {
     if (req.url === '/healthz') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -102,6 +113,7 @@ async function main(): Promise<void> {
     logger.info({ signal }, 'apps/worker shutting down');
     relay.stop();
     bulkExportRelay.stop();
+    backupScheduler.stop();
     server.close();
     await db.destroy();
     process.exit(0);

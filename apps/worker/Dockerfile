@@ -18,6 +18,11 @@ RUN pnpm turbo run build --filter=@ehr/worker
 
 FROM base AS runner
 WORKDIR /app
+# postgresql-client provides pg_dump — packages/db-backup shells out to it (see that package's own
+# doc comments for why a real binary is used instead of a pure-JS reimplementation). Version-matched
+# to the postgres:16-alpine server image used everywhere else in this repo (docker-compose.yml,
+# .github/workflows/ci.yml).
+RUN apk add --no-cache postgresql16-client
 RUN addgroup --system --gid 1001 ehr && adduser --system --uid 1001 ehr
 COPY --from=installer --chown=ehr:ehr /app .
 USER ehr

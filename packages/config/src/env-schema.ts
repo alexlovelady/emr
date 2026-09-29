@@ -63,6 +63,10 @@ export const envSchema = z.object({
 
   // --- SMART standalone launch — where the interactive consent/patient-picker UI lives ---
   PATIENT_PORTAL_BASE_URL: z.string().url().default('http://localhost:3030'),
+
+  // --- Scheduled database backup (packages/db-backup) ---
+  BACKUP_INTERVAL_MS: z.coerce.number().int().positive().default(86_400_000),
+  BACKUP_PG_DUMP_PATH: z.string().min(1).default('pg_dump'),
 });
 
 export type Env = z.infer<typeof envSchema>;
