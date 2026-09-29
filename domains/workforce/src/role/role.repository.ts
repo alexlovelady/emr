@@ -102,6 +102,23 @@ export class RoleRepository {
     return rows.map((row) => ({ ...toUserRoleRow(row), roleKey: row.role_key, roleDisplayName: row.role_display_name }));
   }
 
+  /** Same shape as `listActiveGrantsForUser`, across many users in one query — backs a users
+   * table that needs every row's roles without an N+1 `GET /users/:id/roles` per row. */
+  async listActiveGrantsForUsers(trx: Executor, tenantId: string, userIds: string[]): Promise<UserRoleGrant[]> {
+    if (userIds.length === 0) return [];
+    const rows = await trx
+      .selectFrom('user_roles')
+      .innerJoin('roles', 'roles.id', 'user_roles.role_id')
+      .selectAll('user_roles')
+      .select(['roles.key as role_key', 'roles.display_name as role_display_name'])
+      .where('user_roles.tenant_id', '=', tenantId)
+      .where('user_roles.user_id', 'in', userIds)
+      .where('user_roles.revoked_at', 'is', null)
+      .orderBy('user_roles.granted_at', 'asc')
+      .execute();
+    return rows.map((row) => ({ ...toUserRoleRow(row), roleKey: row.role_key, roleDisplayName: row.role_display_name }));
+  }
+
   async grant(
     trx: Executor,
     input: { tenantId: string; userId: string; roleId: string; grantedBy: string | null; createdBy: string },

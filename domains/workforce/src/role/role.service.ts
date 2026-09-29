@@ -56,6 +56,12 @@ export class RoleService {
     return this.repo.listActiveGrantsForUser(trx, ctx.tenantId, userId);
   }
 
+  /** Same data as `listGrantsForUser`, batched — a user row that doesn't exist (or belongs to
+   * another tenant) simply has no grants in the result, rather than 404ing the whole batch. */
+  async listGrantsForUsers(trx: Executor, ctx: RequestContext, userIds: string[]): Promise<UserRoleGrant[]> {
+    return this.repo.listActiveGrantsForUsers(trx, ctx.tenantId, userIds);
+  }
+
   async assignToUser(trx: Executor, ctx: RequestContext, userId: string, input: AssignRoleInput): Promise<UserRoleRow> {
     const user = await this.userRepo.findById(trx, ctx.tenantId, userId);
     if (!user) throw new NotFoundError('User not found', { id: userId });

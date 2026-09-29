@@ -2,8 +2,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenantContext } from '@ehr/db';
 import { ConflictError, NotFoundError } from '@ehr/domain-common';
 import { setupTestDb, requestContextFor, type TestDbHandle } from '@ehr/testing';
+import { SYSTEM_ROLE_KEYS } from '@ehr/db';
 import { UserService } from '../src/user/user.service.js';
 import { PractitionerRoleService } from '../src/practitioner-role/practitioner-role.service.js';
+import { RoleService } from '../src/role/role.service.js';
 
 /** EHR_BUILD_SPEC.md §18.2 — run via `pnpm test:tenant-isolation`, requires a live Postgres. */
 describe('tenant isolation — users', () => {
@@ -124,5 +126,50 @@ describe('practitioner location-role assignments', () => {
     await expect(
       withTenantContext(handle.db, ctxB.tenantId, (trx) => service.revoke(trx, ctxB, tenantAPractitionerId, assignment.id)),
     ).rejects.toBeInstanceOf(NotFoundError);
+  });
+});
+
+describe('bulk role-grant listing', () => {
+  let handle: TestDbHandle;
+  const userService = new UserService();
+  const roleService = new RoleService();
+
+  beforeAll(async () => {
+    handle = await setupTestDb();
+  });
+
+  afterAll(() => handle.close());
+
+  it('lists role grants for several users in one call, keyed correctly per user', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const userWithRole = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      userService.create(trx, ctxA, { email: `bulk-grants-a-${Date.now()}@tenant-a.test`, password: 'a-long-enough-password' }),
+    );
+    const userWithoutRole = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      userService.create(trx, ctxA, { email: `bulk-grants-b-${Date.now()}@tenant-a.test`, password: 'a-long-enough-password' }),
+    );
+    await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      roleService.assignToUser(trx, ctxA, userWithRole.id, { roleKey: SYSTEM_ROLE_KEYS.STAFF }),
+    );
+
+    const grants = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      roleService.listGrantsForUsers(trx, ctxA, [userWithRole.id, userWithoutRole.id]),
+    );
+    expect(grants.some((g) => g.userId === userWithRole.id && g.roleKey === SYSTEM_ROLE_KEYS.STAFF)).toBe(true);
+    expect(grants.some((g) => g.userId === userWithoutRole.id)).toBe(false);
+  });
+
+  it("Tenant B's bulk lookup returns nothing for a Tenant A user id, even though it's a valid UUID", async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const tenantAUser = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      userService.create(trx, ctxA, { email: `bulk-grants-isolation-${Date.now()}@tenant-a.test`, password: 'a-long-enough-password' }),
+    );
+    await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      roleService.assignToUser(trx, ctxA, tenantAUser.id, { roleKey: SYSTEM_ROLE_KEYS.STAFF }),
+    );
+
+    const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
+    const grants = await withTenantContext(handle.db, ctxB.tenantId, (trx) => roleService.listGrantsForUsers(trx, ctxB, [tenantAUser.id]));
+    expect(grants).toHaveLength(0);
   });
 });

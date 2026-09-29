@@ -19,3 +19,8 @@ export const GrantPermissionSchema = z.object({
   permissionKey: z.string().min(1).max(100),
 });
 export type GrantPermissionInput = z.infer<typeof GrantPermissionSchema>;
+
+export const ListUserRoleGrantsSchema = z.object({
+  userIds: z.array(z.string().uuid()).min(1).max(500),
+});
+export type ListUserRoleGrantsInput = z.infer<typeof ListUserRoleGrantsSchema>;

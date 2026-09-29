@@ -9,9 +9,11 @@ import {
   AssignRoleSchema,
   CreateRoleSchema,
   GrantPermissionSchema,
+  ListUserRoleGrantsSchema,
   type AssignRoleInput,
   type CreateRoleInput,
   type GrantPermissionInput,
+  type ListUserRoleGrantsInput,
 } from './role.dto.js';
 import { RoleService } from './role.service.js';
 
@@ -52,6 +54,16 @@ export class RoleController {
   @Audited('role.permissions.revoke', 'Role')
   async revokePermission(@Param('id') id: string, @Body(new ZodValidationPipe(GrantPermissionSchema)) body: GrantPermissionInput) {
     return this.service.revokePermission(getCurrentTransaction(), id, body.permissionKey);
+  }
+
+  @Post('users/roles/bulk')
+  @RequirePermission(PERMISSION_KEYS.ROLE_MANAGE)
+  @Audited('user.roles.list_bulk', 'User')
+  async listRolesForUsers(
+    @Body(new ZodValidationPipe(ListUserRoleGrantsSchema)) body: ListUserRoleGrantsInput,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.service.listGrantsForUsers(getCurrentTransaction(), requireCtx(req), body.userIds);
   }
 
   @Get('users/:id/roles')

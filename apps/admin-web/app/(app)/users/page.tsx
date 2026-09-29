@@ -12,7 +12,16 @@ export default async function UsersPage() {
     callBackend<UserRow[]>('/api/v1/users'),
     callBackend<RoleRow[]>('/api/v1/roles'),
   ]);
-  const grantsByUser = await Promise.all(users.map((u) => callBackend<UserRoleGrant[]>(`/api/v1/users/${u.id}/roles`)));
+  const grants =
+    users.length > 0
+      ? await callBackend<UserRoleGrant[]>('/api/v1/users/roles/bulk', { method: 'POST', body: { userIds: users.map((u) => u.id) } })
+      : [];
+  const grantsByUserId = new Map<string, UserRoleGrant[]>();
+  for (const grant of grants) {
+    const existing = grantsByUserId.get(grant.userId);
+    if (existing) existing.push(grant);
+    else grantsByUserId.set(grant.userId, [grant]);
+  }
 
   return (
     <div className="space-y-6">
@@ -42,27 +51,30 @@ export default async function UsersPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users.map((u, i) => (
-                  <TableRow key={u.id}>
-                    <TableCell className="font-medium">{u.email}</TableCell>
-                    <TableCell>
-                      {grantsByUser[i]!.length === 0 ? (
-                        <span className="text-xs text-muted-foreground">none</span>
-                      ) : (
-                        <div className="flex flex-wrap gap-1">
-                          {grantsByUser[i]!.map((g) => (
-                            <Badge key={g.id} variant="outline">{g.roleDisplayName}</Badge>
-                          ))}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell>{u.status}</TableCell>
-                    <TableCell>{u.mfaEnrolled ? 'Enrolled' : '—'}</TableCell>
-                    <TableCell className="text-right">
-                      <AssignRoleDialog user={u} roles={roles} />
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {users.map((u) => {
+                  const userGrants = grantsByUserId.get(u.id) ?? [];
+                  return (
+                    <TableRow key={u.id}>
+                      <TableCell className="font-medium">{u.email}</TableCell>
+                      <TableCell>
+                        {userGrants.length === 0 ? (
+                          <span className="text-xs text-muted-foreground">none</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {userGrants.map((g) => (
+                              <Badge key={g.id} variant="outline">{g.roleDisplayName}</Badge>
+                            ))}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell>{u.status}</TableCell>
+                      <TableCell>{u.mfaEnrolled ? 'Enrolled' : '—'}</TableCell>
+                      <TableCell className="text-right">
+                        <AssignRoleDialog user={u} roles={roles} />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
