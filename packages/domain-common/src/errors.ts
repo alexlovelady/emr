@@ -59,3 +59,10 @@ export class IdempotencyConflictError extends DomainError {
   readonly httpStatus = 409;
   readonly problemType = 'https://docs.ehr.internal/problems/idempotency-conflict';
 }
+
+/** A real 429 — previously this threw a plain `Error` from `packages/ai-adapter` that
+ * `ProblemDetailsFilter` couldn't classify, so it fell through to a generic 500. */
+export class RateLimitExceededError extends DomainError {
+  readonly httpStatus = 429;
+  readonly problemType = 'https://docs.ehr.internal/problems/rate-limit-exceeded';
+}

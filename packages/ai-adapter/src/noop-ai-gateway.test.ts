@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { RateLimitExceededError } from './ai-gateway.js';
 import { NoopAiGateway } from './noop-ai-gateway.js';
 
 describe('NoopAiGateway', () => {
@@ -66,21 +65,5 @@ describe('NoopAiGateway', () => {
       input: 'summarize my tasks',
     });
     expect(otherResult.outputJson).toBeNull();
-  });
-
-  it('enforces a real per-tenant daily rate cap', async () => {
-    const gateway = new NoopAiGateway(2);
-    const request = { tenantId: 'tenant-limited', promptTemplateId: 'task-summary-v1' as const, context: [], input: 'x' };
-    await gateway.generate(request);
-    await gateway.generate(request);
-    await expect(gateway.generate(request)).rejects.toBeInstanceOf(RateLimitExceededError);
-  });
-
-  it('rate-limits per tenant independently', async () => {
-    const gateway = new NoopAiGateway(1);
-    await gateway.generate({ tenantId: 'tenant-a', promptTemplateId: 'task-summary-v1', context: [], input: 'x' });
-    await expect(
-      gateway.generate({ tenantId: 'tenant-b', promptTemplateId: 'task-summary-v1', context: [], input: 'x' }),
-    ).resolves.toBeDefined();
   });
 });

@@ -43,8 +43,6 @@ export interface AiGenerateResult {
   generatedAt: string;
 }
 
-export class RateLimitExceededError extends Error {}
-
 export interface AiGateway {
   generate(request: AiGenerateRequest): Promise<AiGenerateResult>;
   /** §15.1 redaction hook — scrubs likely-PHI-adjacent patterns before text would leave this process. */

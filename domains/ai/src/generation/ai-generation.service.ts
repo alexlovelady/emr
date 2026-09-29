@@ -1,10 +1,11 @@
 import type { Kysely, Transaction } from 'kysely';
 import type { DB } from '@ehr/db';
-import { ConflictError, NotFoundError, ValidationError, type RequestContext } from '@ehr/domain-common';
+import { ConflictError, NotFoundError, RateLimitExceededError, ValidationError, type RequestContext } from '@ehr/domain-common';
 import { buildOutboxInsert } from '@ehr/outbox';
 import type { AiGateway } from '@ehr/ai-adapter';
 import type { ProposeAiGenerationInput } from './ai-generation.dto.js';
 import { AiGenerationRepository, type AiGenerationRow } from './ai-generation.repository.js';
+import { AiRateLimitRepository } from './ai-rate-limit.repository.js';
 
 type Executor = Kysely<DB> | Transaction<DB>;
 
@@ -27,11 +28,23 @@ export class AiGenerationService {
   constructor(
     private readonly gateway: AiGateway,
     private readonly repo: AiGenerationRepository = new AiGenerationRepository(),
+    private readonly rateLimitRepo: AiRateLimitRepository = new AiRateLimitRepository(),
+    private readonly dailyLimitPerTenant = 200,
   ) {}
 
   async propose(trx: Executor, ctx: RequestContext, input: ProposeAiGenerationInput): Promise<AiGenerationRow> {
     if (input.context.length === 0) {
       throw new ValidationError('AI generation requires at least one grounding context item', { feature: input.feature });
+    }
+
+    const actorIdForCounter = ctx.actor?.id ?? ctx.tenantId;
+    const todayUtc = new Date().toISOString().slice(0, 10);
+    const countToday = await this.rateLimitRepo.incrementAndGet(trx, ctx.tenantId, todayUtc, actorIdForCounter);
+    if (countToday > this.dailyLimitPerTenant) {
+      throw new RateLimitExceededError(`Tenant has reached its daily AI generation limit (${this.dailyLimitPerTenant})`, {
+        limit: this.dailyLimitPerTenant,
+        windowDate: todayUtc,
+      });
     }
 
     const result = await this.gateway.generate({

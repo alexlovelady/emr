@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import type { AiContextItem, AiGateway, AiGenerateRequest, AiGenerateResult, PromptTemplateId } from './ai-gateway.js';
-import { RateLimitExceededError } from './ai-gateway.js';
 
 const TEMPLATE_LABELS: Record<PromptTemplateId, string> = {
   'note-draft-v1': 'Ambient note draft',
@@ -34,14 +33,13 @@ const EMAIL_PATTERN = /\b[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}\b/g;
  * No LLM vendor BAA exists in this environment (regulatory manual §16.1) — see
  * docs/adr/0004-deferred-ai-vendor.md. Every "generation" is a deterministic, templated stub (no
  * network call, no real language understanding) that still exercises the full real pipeline around
- * it: redaction, prompt-template versioning, model/version capture, a real per-tenant daily rate
- * cap, and reproducible output hashing.
+ * it: redaction, prompt-template versioning, model/version capture, and reproducible output
+ * hashing. The per-tenant daily rate cap that used to live here moved to `domains/ai`'s
+ * `AiGenerationService` — this package deliberately has zero dependencies (see package.json), so a
+ * real, cross-instance-safe Postgres-backed counter can't live in it; see
+ * packages/db/migrations/0050_ai_rate_limit_counters.ts's doc comment for the full story.
  */
 export class NoopAiGateway implements AiGateway {
-  private readonly dailyCounts = new Map<string, { date: string; count: number }>();
-
-  constructor(private readonly dailyLimitPerTenant = 200) {}
-
   redact(text: string): string {
     return text.replace(SSN_PATTERN, '[redacted-ssn]').replace(PHONE_PATTERN, '[redacted-phone]').replace(EMAIL_PATTERN, '[redacted-email]');
   }
@@ -51,8 +49,6 @@ export class NoopAiGateway implements AiGateway {
   }
 
   async generate(request: AiGenerateRequest): Promise<AiGenerateResult> {
-    this.checkRateLimit(request.tenantId);
-
     const redactedInput = this.redact(request.input);
     const redactedContext = request.context.map((item) => redactContextItem(item, this));
 
@@ -70,19 +66,6 @@ export class NoopAiGateway implements AiGateway {
       outputHash: createHash('sha256').update(outputText).digest('hex'),
       generatedAt,
     };
-  }
-
-  private checkRateLimit(tenantId: string): void {
-    const today = new Date().toISOString().slice(0, 10);
-    const existing = this.dailyCounts.get(tenantId);
-    if (!existing || existing.date !== today) {
-      this.dailyCounts.set(tenantId, { date: today, count: 1 });
-      return;
-    }
-    if (existing.count >= this.dailyLimitPerTenant) {
-      throw new RateLimitExceededError(`Tenant has reached its daily AI generation limit (${this.dailyLimitPerTenant})`);
-    }
-    existing.count += 1;
   }
 
   private renderOutputText(promptTemplateId: PromptTemplateId, input: string, context: AiContextItem[]): string {

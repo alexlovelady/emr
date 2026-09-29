@@ -489,6 +489,11 @@ export interface SmartAuthorizationCodesTable extends CommonColumnsTable {
   consumed_at: Timestamp | null;
 }
 
+export interface AiRateLimitCountersTable extends CommonColumnsTable {
+  window_date: Timestamp;
+  count: number;
+}
+
 export interface BulkExportJobsTable extends CommonColumnsTable {
   requested_by_client_id: string;
   resource_types: string[] | null;
@@ -843,6 +848,7 @@ export interface DB {
   smart_clients: SmartClientsTable;
   smart_authorization_codes: SmartAuthorizationCodesTable;
   bulk_export_jobs: BulkExportJobsTable;
+  ai_rate_limit_counters: AiRateLimitCountersTable;
   charges: ChargesTable;
   billing_rules: BillingRulesTable;
   referrals: ReferralsTable;

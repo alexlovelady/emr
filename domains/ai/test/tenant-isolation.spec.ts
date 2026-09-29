@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenantContext } from '@ehr/db';
-import { ConflictError, NotFoundError, ValidationError } from '@ehr/domain-common';
+import { ConflictError, NotFoundError, RateLimitExceededError, ValidationError } from '@ehr/domain-common';
 import { NoopAiGateway } from '@ehr/ai-adapter';
 import { CohortDslSchema, CohortService } from '@ehr/query';
 import type { ObjectStorageGateway } from '@ehr/object-storage';
@@ -326,5 +326,82 @@ describe('resolveAmbientAudioInput (real ambient-scribe path)', () => {
     expect(result.inputText).toBe('Patient reports improved symptoms since last visit.');
     expect(result.contextItems).toHaveLength(1);
     expect(result.contextItems[0]!.ref).toBe(`Document/${storedAudioDocumentId}`);
+  });
+});
+
+/**
+ * This dev DB is shared and never reset, so `ai_rate_limit_counters` accumulates one row per
+ * (tenant, calendar day) across every test run today — a fixed literal limit like "3" would break
+ * the moment this file (or anything else hitting tenant B's AiGenerationService today) runs twice
+ * in one day. Reads today's actual baseline count first and sets the limit relative to it, the same
+ * "make the assertion relative, not absolute" fix this session used for other shared-DB tests.
+ */
+describe('AI generation daily rate limit (persisted, cross-instance-safe)', () => {
+  let handle: TestDbHandle;
+
+  beforeAll(async () => {
+    handle = await setupTestDb();
+  });
+
+  afterAll(() => handle.close());
+
+  async function todaysCount(tenantId: string): Promise<number> {
+    const ctx = requestContextFor(tenantId, handle.seed.tenantB.adminUserId);
+    const todayUtc = new Date().toISOString().slice(0, 10);
+    const row = await withTenantContext(handle.db, ctx.tenantId, (trx) =>
+      trx.selectFrom('ai_rate_limit_counters').select('count').where('tenant_id', '=', tenantId).where('window_date', '=', todayUtc).executeTakeFirst(),
+    );
+    return row?.count ?? 0;
+  }
+
+  function proposeInput(marker: string) {
+    return {
+      feature: 'task_summary' as const,
+      promptTemplateId: 'task-summary-v1' as const,
+      patientId: null,
+      subjectType: null,
+      subjectId: null,
+      inputText: `rate limit test ${marker}`,
+      context: [{ ref: 'Task/rate-limit-test', data: { status: 'open' } }],
+    };
+  }
+
+  it('enforces a real per-tenant daily cap that persists across separate service instances', async () => {
+    const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
+    const baseline = await todaysCount(handle.seed.tenantB.tenantId);
+    // Two separate AiGenerationService instances (standing in for two separate `apps/api`
+    // processes) sharing nothing but the database — proves the counter isn't in-process memory.
+    const serviceInstanceOne = new AiGenerationService(new NoopAiGateway(), undefined, undefined, baseline + 2);
+    const serviceInstanceTwo = new AiGenerationService(new NoopAiGateway(), undefined, undefined, baseline + 2);
+
+    await withTenantContext(handle.db, ctxB.tenantId, (trx) => serviceInstanceOne.propose(trx, ctxB, proposeInput('one')));
+    await withTenantContext(handle.db, ctxB.tenantId, (trx) => serviceInstanceTwo.propose(trx, ctxB, proposeInput('two')));
+
+    await expect(
+      withTenantContext(handle.db, ctxB.tenantId, (trx) => serviceInstanceOne.propose(trx, ctxB, proposeInput('three'))),
+    ).rejects.toBeInstanceOf(RateLimitExceededError);
+
+    // The rejected attempt's own increment rolls back with the rest of its transaction (same as
+    // any other failure inside a `trx`-wrapped call in this codebase) — the persisted count stays
+    // exactly at the limit rather than climbing past it on every retry, while still correctly
+    // rejecting every subsequent attempt (it re-reads the same at-limit count each time).
+    expect(await todaysCount(handle.seed.tenantB.tenantId)).toBe(baseline + 2);
+  });
+
+  it("does not count a rejected (never-succeeded) generation against a different tenant's quota", async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const baselineA = await todaysCount(handle.seed.tenantA.tenantId);
+    const service = new AiGenerationService(new NoopAiGateway());
+    await withTenantContext(handle.db, ctxA.tenantId, (trx) => service.propose(trx, ctxA, proposeInput('isolation')));
+    expect(await todaysCount(handle.seed.tenantA.tenantId)).toBe(baselineA + 1);
+
+    // Tenant B's own baseline (read in the previous test) must be unaffected by tenant A activity.
+    const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
+    const countB = await todaysCount(handle.seed.tenantB.tenantId);
+    const beforeCrossTenantAttempt = countB;
+    await expect(
+      withTenantContext(handle.db, ctxB.tenantId, (trx) => service.getById(trx, ctxB, '00000000-0000-0000-0000-000000000000')),
+    ).rejects.toBeInstanceOf(NotFoundError);
+    expect(await todaysCount(handle.seed.tenantB.tenantId)).toBe(beforeCrossTenantAttempt);
   });
 });

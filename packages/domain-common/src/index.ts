@@ -9,4 +9,5 @@ export {
   ConcurrencyError,
   ValidationError,
   IdempotencyConflictError,
+  RateLimitExceededError,
 } from './errors.js';
