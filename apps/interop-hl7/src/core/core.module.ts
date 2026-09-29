@@ -4,8 +4,8 @@ import { Reflector } from '@nestjs/core';
 import { getConfig } from '@ehr/config';
 import { createDb } from '@ehr/db';
 import { PolicyEngine } from '@ehr/authz';
-import { loadOrCreateKeyMaterial } from '@ehr/auth-adapter';
-import { DB_CONNECTION, KEY_MATERIAL, ENV_CONFIG } from '../common/tokens.js';
+import { createKeyRingStore } from '@ehr/auth-adapter';
+import { DB_CONNECTION, KEY_RING, ENV_CONFIG } from '../common/tokens.js';
 
 const env = getConfig();
 const db = createDb({ connectionString: env.APP_DATABASE_URL });
@@ -16,15 +16,20 @@ const db = createDb({ connectionString: env.APP_DATABASE_URL });
     { provide: ENV_CONFIG, useValue: env },
     { provide: DB_CONNECTION, useValue: db },
     {
-      provide: KEY_MATERIAL,
+      // Same shared-file keyring as apps/api — see that app's core.module.ts doc comment. This
+      // process only verifies staff tokens (for HL7 admin actions), never rotates them itself, so
+      // it just needs to stay current via the periodic reload poll.
+      provide: KEY_RING,
       useFactory: async () => {
         await fs.mkdir('.dev', { recursive: true }).catch(() => undefined);
-        return loadOrCreateKeyMaterial(env.JWT_PRIVATE_KEY_PATH, env.JWT_PUBLIC_KEY_PATH);
+        const store = await createKeyRingStore(env.JWT_KEYRING_PATH, env.JWT_PRIVATE_KEY_PATH, env.JWT_PUBLIC_KEY_PATH);
+        store.startAutoReload(env.KEY_RING_RELOAD_INTERVAL_MS);
+        return store;
       },
     },
     { provide: PolicyEngine, useValue: new PolicyEngine() },
     Reflector,
   ],
-  exports: [ENV_CONFIG, DB_CONNECTION, KEY_MATERIAL, PolicyEngine, Reflector],
+  exports: [ENV_CONFIG, DB_CONNECTION, KEY_RING, PolicyEngine, Reflector],
 })
 export class CoreModule {}

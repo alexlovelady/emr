@@ -1,9 +1,12 @@
-import { generateKeyPair } from 'jose';
+import { tmpdir } from 'node:os';
+import * as path from 'node:path';
+import { generateKeyPair, type JWK } from 'jose';
 import { Kysely, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { seedSyntheticFixtures, DEV_PASSWORD, type DB, type SeedResult } from '@ehr/db';
-import { JWT_ALG, type KeyMaterial } from './keys.js';
+import { JWT_ALG } from './keys.js';
+import { KeyRingStore } from './keyring.js';
 import { authenticator } from 'otplib';
 import { FirstPartyIdentityProvider, InvalidCredentialsError, InvalidMfaCodeError } from './identity-provider.js';
 import { InvalidRefreshTokenError, verifyAccessToken } from './tokens.js';
@@ -14,7 +17,7 @@ describe('FirstPartyIdentityProvider (integration)', () => {
   let appDb: Kysely<DB>;
   let seed: SeedResult;
   let provider: FirstPartyIdentityProvider;
-  let keys: KeyMaterial;
+  let keyRingStore: KeyRingStore;
 
   beforeAll(async () => {
     // Seeding needs the owner/bootstrap role (DATABASE_URL) — it writes across two tenants in
@@ -32,8 +35,12 @@ describe('FirstPartyIdentityProvider (integration)', () => {
     });
 
     const { privateKey, publicKey } = await generateKeyPair(JWT_ALG, { extractable: true });
-    keys = { privateKey, publicKey, kid: 'test-kid' };
-    provider = new FirstPartyIdentityProvider(appDb, keys, {
+    const keyringPath = path.join(tmpdir(), `ehr-test-keyring-${Date.now()}.json`);
+    keyRingStore = new KeyRingStore(
+      { currentKid: 'test-kid', keys: [{ privateKey, publicKey, kid: 'test-kid', createdAt: new Date() }] },
+      keyringPath,
+    );
+    provider = new FirstPartyIdentityProvider(appDb, keyRingStore, {
       issuer: 'ehr-test',
       audience: 'ehr-api',
       accessTokenTtlSeconds: 900,
@@ -71,7 +78,7 @@ describe('FirstPartyIdentityProvider (integration)', () => {
 
   it('issues a working access token and a rotating refresh token', async () => {
     const pair1 = await provider.issueTokens(seed.tenantA.adminUserId, seed.tenantA.tenantId);
-    const claims = await verifyAccessToken(pair1.accessToken, keys.publicKey, {
+    const claims = await verifyAccessToken(pair1.accessToken, keyRingStore.get().keys[0]!.publicKey, {
       issuer: 'ehr-test',
       audience: 'ehr-api',
     });
@@ -97,7 +104,44 @@ describe('FirstPartyIdentityProvider (integration)', () => {
   it('getJWKS() exposes the public key with the expected kid', async () => {
     const jwks = await provider.getJWKS();
     expect(jwks.keys).toHaveLength(1);
-    expect(jwks.keys[0]).toMatchObject({ kid: keys.kid, use: 'sig', alg: 'ES256' });
+    expect(jwks.keys[0]).toMatchObject({ kid: keyRingStore.get().keys[0]!.kid, use: 'sig', alg: 'ES256' });
+  });
+
+  describe('rotateSigningKey()', () => {
+    it('starts signing new tokens with a new key, while a token signed by the outgoing key still verifies', async () => {
+      const beforeRotation = await provider.issueTokens(seed.tenantA.adminUserId, seed.tenantA.tenantId);
+      const jwksBefore = await provider.getJWKS();
+      expect(jwksBefore.keys).toHaveLength(1);
+      const outgoingKid = jwksBefore.keys[0]!.kid;
+
+      await provider.rotateSigningKey();
+
+      const afterRotation = await provider.issueTokens(seed.tenantA.adminUserId, seed.tenantA.tenantId);
+      const jwksAfter = await provider.getJWKS();
+      expect(jwksAfter.keys.length).toBeGreaterThanOrEqual(2);
+      const kids = jwksAfter.keys.map((k) => k.kid);
+      expect(kids).toContain(outgoingKid);
+
+      // Both the pre- and post-rotation access token still verify, against the full published
+      // JWKS (a rotation-aware lookup by the token's own `kid`), not a single fixed key.
+      const keysByKid = new Map(jwksAfter.keys.map((k) => [k.kid, k]));
+      const { importJWK } = await import('jose');
+      const verifyAgainstJwks = async (token: string) =>
+        verifyAccessToken(
+          token,
+          async (header) => {
+            const jwk = keysByKid.get(header.kid);
+            if (!jwk) throw new Error('unknown kid');
+            return importJWK(jwk as unknown as JWK, 'ES256');
+          },
+          { issuer: 'ehr-test', audience: 'ehr-api' },
+        );
+
+      const beforeClaims = await verifyAgainstJwks(beforeRotation.accessToken);
+      expect(beforeClaims.userId).toBe(seed.tenantA.adminUserId);
+      const afterClaims = await verifyAgainstJwks(afterRotation.accessToken);
+      expect(afterClaims.userId).toBe(seed.tenantA.adminUserId);
+    });
   });
 
   describe('MFA enrollment and challenge', () => {

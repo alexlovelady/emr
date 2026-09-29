@@ -2,7 +2,7 @@ import * as argon2 from 'argon2';
 import type { Kysely } from 'kysely';
 import type { DB } from '@ehr/db';
 import { ForbiddenError } from '@ehr/domain-common';
-import type { KeyMaterial } from '@ehr/auth-adapter';
+import { getCurrentKey, type KeyRingStore } from '@ehr/auth-adapter';
 import type { Env } from '@ehr/config';
 import { signSmartAccessToken } from './smart-token.js';
 import { verifyPkce } from './pkce.js';
@@ -11,7 +11,7 @@ import type { TokenRequestInput, TokenResponse } from './token.dto.js';
 export class TokenService {
   constructor(
     private readonly ownerDb: Kysely<DB>,
-    private readonly keys: KeyMaterial,
+    private readonly keyRingStore: KeyRingStore,
     private readonly env: Pick<Env, 'JWT_ISSUER' | 'JWT_AUDIENCE' | 'ACCESS_TOKEN_TTL_SECONDS'>,
   ) {}
 
@@ -47,7 +47,7 @@ export class TokenService {
 
     const accessToken = await signSmartAccessToken(
       { tenantId: client.tenant_id, clientId: client.client_id, scope: grantedScopes },
-      this.keys,
+      getCurrentKey(this.keyRingStore.get()),
       { issuer: this.env.JWT_ISSUER, audience: this.env.JWT_AUDIENCE, ttlSeconds: this.env.ACCESS_TOKEN_TTL_SECONDS },
     );
 
@@ -113,7 +113,7 @@ export class TokenService {
     const scope = code.scope.split(' ').filter(Boolean);
     const accessToken = await signSmartAccessToken(
       { tenantId: code.tenant_id, clientId: client.client_id, scope, patientId: code.patient_id },
-      this.keys,
+      getCurrentKey(this.keyRingStore.get()),
       { issuer: this.env.JWT_ISSUER, audience: this.env.JWT_AUDIENCE, ttlSeconds: this.env.ACCESS_TOKEN_TTL_SECONDS },
     );
 

@@ -1,5 +1,5 @@
 import type { FastifyRequest } from 'fastify';
-import { verifyPortalAccessToken, type KeyMaterial } from '@ehr/auth-adapter';
+import { findKey, verifyPortalAccessToken, type KeyRingStore } from '@ehr/auth-adapter';
 import type { Env } from '@ehr/config';
 
 /**
@@ -11,7 +11,7 @@ import type { Env } from '@ehr/config';
  * makes a staff token structurally unable to authenticate a portal route and vice versa — see
  * README's Phase 8 scope decisions.
  */
-export function attachPortalContext(keys: KeyMaterial, env: Pick<Env, 'JWT_ISSUER' | 'PORTAL_JWT_AUDIENCE'>) {
+export function attachPortalContext(keyRingStore: KeyRingStore, env: Pick<Env, 'JWT_ISSUER' | 'PORTAL_JWT_AUDIENCE'>) {
   return async function onRequest(req: FastifyRequest): Promise<void> {
     if (!req.ehrContext || req.ehrContext.actor) {
       return;
@@ -23,10 +23,15 @@ export function attachPortalContext(keys: KeyMaterial, env: Pick<Env, 'JWT_ISSUE
     }
     const token = authHeader.slice('Bearer '.length);
     try {
-      const claims = await verifyPortalAccessToken(token, keys.publicKey, {
-        issuer: env.JWT_ISSUER,
-        audience: env.PORTAL_JWT_AUDIENCE,
-      });
+      const claims = await verifyPortalAccessToken(
+        token,
+        (header) => {
+          const key = findKey(keyRingStore.get(), header.kid);
+          if (!key) throw new Error(`Unknown signing key (kid=${header.kid ?? 'none'})`);
+          return key.publicKey;
+        },
+        { issuer: env.JWT_ISSUER, audience: env.PORTAL_JWT_AUDIENCE },
+      );
       req.ehrContext.tenantId = claims.tenantId;
       req.ehrContext.actor = { id: claims.portalAccountId, type: 'patient' };
     } catch {

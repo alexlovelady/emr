@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
-import { verifyAccessToken, type KeyMaterial } from '@ehr/auth-adapter';
+import { findKey, verifyAccessToken, type KeyRingStore } from '@ehr/auth-adapter';
 import type { Env } from '@ehr/config';
 import '@ehr/api-contracts';
 
@@ -18,7 +18,7 @@ function asUuidOrGenerate(value: string | undefined): string {
  * engine authenticates as a normal internal actor with the `interop.hl7.ingest` permission, not
  * as a SMART client (that mechanism is `apps/interop-fhir`'s, a genuinely different audience).
  */
-export function attachEhrContext(keys: KeyMaterial, env: Pick<Env, 'JWT_ISSUER' | 'JWT_AUDIENCE'>) {
+export function attachEhrContext(keyRingStore: KeyRingStore, env: Pick<Env, 'JWT_ISSUER' | 'JWT_AUDIENCE'>) {
   return async function onRequest(req: FastifyRequest): Promise<void> {
     const requestId = asUuidOrGenerate(req.headers['x-request-id'] as string | undefined);
     const correlationId = asUuidOrGenerate((req.headers['x-correlation-id'] as string | undefined) ?? requestId);
@@ -35,10 +35,15 @@ export function attachEhrContext(keys: KeyMaterial, env: Pick<Env, 'JWT_ISSUER' 
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.slice('Bearer '.length);
       try {
-        const claims = await verifyAccessToken(token, keys.publicKey, {
-          issuer: env.JWT_ISSUER,
-          audience: env.JWT_AUDIENCE,
-        });
+        const claims = await verifyAccessToken(
+          token,
+          (header) => {
+            const key = findKey(keyRingStore.get(), header.kid);
+            if (!key) throw new Error(`Unknown signing key (kid=${header.kid ?? 'none'})`);
+            return key.publicKey;
+          },
+          { issuer: env.JWT_ISSUER, audience: env.JWT_AUDIENCE },
+        );
         req.ehrContext.tenantId = claims.tenantId;
         req.ehrContext.actor = { id: claims.userId, type: 'user' };
       } catch {

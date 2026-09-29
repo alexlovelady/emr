@@ -6,7 +6,7 @@ import { startTracing, createLogger } from '@ehr/observability';
 import { AppModule } from './app.module.js';
 import { attachEhrContext } from './common/tenant-context.hook.js';
 import { attachPortalContext } from './common/portal-context.hook.js';
-import { KEY_MATERIAL, ENV_CONFIG } from './common/tokens.js';
+import { KEY_RING, ENV_CONFIG } from './common/tokens.js';
 
 async function bootstrap(): Promise<void> {
   const env = getConfig();
@@ -24,10 +24,10 @@ async function bootstrap(): Promise<void> {
   // A real Fastify hook, not Nest middleware — see tenant-context.hook.ts's doc comment for why.
   // Resolved from Nest's DI container (CoreModule's providers) after the app is built, since
   // Fastify hooks live outside Nest's class-instantiation system.
-  const keys = app.get(KEY_MATERIAL);
+  const keyRingStore = app.get(KEY_RING);
   const envConfig = app.get(ENV_CONFIG);
-  app.getHttpAdapter().getInstance().addHook('onRequest', attachEhrContext(keys, envConfig));
-  app.getHttpAdapter().getInstance().addHook('onRequest', attachPortalContext(keys, envConfig));
+  app.getHttpAdapter().getInstance().addHook('onRequest', attachEhrContext(keyRingStore, envConfig));
+  app.getHttpAdapter().getInstance().addHook('onRequest', attachPortalContext(keyRingStore, envConfig));
 
   await app.listen(env.PORT, '0.0.0.0');
   logger.info({ port: env.PORT }, 'apps/api listening');

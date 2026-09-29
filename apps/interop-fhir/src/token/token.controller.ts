@@ -1,10 +1,10 @@
 import { Body, Controller, Inject, Post } from '@nestjs/common';
 import type { Kysely } from 'kysely';
 import type { DB } from '@ehr/db';
-import type { KeyMaterial } from '@ehr/auth-adapter';
+import type { KeyRingStore } from '@ehr/auth-adapter';
 import type { Env } from '@ehr/config';
 import { ZodValidationPipe } from '@ehr/api-contracts';
-import { OWNER_DB_CONNECTION, ENV_CONFIG, KEY_MATERIAL } from '../common/tokens.js';
+import { OWNER_DB_CONNECTION, ENV_CONFIG, KEY_RING } from '../common/tokens.js';
 import { TokenRequestSchema, type TokenRequestInput, type TokenResponse } from './token.dto.js';
 import { TokenService } from './token.service.js';
 
@@ -20,10 +20,10 @@ export class TokenController {
 
   constructor(
     @Inject(OWNER_DB_CONNECTION) ownerDb: Kysely<DB>,
-    @Inject(KEY_MATERIAL) keys: KeyMaterial,
+    @Inject(KEY_RING) keyRingStore: KeyRingStore,
     @Inject(ENV_CONFIG) env: Env,
   ) {
-    this.service = new TokenService(ownerDb, keys, env);
+    this.service = new TokenService(ownerDb, keyRingStore, env);
   }
 
   @Post()

@@ -23,6 +23,13 @@ export const envSchema = z.object({
   PORTAL_JWT_AUDIENCE: z.string().min(1).default('ehr-portal'),
   JWT_PRIVATE_KEY_PATH: z.string().min(1).default('./.dev/jwt-private.pem'),
   JWT_PUBLIC_KEY_PATH: z.string().min(1).default('./.dev/jwt-public.pem'),
+  // The rotatable keyring file (packages/auth-adapter's KeyRing) — superset of the legacy single
+  // private/public PEM pair above, which stay documented for first-boot migration only (see
+  // loadOrCreateKeyRing). Each of the three backend apps (api, interop-fhir, interop-hl7) polls this
+  // same file on KEY_RING_RELOAD_INTERVAL_MS so a rotation performed by any one process's own
+  // IdentityProvider/token endpoint is picked up by the others without a restart.
+  JWT_KEYRING_PATH: z.string().min(1).default('./.dev/jwt-keyring.json'),
+  KEY_RING_RELOAD_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(900),
   REFRESH_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(1_209_600),
 

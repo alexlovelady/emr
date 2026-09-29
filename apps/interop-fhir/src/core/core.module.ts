@@ -3,9 +3,9 @@ import { Global, Module } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { getConfig } from '@ehr/config';
 import { createDb } from '@ehr/db';
-import { loadOrCreateKeyMaterial } from '@ehr/auth-adapter';
+import { createKeyRingStore } from '@ehr/auth-adapter';
 import { S3ObjectStorageGateway } from '@ehr/object-storage';
-import { DB_CONNECTION, OWNER_DB_CONNECTION, KEY_MATERIAL, ENV_CONFIG, OBJECT_STORAGE_GATEWAY } from '../common/tokens.js';
+import { DB_CONNECTION, OWNER_DB_CONNECTION, KEY_RING, ENV_CONFIG, OBJECT_STORAGE_GATEWAY } from '../common/tokens.js';
 
 const env = getConfig();
 const db = createDb({ connectionString: env.APP_DATABASE_URL });
@@ -24,10 +24,16 @@ const ownerDb = createDb({ connectionString: env.DATABASE_URL });
     { provide: DB_CONNECTION, useValue: db },
     { provide: OWNER_DB_CONNECTION, useValue: ownerDb },
     {
-      provide: KEY_MATERIAL,
+      // Same shared-file keyring as apps/api (see that app's core.module.ts doc comment) — this
+      // process only ever SIGNS/verifies SMART tokens with it (interop-fhir never performs a
+      // rotation itself; that's an apps/api admin action), so it just needs to stay current via the
+      // periodic reload poll below.
+      provide: KEY_RING,
       useFactory: async () => {
         await fs.mkdir('.dev', { recursive: true }).catch(() => undefined);
-        return loadOrCreateKeyMaterial(env.JWT_PRIVATE_KEY_PATH, env.JWT_PUBLIC_KEY_PATH);
+        const store = await createKeyRingStore(env.JWT_KEYRING_PATH, env.JWT_PRIVATE_KEY_PATH, env.JWT_PUBLIC_KEY_PATH);
+        store.startAutoReload(env.KEY_RING_RELOAD_INTERVAL_MS);
+        return store;
       },
     },
     {
@@ -45,6 +51,6 @@ const ownerDb = createDb({ connectionString: env.DATABASE_URL });
     },
     Reflector,
   ],
-  exports: [ENV_CONFIG, DB_CONNECTION, OWNER_DB_CONNECTION, KEY_MATERIAL, OBJECT_STORAGE_GATEWAY, Reflector],
+  exports: [ENV_CONFIG, DB_CONNECTION, OWNER_DB_CONNECTION, KEY_RING, OBJECT_STORAGE_GATEWAY, Reflector],
 })
 export class CoreModule {}

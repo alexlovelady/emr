@@ -5,7 +5,7 @@ import { getConfig } from '@ehr/config';
 import { startTracing, createLogger } from '@ehr/observability';
 import { AppModule } from './app.module.js';
 import { attachEhrContext } from './common/tenant-context.hook.js';
-import { KEY_MATERIAL, ENV_CONFIG } from './common/tokens.js';
+import { KEY_RING, ENV_CONFIG } from './common/tokens.js';
 
 async function bootstrap(): Promise<void> {
   const env = getConfig();
@@ -20,9 +20,9 @@ async function bootstrap(): Promise<void> {
     bufferLogs: true,
   });
 
-  const keys = app.get(KEY_MATERIAL);
+  const keyRingStore = app.get(KEY_RING);
   const envConfig = app.get(ENV_CONFIG);
-  app.getHttpAdapter().getInstance().addHook('onRequest', attachEhrContext(keys, envConfig));
+  app.getHttpAdapter().getInstance().addHook('onRequest', attachEhrContext(keyRingStore, envConfig));
 
   await app.listen(env.INTEROP_HL7_PORT, '0.0.0.0');
   logger.info({ port: env.INTEROP_HL7_PORT }, 'apps/interop-hl7 listening');

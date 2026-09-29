@@ -9,14 +9,15 @@ import {
   decodeRefreshToken,
   encodeRefreshToken,
   generateRefreshSecret,
+  getCurrentKey,
   hashRefreshSecret,
   InvalidRefreshTokenError,
   signPortalAccessToken,
-  type KeyMaterial,
+  type KeyRingStore,
   type PortalTokenIssuerConfig,
 } from '@ehr/auth-adapter';
 import { UnauthorizedError } from '@ehr/domain-common';
-import { DB_CONNECTION, ENV_CONFIG, KEY_MATERIAL } from '../common/tokens.js';
+import { DB_CONNECTION, ENV_CONFIG, KEY_RING } from '../common/tokens.js';
 import type { Env } from '@ehr/config';
 import { PortalAccountRepository } from './portal-account.repository.js';
 
@@ -49,7 +50,7 @@ export class PortalAuthService {
 
   constructor(
     @Inject(DB_CONNECTION) private readonly db: Kysely<DB>,
-    @Inject(KEY_MATERIAL) private readonly keys: KeyMaterial,
+    @Inject(KEY_RING) private readonly keyRingStore: KeyRingStore,
     @Inject(ENV_CONFIG) private readonly env: Env,
   ) {}
 
@@ -154,7 +155,7 @@ export class PortalAuthService {
   }
 
   private async issueTokens(portalAccountId: string, tenantId: string): Promise<PortalTokenPair> {
-    const accessToken = await signPortalAccessToken({ portalAccountId, tenantId }, this.keys, this.tokenConfig);
+    const accessToken = await signPortalAccessToken({ portalAccountId, tenantId }, getCurrentKey(this.keyRingStore.get()), this.tokenConfig);
 
     const secret = generateRefreshSecret();
     const expiresAt = new Date(Date.now() + this.env.REFRESH_TOKEN_TTL_SECONDS * 1000);

@@ -1,5 +1,11 @@
-import { jwtVerify, SignJWT } from 'jose';
+import { jwtVerify, SignJWT, type JWTVerifyGetKey, type KeyLike } from 'jose';
 import { JWT_ALG, type KeyMaterial } from '@ehr/auth-adapter';
+
+/** Same reasoning as `@ehr/auth-adapter`'s own `asGetKey` — TS overload resolution can't dispatch
+ * on a `KeyLike | JWTVerifyGetKey` union directly. */
+function asGetKey(key: KeyLike | JWTVerifyGetKey): JWTVerifyGetKey {
+  return typeof key === 'function' ? key : (() => key) as JWTVerifyGetKey;
+}
 
 export interface SmartTokenConfig {
   issuer: string;
@@ -41,12 +47,12 @@ export async function signSmartAccessToken(claims: SmartTokenClaims, keys: KeyMa
 
 export async function verifySmartAccessToken(
   token: string,
-  publicKey: KeyMaterial['publicKey'],
+  publicKey: KeyMaterial['publicKey'] | JWTVerifyGetKey,
   config: Pick<SmartTokenConfig, 'issuer' | 'audience'>,
 ): Promise<SmartTokenClaims> {
   let payload;
   try {
-    ({ payload } = await jwtVerify(token, publicKey, { issuer: config.issuer, audience: config.audience }));
+    ({ payload } = await jwtVerify(token, asGetKey(publicKey), { issuer: config.issuer, audience: config.audience }));
   } catch (err) {
     throw new InvalidSmartTokenError(err instanceof Error ? err.message : String(err));
   }

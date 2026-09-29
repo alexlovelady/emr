@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createHash, randomUUID } from 'node:crypto';
 import { withTenantContext, DEV_SMART_CLIENT_SECRET } from '@ehr/db';
 import { ForbiddenError } from '@ehr/domain-common';
-import { loadOrCreateKeyMaterial, type KeyMaterial } from '@ehr/auth-adapter';
+import { loadOrCreateKeyMaterial, KeyRingStore, type KeyMaterial } from '@ehr/auth-adapter';
 import { setupTestDb, type TestDbHandle } from '@ehr/testing';
 import { PatientRepository } from '@ehr/patient';
 import { toFhirPatient } from '@ehr/fhir-mapping';
@@ -27,17 +27,19 @@ const TEST_VERIFY_CONFIG = { issuer: TEST_ENV_CONFIG.JWT_ISSUER, audience: TEST_
 describe('SMART client-credentials token issuance + scope enforcement', () => {
   let handle: TestDbHandle;
   let keys: KeyMaterial;
+  let keyRingStore: KeyRingStore;
   const patientRepo = new PatientRepository();
 
   beforeAll(async () => {
     handle = await setupTestDb();
     keys = await loadOrCreateKeyMaterial('.dev-test/jwt-private.pem', '.dev-test/jwt-public.pem');
+    keyRingStore = new KeyRingStore({ currentKid: keys.kid, keys: [{ ...keys, createdAt: new Date() }] }, '.dev-test/jwt-keyring-unused.json');
   });
 
   afterAll(() => handle.close());
 
   it('issues a token granting only the intersection of requested and allowed scopes', async () => {
-    const service = new TokenService(handle.ownerDb, keys, TEST_ENV_CONFIG);
+    const service = new TokenService(handle.ownerDb, keyRingStore, TEST_ENV_CONFIG);
     const response = await service.issueToken({
       grant_type: 'client_credentials',
       client_id: handle.seed.tenantA.smartClientId,
@@ -55,7 +57,7 @@ describe('SMART client-credentials token issuance + scope enforcement', () => {
   });
 
   it('rejects an invalid client secret', async () => {
-    const service = new TokenService(handle.ownerDb, keys, TEST_ENV_CONFIG);
+    const service = new TokenService(handle.ownerDb, keyRingStore, TEST_ENV_CONFIG);
     await expect(
       service.issueToken({
         grant_type: 'client_credentials',
@@ -67,7 +69,7 @@ describe('SMART client-credentials token issuance + scope enforcement', () => {
   });
 
   it('rejects a request for scopes the client is not allowed at all', async () => {
-    const service = new TokenService(handle.ownerDb, keys, TEST_ENV_CONFIG);
+    const service = new TokenService(handle.ownerDb, keyRingStore, TEST_ENV_CONFIG);
     await expect(
       service.issueToken({
         grant_type: 'client_credentials',
@@ -79,7 +81,7 @@ describe('SMART client-credentials token issuance + scope enforcement', () => {
   });
 
   it('a token can fetch a FHIR Patient resource scoped to the issuing tenant, and cannot see another tenant’s patient', async () => {
-    const service = new TokenService(handle.ownerDb, keys, TEST_ENV_CONFIG);
+    const service = new TokenService(handle.ownerDb, keyRingStore, TEST_ENV_CONFIG);
     const response = await service.issueToken({
       grant_type: 'client_credentials',
       client_id: handle.seed.tenantA.smartClientId,
@@ -129,12 +131,14 @@ describe('SMART client-credentials token issuance + scope enforcement', () => {
 describe('SMART authorization_code grant + PKCE', () => {
   let handle: TestDbHandle;
   let keys: KeyMaterial;
+  let keyRingStore: KeyRingStore;
   let patientId: string;
   let portalAccountId: string;
 
   beforeAll(async () => {
     handle = await setupTestDb();
     keys = await loadOrCreateKeyMaterial('.dev-test/jwt-private.pem', '.dev-test/jwt-public.pem');
+    keyRingStore = new KeyRingStore({ currentKid: keys.kid, keys: [{ ...keys, createdAt: new Date() }] }, '.dev-test/jwt-keyring-unused.json');
     const ctxA = handle.seed.tenantA;
 
     patientId = await withTenantContext(handle.db, ctxA.tenantId, async (trx) => {
@@ -183,7 +187,7 @@ describe('SMART authorization_code grant + PKCE', () => {
   it('exchanges a valid code for a token carrying the patient launch-context claim', async () => {
     const verifier = 'a-real-code-verifier-with-enough-entropy-1';
     const code = await insertCode({ codeChallenge: challengeFor(verifier) });
-    const service = new TokenService(handle.ownerDb, keys, TEST_ENV_CONFIG);
+    const service = new TokenService(handle.ownerDb, keyRingStore, TEST_ENV_CONFIG);
 
     const response = await service.issueToken({
       grant_type: 'authorization_code',
@@ -202,7 +206,7 @@ describe('SMART authorization_code grant + PKCE', () => {
 
   it('rejects a mismatched PKCE code_verifier', async () => {
     const code = await insertCode({ codeChallenge: challengeFor('the-real-verifier') });
-    const service = new TokenService(handle.ownerDb, keys, TEST_ENV_CONFIG);
+    const service = new TokenService(handle.ownerDb, keyRingStore, TEST_ENV_CONFIG);
     await expect(
       service.issueToken({
         grant_type: 'authorization_code',
@@ -218,7 +222,7 @@ describe('SMART authorization_code grant + PKCE', () => {
   it('rejects a code that has already been consumed (single-use, no replay)', async () => {
     const verifier = 'a-real-code-verifier-with-enough-entropy-2';
     const code = await insertCode({ codeChallenge: challengeFor(verifier) });
-    const service = new TokenService(handle.ownerDb, keys, TEST_ENV_CONFIG);
+    const service = new TokenService(handle.ownerDb, keyRingStore, TEST_ENV_CONFIG);
     const exchange = () =>
       service.issueToken({
         grant_type: 'authorization_code',
@@ -236,7 +240,7 @@ describe('SMART authorization_code grant + PKCE', () => {
   it('rejects an expired code', async () => {
     const verifier = 'a-real-code-verifier-with-enough-entropy-3';
     const code = await insertCode({ codeChallenge: challengeFor(verifier), expiresAt: new Date(Date.now() - 60_000) });
-    const service = new TokenService(handle.ownerDb, keys, TEST_ENV_CONFIG);
+    const service = new TokenService(handle.ownerDb, keyRingStore, TEST_ENV_CONFIG);
     await expect(
       service.issueToken({
         grant_type: 'authorization_code',
@@ -252,7 +256,7 @@ describe('SMART authorization_code grant + PKCE', () => {
   it('rejects a redirect_uri that does not match the one used to obtain the code', async () => {
     const verifier = 'a-real-code-verifier-with-enough-entropy-4';
     const code = await insertCode({ codeChallenge: challengeFor(verifier) });
-    const service = new TokenService(handle.ownerDb, keys, TEST_ENV_CONFIG);
+    const service = new TokenService(handle.ownerDb, keyRingStore, TEST_ENV_CONFIG);
     await expect(
       service.issueToken({
         grant_type: 'authorization_code',
@@ -266,7 +270,7 @@ describe('SMART authorization_code grant + PKCE', () => {
   });
 
   it('rejects an unknown code', async () => {
-    const service = new TokenService(handle.ownerDb, keys, TEST_ENV_CONFIG);
+    const service = new TokenService(handle.ownerDb, keyRingStore, TEST_ENV_CONFIG);
     await expect(
       service.issueToken({
         grant_type: 'authorization_code',

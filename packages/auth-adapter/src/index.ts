@@ -1,4 +1,15 @@
-export { loadOrCreateKeyMaterial, JWT_ALG, type KeyMaterial } from './keys.js';
+export { loadOrCreateKeyMaterial, generateKeyMaterial, computeKid, JWT_ALG, type KeyMaterial } from './keys.js';
+export {
+  loadOrCreateKeyRing,
+  reloadKeyRing,
+  rotateKeyRing,
+  getCurrentKey,
+  findKey,
+  KeyRingStore,
+  createKeyRingStore,
+  type KeyRing,
+  type KeyRingEntry,
+} from './keyring.js';
 export {
   signAccessToken,
   verifyAccessToken,

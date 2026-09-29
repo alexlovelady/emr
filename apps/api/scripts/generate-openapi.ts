@@ -153,6 +153,10 @@ const document = {
     ),
     '/auth/mfa/enroll': post('Start TOTP enrollment for the caller (returns a secret + otpauth URI)', 'Auth'),
     '/auth/mfa/confirm': post('Confirm TOTP enrollment with a first valid code', 'Auth', MfaConfirmSchema, 'MfaConfirm'),
+    '/auth/keys/rotate': post(
+      'Generate a new JWT signing key and make it current (requires security.key_rotate); the outgoing key is retained so already-issued tokens keep verifying',
+      'Auth',
+    ),
     '/organizations': {
       ...post('Create an organization', 'Tenant', CreateOrganizationSchema, 'CreateOrganization'),
       ...get('List organizations in the caller’s tenant', 'Tenant'),

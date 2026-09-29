@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { jwtVerify, SignJWT, type KeyLike } from 'jose';
+import { jwtVerify, SignJWT, type JWTVerifyGetKey, type KeyLike } from 'jose';
 import { UnauthorizedError } from '@ehr/domain-common';
 import { JWT_ALG, type KeyMaterial } from './keys.js';
 
@@ -20,6 +20,14 @@ export interface AccessTokenClaims {
 export class InvalidAccessTokenError extends UnauthorizedError {}
 export class InvalidRefreshTokenError extends UnauthorizedError {}
 
+/** `jose`'s `jwtVerify` overloads dispatch on the STATIC type of its second argument, so a
+ * `KeyLike | JWTVerifyGetKey` union can't be forwarded directly (TS can't tell which overload a
+ * union matches). Normalizing to always call the `JWTVerifyGetKey` overload — wrapping a plain key
+ * in a trivial lookup — sidesteps that without runtime branching. */
+function asGetKey(key: KeyLike | JWTVerifyGetKey): JWTVerifyGetKey {
+  return typeof key === 'function' ? key : (() => key) as JWTVerifyGetKey;
+}
+
 export async function signAccessToken(
   claims: AccessTokenClaims,
   keys: KeyMaterial,
@@ -35,14 +43,18 @@ export async function signAccessToken(
     .sign(keys.privateKey);
 }
 
+/** `publicKey` accepts either a single fixed key (every existing caller, unchanged) or a
+ * `JWTVerifyGetKey` lookup keyed by the token's own `kid` header — what a rotation-aware caller
+ * passes so a token signed by a since-retired (but still within its ring's retention window) key
+ * keeps verifying. `jose`'s `jwtVerify` already natively dispatches on which form it receives. */
 export async function verifyAccessToken(
   token: string,
-  publicKey: KeyLike,
+  publicKey: KeyLike | JWTVerifyGetKey,
   config: Pick<TokenIssuerConfig, 'issuer' | 'audience'>,
 ): Promise<AccessTokenClaims> {
   let payload;
   try {
-    ({ payload } = await jwtVerify(token, publicKey, {
+    ({ payload } = await jwtVerify(token, asGetKey(publicKey), {
       issuer: config.issuer,
       audience: config.audience,
     }));
@@ -84,10 +96,10 @@ export async function signMfaPendingToken(claims: MfaPendingClaims, keys: KeyMat
     .sign(keys.privateKey);
 }
 
-export async function verifyMfaPendingToken(token: string, publicKey: KeyLike, issuer: string): Promise<MfaPendingClaims> {
+export async function verifyMfaPendingToken(token: string, publicKey: KeyLike | JWTVerifyGetKey, issuer: string): Promise<MfaPendingClaims> {
   let payload;
   try {
-    ({ payload } = await jwtVerify(token, publicKey, { issuer, audience: MFA_PENDING_AUDIENCE }));
+    ({ payload } = await jwtVerify(token, asGetKey(publicKey), { issuer, audience: MFA_PENDING_AUDIENCE }));
   } catch (err) {
     throw new InvalidAccessTokenError(err instanceof Error ? err.message : String(err));
   }

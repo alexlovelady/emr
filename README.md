@@ -725,6 +725,68 @@ page and confirmed it appears in both admin-web's list and clinician-web's appoi
 selecting a location with no resources correctly shows "No rooms or equipment are assigned to this
 location" instead of an unfiltered list.
 
+### Remaining-gaps build-out — JWT key rotation
+
+Closes item 16 of the post-Tier-2 gap sweep ("do all but vendor gated stuff"): signing keys were
+loaded once at process startup and never rotated, with no mechanism to retire a compromised or
+aging key without invalidating every session.
+
+- **`packages/auth-adapter`'s `KeyRing`/`KeyRingStore`** (new `src/keyring.ts`) replaces the old
+  single `KeyMaterial` load. A `KeyRing` is `{currentKid, keys[]}`, each entry a `KeyMaterial` plus
+  `createdAt`; `kid` is a deterministic SHA-256 hash of the public JWK (`computeKid`, already
+  existed), not random. `rotateKeyRing()` generates a new current key and prunes anything past
+  `retentionMs` (default 7 days) — **except** the just-outgoing current key, which is always kept
+  through one more rotation regardless of its own age, so a token signed microseconds before a
+  rotation never immediately fails to verify. `loadOrCreateKeyRing()` migrates the pre-existing
+  single-PEM-pair files in as the ring's first key when no keyring file exists yet, so upgrading to
+  this doesn't invalidate already-issued tokens on deploy. `KeyRingStore` is the mutable, shareable
+  holder every consumer actually depends on: it wraps a `KeyRing` plus the keyring file path, and
+  every reader calls `.get()` fresh (never captures a `KeyRing` once) so `.rotate()` and
+  `.reload()` (a `reloadKeyRing()` poll, `startAutoReload(intervalMs)`) both take effect
+  immediately for every holder of that same store instance, no restart needed.
+- **A real bug caught by its own test, not shipped**: the first draft of `rotateKeyRing()`'s
+  retention filter had an inverted condition — it only kept the outgoing current key when that key
+  was *already stale* (past `retentionMs`) and silently dropped it in the normal case (freshly
+  created, well within the window), the exact opposite of the documented guarantee. A unit test
+  asserting the outgoing key survives one rotation (`packages/auth-adapter/src/keyring.test.ts`)
+  failed immediately and pointed at the exact line; fixed by unconditionally keeping
+  `previousCurrent` and only using the retention filter for older keys.
+- **Blast radius traced before writing code**: `verifyAccessToken`/`verifyMfaPendingToken`
+  (`tokens.ts`), `verifyPortalAccessToken` (`portal-tokens.ts`), and `verifySmartAccessToken`
+  (`apps/interop-fhir/src/token/smart-token.ts`) all needed their key parameter widened from a
+  single `KeyLike` to `KeyLike | JWTVerifyGetKey` — `jose`'s `jwtVerify` supports a lookup-by-`kid`
+  callback natively, but TypeScript can't dispatch its two overloads on a union type forwarded as a
+  variable (`TS2769: No overload matches this call`), so each file gained a small local
+  `asGetKey()` normalizing helper rather than a new shared micro-package (each already has its own
+  deliberate zero/minimal-dependency posture). Three separate backend processes each independently
+  load key material from the same shared keyring file — `apps/api` (staff + portal tokens),
+  `apps/interop-fhir` (SMART tokens only), `apps/interop-hl7` (staff-token verification for HL7
+  admin actions) — so each app's `core.module.ts` now provides a `KEY_RING` (`KeyRingStore`) token
+  instead of the old `KEY_MATERIAL`, and each starts its own `startAutoReload(KEY_RING_RELOAD_
+  INTERVAL_MS)` poll so a rotation performed by any one process reaches the other two (and any
+  other replica of the same app) without a restart.
+- **New admin endpoint**: `POST /api/v1/auth/keys/rotate` (`apps/api/src/auth/auth.controller.ts`),
+  gated on a new `security.key_rotate` permission key (global action — one keyring per deployment,
+  not per tenant — so it deliberately checks a platform-level permission rather than being callable
+  per-tenant-role). Calls `IdentityProvider.rotateSigningKey()`, which now delegates to
+  `KeyRingStore.rotate()` instead of holding its own mutable `KeyRing` field — the Fastify auth
+  hooks (`tenant-context.hook.ts`, `portal-context.hook.ts`) and `FirstPartyIdentityProvider` share
+  the exact same store instance, so a rotation from this endpoint is visible to `apps/api`'s own
+  request-verification path on the very next request, no reload needed for same-process callers.
+- New env vars: `JWT_KEYRING_PATH` (default `./.dev/jwt-keyring.json`) and
+  `KEY_RING_RELOAD_INTERVAL_MS` (default 60000). The old `JWT_PRIVATE_KEY_PATH`/
+  `JWT_PUBLIC_KEY_PATH` stay documented and required — they're the first-boot migration source, not
+  dead config.
+- **Live-verified** against the running dev stack: logged in, called the new rotate endpoint,
+  confirmed `/.well-known/jwks.json` went from 1 key to 2 (new current + retained outgoing),
+  confirmed the pre-rotation access token still authenticated a request (`GET /auth/me`), and
+  confirmed a fresh login after rotation signs with the new `kid` and authenticates correctly.
+  `apps/interop-fhir`'s `/fhir/r4/metadata` and `apps/api`'s portal login endpoint were both
+  exercised post-rotation with no disruption. Full repo-wide lint/typecheck/build (102 tasks each)
+  and test/test:integration/test:tenant-isolation (98/58/69 tasks) all green, including a new
+  rotation-specific integration test (old token verifies after rotation, new token uses the new
+  kid, JWKS reflects both keys) and 11 new `keyring.test.ts` unit tests.
+
 ## Verification status
 
 Docker Desktop's backend would not start in the environment this was built in (its WSL2

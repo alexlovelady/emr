@@ -5,7 +5,7 @@ import type { Kysely } from 'kysely';
 import type { DB } from '@ehr/db';
 import { withSystemContext, withTenantContext } from '@ehr/db';
 import { UnauthorizedError } from '@ehr/domain-common';
-import type { KeyMaterial } from './keys.js';
+import { findKey, getCurrentKey, type KeyRingStore } from './keyring.js';
 import {
   decodeRefreshToken,
   encodeRefreshToken,
@@ -58,6 +58,10 @@ export interface IdentityProvider {
   refresh(refreshToken: string): Promise<TokenPair>;
   revoke(refreshToken: string): Promise<void>;
   getJWKS(): Promise<{ keys: Record<string, unknown>[] }>;
+  /** Generates a new signing key, makes it current, and prunes any key past its retention window —
+   * see `rotateKeyRing`'s own doc comment. Existing, not-yet-expired tokens signed by the outgoing
+   * key keep verifying (it's retained, just no longer used to sign new ones). */
+  rotateSigningKey(): Promise<void>;
   /** Issued by `AuthService.login()` when `mfa_enrolled` is true, instead of real tokens. */
   issueMfaPendingToken(userId: string, tenantId: string): Promise<string>;
   verifyMfaPendingToken(token: string): Promise<MfaPendingClaims>;
@@ -81,7 +85,11 @@ export interface PasswordCredentialProvider {
 export class FirstPartyIdentityProvider implements IdentityProvider, PasswordCredentialProvider {
   constructor(
     private readonly db: Kysely<DB>,
-    private readonly keys: KeyMaterial,
+    /** Shared with this process's Fastify auth hooks (see tenant-context.hook.ts) — every method
+     * below always reads `this.keyRingStore.get()` fresh (never captures a `KeyRing` once at
+     * construction), so a rotation or a reload picked up by the store takes effect on this
+     * instance's very next call, no restart needed. */
+    private readonly keyRingStore: KeyRingStore,
     private readonly config: TokenIssuerConfig & { refreshTokenTtlSeconds: number },
   ) {}
 
@@ -121,7 +129,7 @@ export class FirstPartyIdentityProvider implements IdentityProvider, PasswordCre
   }
 
   async issueTokens(userId: string, tenantId: string): Promise<TokenPair> {
-    const accessToken = await signAccessToken({ userId, tenantId }, this.keys, this.config);
+    const accessToken = await signAccessToken({ userId, tenantId }, getCurrentKey(this.keyRingStore.get()), this.config);
 
     const secret = generateRefreshSecret();
     const expiresAt = new Date(Date.now() + this.config.refreshTokenTtlSeconds * 1000);
@@ -181,17 +189,33 @@ export class FirstPartyIdentityProvider implements IdentityProvider, PasswordCre
     );
   }
 
+  /** Every key still in the ring, not just the current one — the standard JWKS-rotation contract:
+   * a client fetching this mid-rotation must still be able to verify a token signed moments ago by
+   * the outgoing key, not only the brand-new one. */
   async getJWKS(): Promise<{ keys: Record<string, unknown>[] }> {
-    const jwk = await exportJWK(this.keys.publicKey);
-    return { keys: [{ ...jwk, kid: this.keys.kid, use: 'sig', alg: 'ES256' }] };
+    const jwks = await Promise.all(
+      this.keyRingStore.get().keys.map(async (k) => {
+        const jwk = await exportJWK(k.publicKey);
+        return { ...jwk, kid: k.kid, use: 'sig', alg: 'ES256' };
+      }),
+    );
+    return { keys: jwks };
   }
 
   async issueMfaPendingToken(userId: string, tenantId: string): Promise<string> {
-    return signMfaPendingToken({ userId, tenantId }, this.keys, this.config.issuer);
+    return signMfaPendingToken({ userId, tenantId }, getCurrentKey(this.keyRingStore.get()), this.config.issuer);
   }
 
   async verifyMfaPendingToken(token: string): Promise<MfaPendingClaims> {
-    return verifyMfaPendingToken(token, this.keys.publicKey, this.config.issuer);
+    return verifyMfaPendingToken(token, (header) => {
+      const key = findKey(this.keyRingStore.get(), header.kid);
+      if (!key) throw new Error(`Unknown signing key (kid=${header.kid ?? 'none'})`);
+      return key.publicKey;
+    }, this.config.issuer);
+  }
+
+  async rotateSigningKey(): Promise<void> {
+    await this.keyRingStore.rotate();
   }
 
   async startMfaEnrollment(userId: string, tenantId: string, accountLabel: string): Promise<MfaEnrollment> {

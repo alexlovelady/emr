@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { Body, Controller, Get, HttpCode, Inject, Post, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { Audited, SkipAudit } from '@ehr/audit';
-import { SkipAuthz, getEffectivePermissions } from '@ehr/authz';
+import { PERMISSION_KEYS, RequirePermission, SkipAuthz, getEffectivePermissions } from '@ehr/authz';
+import type { IdentityProvider } from '@ehr/auth-adapter';
 import { ForbiddenError, type RequestContext } from '@ehr/domain-common';
 import { getCurrentTransaction } from '@ehr/db';
 import { UserService } from '@ehr/workforce';
@@ -18,6 +19,7 @@ import {
   type RefreshInput,
 } from './auth.dto.js';
 import { AuthService } from './auth.service.js';
+import { IDENTITY_PROVIDER } from '../common/tokens.js';
 
 /**
  * `@SkipAuthz`/`@SkipAudit` are applied per-method here, not at the class level — `me()` needs
@@ -33,6 +35,7 @@ import { AuthService } from './auth.service.js';
 export class AuthController {
   constructor(
     @Inject(AuthService) private readonly authService: AuthService,
+    @Inject(IDENTITY_PROVIDER) private readonly identityProvider: IdentityProvider,
     private readonly userService: UserService = new UserService(),
   ) {}
 
@@ -130,6 +133,22 @@ export class AuthController {
     if (!ctx.actor) throw new ForbiddenError('No authenticated actor on request');
     const permissions = await getEffectivePermissions(getCurrentTransaction(), ctx.tenantId, ctx.actor.id);
     return { permissions };
+  }
+
+  /**
+   * Generates a new signing key and makes it current, without invalidating any token signed by the
+   * outgoing key (it's retained for its own rotation-retention window — see
+   * `IdentityProvider.rotateSigningKey`'s doc comment). A global, not tenant-scoped, action — there
+   * is exactly one keyring shared by every tenant on this deployment — so this deliberately checks a
+   * platform-level permission rather than being callable per-tenant.
+   */
+  @Post('keys/rotate')
+  @RequirePermission(PERMISSION_KEYS.SECURITY_KEY_ROTATE)
+  @Audited('auth.keys_rotate', 'KeyRing')
+  @HttpCode(200)
+  async rotateKeys(): Promise<{ ok: true }> {
+    await this.identityProvider.rotateSigningKey();
+    return { ok: true };
   }
 }
 

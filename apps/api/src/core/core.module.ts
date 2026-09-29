@@ -4,7 +4,7 @@ import { Reflector } from '@nestjs/core';
 import { getConfig } from '@ehr/config';
 import { createDb } from '@ehr/db';
 import { PolicyEngine } from '@ehr/authz';
-import { loadOrCreateKeyMaterial, FirstPartyIdentityProvider } from '@ehr/auth-adapter';
+import { createKeyRingStore, FirstPartyIdentityProvider } from '@ehr/auth-adapter';
 import { S3ObjectStorageGateway } from '@ehr/object-storage';
 import { OBJECT_STORAGE_GATEWAY } from '@ehr/documents';
 import { NoopLabOrderGateway } from '@ehr/lab-adapter';
@@ -26,7 +26,7 @@ import { VIDEO_VISIT_GATEWAY } from '@ehr/scheduling';
 import { NoopAiGateway } from '@ehr/ai-adapter';
 import { AI_GATEWAY, TRANSCRIPTION_GATEWAY } from '@ehr/ai';
 import { NoopTranscriptionGateway } from '@ehr/transcription-adapter';
-import { DB_CONNECTION, KEY_MATERIAL, IDENTITY_PROVIDER, ENV_CONFIG } from '../common/tokens.js';
+import { DB_CONNECTION, KEY_RING, IDENTITY_PROVIDER, ENV_CONFIG } from '../common/tokens.js';
 
 const env = getConfig();
 const db = createDb({ connectionString: env.APP_DATABASE_URL });
@@ -43,17 +43,24 @@ const db = createDb({ connectionString: env.APP_DATABASE_URL });
     { provide: ENV_CONFIG, useValue: env },
     { provide: DB_CONNECTION, useValue: db },
     {
-      provide: KEY_MATERIAL,
+      // A KeyRingStore, not a raw KeyRing — every consumer (the identity provider below, and the
+      // Fastify auth hooks wired up in main.ts) shares this SAME instance and reads `.get()` fresh
+      // per call, so `rotateSigningKey()` (mutates this process's store directly) and the
+      // KEY_RING_RELOAD_INTERVAL_MS poll (picks up a rotation performed by another process/replica
+      // via the shared keyring file) both take effect everywhere without a restart.
+      provide: KEY_RING,
       useFactory: async () => {
         await fs.mkdir('.dev', { recursive: true }).catch(() => undefined);
-        return loadOrCreateKeyMaterial(env.JWT_PRIVATE_KEY_PATH, env.JWT_PUBLIC_KEY_PATH);
+        const store = await createKeyRingStore(env.JWT_KEYRING_PATH, env.JWT_PRIVATE_KEY_PATH, env.JWT_PUBLIC_KEY_PATH);
+        store.startAutoReload(env.KEY_RING_RELOAD_INTERVAL_MS);
+        return store;
       },
     },
     {
       provide: IDENTITY_PROVIDER,
-      inject: [KEY_MATERIAL],
-      useFactory: (keys) =>
-        new FirstPartyIdentityProvider(db, keys, {
+      inject: [KEY_RING],
+      useFactory: (keyRingStore) =>
+        new FirstPartyIdentityProvider(db, keyRingStore, {
           issuer: env.JWT_ISSUER,
           audience: env.JWT_AUDIENCE,
           accessTokenTtlSeconds: env.ACCESS_TOKEN_TTL_SECONDS,
@@ -90,7 +97,7 @@ const db = createDb({ connectionString: env.APP_DATABASE_URL });
   exports: [
     ENV_CONFIG,
     DB_CONNECTION,
-    KEY_MATERIAL,
+    KEY_RING,
     IDENTITY_PROVIDER,
     OBJECT_STORAGE_GATEWAY,
     LAB_ORDER_GATEWAY,

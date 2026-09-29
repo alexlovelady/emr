@@ -93,6 +93,7 @@ export const PERMISSION_KEYS = {
   PROXY_GRANT_MANAGE: 'proxy_grant.manage',
   MESSAGE_MANAGE: 'message.manage',
   AI_GENERATION_MANAGE: 'ai_generation.manage',
+  SECURITY_KEY_ROTATE: 'security.key_rotate',
 } as const;
 
 export interface SeededTenant {

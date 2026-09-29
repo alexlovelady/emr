@@ -1864,6 +1864,223 @@
         }
       }
     },
+    "/auth/keys/rotate": {
+      "post": {
+        "summary": "Generate a new JWT signing key and make it current (requires security.key_rotate); the outgoing key is retained so already-issued tokens keep verifying",
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Problem Details (RFC 7807)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "detail": {},
+                    "instance": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Problem Details (RFC 7807)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "detail": {},
+                    "instance": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Problem Details (RFC 7807)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "detail": {},
+                    "instance": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Problem Details (RFC 7807)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "detail": {},
+                    "instance": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Problem Details (RFC 7807)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "detail": {},
+                    "instance": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Problem Details (RFC 7807)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "detail": {},
+                    "instance": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/organizations": {
       "post": {
         "summary": "Create an organization",

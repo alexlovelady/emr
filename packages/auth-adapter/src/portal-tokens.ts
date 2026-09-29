@@ -1,6 +1,12 @@
-import { jwtVerify, SignJWT, type KeyLike } from 'jose';
+import { jwtVerify, SignJWT, type JWTVerifyGetKey, type KeyLike } from 'jose';
 import { UnauthorizedError } from '@ehr/domain-common';
 import { JWT_ALG, type KeyMaterial } from './keys.js';
+
+/** Same reasoning as `tokens.ts`'s own `asGetKey` — TS overload resolution can't dispatch on a
+ * `KeyLike | JWTVerifyGetKey` union directly. */
+function asGetKey(key: KeyLike | JWTVerifyGetKey): JWTVerifyGetKey {
+  return typeof key === 'function' ? key : (() => key) as JWTVerifyGetKey;
+}
 
 export interface PortalTokenIssuerConfig {
   issuer: string;
@@ -43,12 +49,12 @@ export async function signPortalAccessToken(
 
 export async function verifyPortalAccessToken(
   token: string,
-  publicKey: KeyLike,
+  publicKey: KeyLike | JWTVerifyGetKey,
   config: Pick<PortalTokenIssuerConfig, 'issuer' | 'audience'>,
 ): Promise<PortalAccessTokenClaims> {
   let payload;
   try {
-    ({ payload } = await jwtVerify(token, publicKey, {
+    ({ payload } = await jwtVerify(token, asGetKey(publicKey), {
       issuer: config.issuer,
       audience: config.audience,
     }));
