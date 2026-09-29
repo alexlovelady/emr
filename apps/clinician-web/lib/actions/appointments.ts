@@ -74,6 +74,17 @@ export async function checkInAppointment(id: string): Promise<ActionResult<Appoi
   return result;
 }
 
+export async function rescheduleAppointment(id: string, scheduledStart: string, scheduledEnd: string): Promise<ActionResult<Appointment>> {
+  const result = await runAction(() =>
+    callBackend<Appointment>(`/api/v1/appointments/${id}/reschedule`, {
+      method: 'POST',
+      body: { scheduledStart: new Date(scheduledStart).toISOString(), scheduledEnd: new Date(scheduledEnd).toISOString() },
+    }),
+  );
+  if (result.ok) revalidatePath('/schedule');
+  return result;
+}
+
 export async function cancelAppointment(id: string, reason?: string): Promise<ActionResult<Appointment>> {
   const result = await runAction(() =>
     callBackend<Appointment>(`/api/v1/appointments/${id}/cancel`, { method: 'POST', body: reason ? { reason } : {} }),

@@ -88,6 +88,28 @@ export class TaskRepository {
     return rows.map(toRow);
   }
 
+  async reassign(
+    trx: Executor,
+    tenantId: string,
+    id: string,
+    input: { assignedToUserId?: string | null | undefined; assignedToRoleId?: string | null | undefined },
+    updatedBy: string,
+  ): Promise<TaskRow> {
+    const row = await trx
+      .updateTable('tasks')
+      .set({
+        ...(input.assignedToUserId !== undefined ? { assigned_to_user_id: input.assignedToUserId } : {}),
+        ...(input.assignedToRoleId !== undefined ? { assigned_to_role_id: input.assignedToRoleId } : {}),
+        updated_by: updatedBy,
+        updated_at: new Date(),
+      })
+      .where('tenant_id', '=', tenantId)
+      .where('id', '=', id)
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return toRow(row);
+  }
+
   async setStatus(
     trx: Executor,
     tenantId: string,

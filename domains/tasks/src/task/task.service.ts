@@ -2,7 +2,7 @@ import type { Kysely, Transaction } from 'kysely';
 import type { DB } from '@ehr/db';
 import { ConflictError, NotFoundError, type RequestContext } from '@ehr/domain-common';
 import { buildOutboxInsert } from '@ehr/outbox';
-import type { CreateTaskInput } from './task.dto.js';
+import type { CreateTaskInput, ReassignTaskInput } from './task.dto.js';
 import { TaskRepository, type TaskRow } from './task.repository.js';
 
 type Executor = Kysely<DB> | Transaction<DB>;
@@ -46,6 +46,18 @@ export class TaskService {
     filter: { patientId?: string; assignedToUserId?: string; status?: string } = {},
   ): Promise<TaskRow[]> {
     return this.repo.list(trx, ctx.tenantId, filter);
+  }
+
+  async reassign(trx: Executor, ctx: RequestContext, id: string, input: ReassignTaskInput): Promise<TaskRow> {
+    const current = await this.getById(trx, ctx, id);
+    this.assertNotTerminal(current);
+    const actorId = ctx.actor?.id ?? null;
+    const updated = await this.repo.reassign(trx, ctx.tenantId, id, input, actorId ?? ctx.tenantId);
+    await this.emit(trx, ctx, updated, 'task.reassigned.v1', {
+      assignedToUserId: updated.assignedToUserId,
+      assignedToRoleId: updated.assignedToRoleId,
+    });
+    return updated;
   }
 
   async complete(trx: Executor, ctx: RequestContext, id: string): Promise<TaskRow> {

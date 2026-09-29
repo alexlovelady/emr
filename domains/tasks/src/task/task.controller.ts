@@ -5,7 +5,7 @@ import { ForbiddenError, type RequestContext } from '@ehr/domain-common';
 import { Audited } from '@ehr/audit';
 import { PERMISSION_KEYS, RequirePermission } from '@ehr/authz';
 import { ZodValidationPipe } from '@ehr/api-contracts';
-import { CreateTaskSchema, type CreateTaskInput } from './task.dto.js';
+import { CreateTaskSchema, ReassignTaskSchema, type CreateTaskInput, type ReassignTaskInput } from './task.dto.js';
 import { TaskService } from './task.service.js';
 
 @Controller('api/v1/tasks')
@@ -40,6 +40,13 @@ export class TaskController {
       ...(assignedToUserId ? { assignedToUserId } : {}),
       ...(status ? { status } : {}),
     });
+  }
+
+  @Post(':id/reassign')
+  @RequirePermission(PERMISSION_KEYS.TASK_MANAGE)
+  @Audited('task.reassign', 'Task')
+  async reassign(@Param('id') id: string, @Body(new ZodValidationPipe(ReassignTaskSchema)) body: ReassignTaskInput, @Req() req: FastifyRequest) {
+    return this.service.reassign(getCurrentTransaction(), requireCtx(req), id, body);
   }
 
   @Post(':id/complete')

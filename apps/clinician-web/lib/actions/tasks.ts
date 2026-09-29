@@ -26,6 +26,14 @@ export async function createTask(_prevState: ActionResult<Task> | null, formData
   return result;
 }
 
+export async function reassignTask(id: string, assignedToUserId: string): Promise<ActionResult<Task>> {
+  const result = await runAction(() =>
+    callBackend<Task>(`/api/v1/tasks/${id}/reassign`, { method: 'POST', body: { assignedToUserId } }),
+  );
+  if (result.ok) revalidatePath('/tasks');
+  return result;
+}
+
 export async function completeTask(id: string): Promise<ActionResult<Task>> {
   const result = await runAction(() => callBackend<Task>(`/api/v1/tasks/${id}/complete`, { method: 'POST' }));
   if (result.ok) revalidatePath('/tasks');

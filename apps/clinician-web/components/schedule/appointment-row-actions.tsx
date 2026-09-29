@@ -8,11 +8,12 @@ import { usePermissions } from '@/components/providers/permissions-provider';
 import { PERMISSION_KEYS } from '@/lib/permission-keys';
 import { cancelAppointment, checkInAppointment, confirmAppointment, markNoShow, promoteAppointment, waitlistAppointment } from '@/lib/actions/appointments';
 import { createEncounter } from '@/lib/actions/encounters';
+import { RescheduleAppointmentDialog } from '@/components/schedule/reschedule-appointment-dialog';
 import type { Appointment } from '@/lib/types';
 
 const LEGAL_ACTIONS: Record<string, string[]> = {
-  scheduled: ['confirm', 'check-in', 'cancel', 'no-show', 'waitlist'],
-  confirmed: ['check-in', 'cancel', 'no-show'],
+  scheduled: ['confirm', 'check-in', 'reschedule', 'cancel', 'no-show', 'waitlist'],
+  confirmed: ['check-in', 'reschedule', 'cancel', 'no-show'],
   checked_in: ['start-visit'],
   cancelled: ['waitlist'],
   waitlisted: ['promote'],
@@ -65,6 +66,7 @@ export function AppointmentRowActions({ appointment }: { appointment: Appointmen
           Start visit
         </Button>
       )}
+      {legal.includes('reschedule') && <RescheduleAppointmentDialog appointment={appointment} />}
       {legal.includes('cancel') && (
         <Button size="sm" variant="outline" disabled={isPending || busy} onClick={() => run(() => cancelAppointment(appointment.id))}>
           Cancel

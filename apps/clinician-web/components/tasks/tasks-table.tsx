@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/chart/empty-state';
 import { completeTask, cancelTask } from '@/lib/actions/tasks';
+import { ReassignTaskDialog } from '@/components/tasks/reassign-task-dialog';
 import type { Task } from '@/lib/types';
 
 const PRIORITY_VARIANT: Record<Task['priority'], 'outline' | 'warning' | 'destructive'> = {
@@ -68,6 +69,7 @@ export function TasksTable({ tasks }: { tasks: Task[] }) {
                   <Button size="sm" variant="outline" disabled={isPending} onClick={() => run(() => completeTask(t.id))}>
                     Complete
                   </Button>
+                  <ReassignTaskDialog taskId={t.id} />
                   <Button size="sm" variant="ghost" disabled={isPending} onClick={() => run(() => cancelTask(t.id))}>
                     Cancel
                   </Button>

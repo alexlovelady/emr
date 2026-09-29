@@ -13,3 +13,13 @@ export const CreateTaskSchema = z.object({
   relatedResourceId: z.string().uuid().nullish(),
 });
 export type CreateTaskInput = z.infer<typeof CreateTaskSchema>;
+
+export const ReassignTaskSchema = z
+  .object({
+    assignedToUserId: z.string().uuid().nullish(),
+    assignedToRoleId: z.string().uuid().nullish(),
+  })
+  .refine((v) => v.assignedToUserId !== undefined || v.assignedToRoleId !== undefined, {
+    message: 'Provide assignedToUserId or assignedToRoleId (null clears that assignment)',
+  });
+export type ReassignTaskInput = z.infer<typeof ReassignTaskSchema>;

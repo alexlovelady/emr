@@ -140,6 +140,48 @@ describe('tenant isolation — appointments', () => {
     ).rejects.toBeInstanceOf(ConflictError);
   });
 
+  it('reschedule() moves the appointment and rejects a conflicting new time', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const blockerStart = new Date(Date.now() + 60 * 3600_000);
+    const blockerEnd = new Date(blockerStart.getTime() + 1800_000);
+    await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      appointmentService.create(trx, ctxA, {
+        patientId: tenantAPatientId,
+        locationId: handle.seed.tenantA.locationId,
+        practitionerId: tenantAPractitionerId,
+        appointmentType: 'office_visit',
+        scheduledStart: blockerStart,
+        scheduledEnd: blockerEnd,
+      }),
+    );
+
+    const newStart = new Date(Date.now() + 70 * 3600_000);
+    const newEnd = new Date(newStart.getTime() + 1800_000);
+    const rescheduled = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      appointmentService.reschedule(trx, ctxA, tenantAAppointmentId, { scheduledStart: newStart, scheduledEnd: newEnd }),
+    );
+    expect(rescheduled.scheduledStart.getTime()).toBe(newStart.getTime());
+    expect(rescheduled.scheduledEnd.getTime()).toBe(newEnd.getTime());
+
+    await expect(
+      withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        appointmentService.reschedule(trx, ctxA, tenantAAppointmentId, { scheduledStart: blockerStart, scheduledEnd: blockerEnd }),
+      ),
+    ).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it('Tenant B cannot reschedule a Tenant A appointment by known UUID', async () => {
+    const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
+    await expect(
+      withTenantContext(handle.db, ctxB.tenantId, (trx) =>
+        appointmentService.reschedule(trx, ctxB, tenantAAppointmentId, {
+          scheduledStart: new Date(Date.now() + 80 * 3600_000),
+          scheduledEnd: new Date(Date.now() + 81 * 3600_000),
+        }),
+      ),
+    ).rejects.toBeInstanceOf(NotFoundError);
+  });
+
   it('override:true bypasses the double-booking check', async () => {
     const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
     const start = new Date(Date.now() + 20 * 3600_000);
