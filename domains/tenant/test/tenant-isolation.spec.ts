@@ -65,6 +65,27 @@ describe('tenant isolation — organizations & locations', () => {
     expect(true).toBe(true);
   });
 
+  it('list() pagination (limit/offset) slices the same order as an unpaginated call', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const all = await withTenantContext(handle.db, ctxA.tenantId, (trx) => locationService.list(trx, ctxA));
+    expect(all.length).toBeGreaterThanOrEqual(4);
+
+    const firstTwo = await withTenantContext(handle.db, ctxA.tenantId, (trx) => locationService.list(trx, ctxA, { limit: 2, offset: 0 }));
+    const nextTwo = await withTenantContext(handle.db, ctxA.tenantId, (trx) => locationService.list(trx, ctxA, { limit: 2, offset: 2 }));
+
+    expect(firstTwo).toHaveLength(2);
+    expect(nextTwo).toHaveLength(2);
+    expect(firstTwo.map((l) => l.id)).toEqual(all.slice(0, 2).map((l) => l.id));
+    expect(nextTwo.map((l) => l.id)).toEqual(all.slice(2, 4).map((l) => l.id));
+    expect(firstTwo[0]!.id).not.toBe(nextTwo[0]!.id);
+  });
+
+  it("Tenant B's paginated list() never returns a Tenant A row", async () => {
+    const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
+    const page = await withTenantContext(handle.db, ctxB.tenantId, (trx) => locationService.list(trx, ctxB, { limit: 5, offset: 0 }));
+    expect(page.some((l) => l.id === tenantALocationId)).toBe(false);
+  });
+
   it('deactivating a location cascades to revoke every active practitioner-role assignment there', async () => {
     const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
     const org = await withTenantContext(handle.db, ctxA.tenantId, (trx) => orgService.create(trx, ctxA, { name: `Cascade Org ${Date.now()}` }));

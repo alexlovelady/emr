@@ -45,8 +45,8 @@ export class OrganizationService {
     return org;
   }
 
-  async list(trx: Executor, ctx: RequestContext): Promise<OrganizationRow[]> {
-    return this.repo.list(trx, ctx.tenantId);
+  async list(trx: Executor, ctx: RequestContext, pagination: { limit?: number | undefined; offset?: number | undefined } = {}): Promise<OrganizationRow[]> {
+    return this.repo.list(trx, ctx.tenantId, pagination);
   }
 
   async update(trx: Executor, ctx: RequestContext, id: string, input: UpdateOrganizationInput): Promise<OrganizationRow> {

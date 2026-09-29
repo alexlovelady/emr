@@ -45,13 +45,11 @@ export class UserRepository {
     return row ? toRow(row) : null;
   }
 
-  async list(trx: Executor, tenantId: string): Promise<UserRow[]> {
-    const rows = await trx
-      .selectFrom('users')
-      .selectAll()
-      .where('tenant_id', '=', tenantId)
-      .orderBy('created_at', 'asc')
-      .execute();
+  async list(trx: Executor, tenantId: string, pagination: { limit?: number | undefined; offset?: number | undefined } = {}): Promise<UserRow[]> {
+    let query = trx.selectFrom('users').selectAll().where('tenant_id', '=', tenantId).orderBy('created_at', 'asc');
+    if (pagination.limit !== undefined) query = query.limit(pagination.limit);
+    if (pagination.offset !== undefined) query = query.offset(pagination.offset);
+    const rows = await query.execute();
     return rows.map(toRow);
   }
 }

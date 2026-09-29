@@ -44,13 +44,11 @@ export class OrganizationRepository {
     return row ? toRow(row) : null;
   }
 
-  async list(trx: Executor, tenantId: string): Promise<OrganizationRow[]> {
-    const rows = await trx
-      .selectFrom('organizations')
-      .selectAll()
-      .where('tenant_id', '=', tenantId)
-      .orderBy('created_at', 'asc')
-      .execute();
+  async list(trx: Executor, tenantId: string, pagination: { limit?: number | undefined; offset?: number | undefined } = {}): Promise<OrganizationRow[]> {
+    let query = trx.selectFrom('organizations').selectAll().where('tenant_id', '=', tenantId).orderBy('created_at', 'asc');
+    if (pagination.limit !== undefined) query = query.limit(pagination.limit);
+    if (pagination.offset !== undefined) query = query.offset(pagination.offset);
+    const rows = await query.execute();
     return rows.map(toRow);
   }
 

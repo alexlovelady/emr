@@ -2,18 +2,25 @@ import { Stethoscope } from 'lucide-react';
 import { callBackend } from '@/lib/api-proxy';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import { Pagination } from '@/components/ui/pagination';
 import { NewPractitionerDialog } from '@/components/practitioners/new-practitioner-dialog';
 import { PractitionerRowActions } from '@/components/practitioners/practitioner-row-actions';
 import type { LocationRow, OrganizationRow, PractitionerRoleRow, PractitionerRow, RoleRow, UserRow } from '@/lib/types';
 
-export default async function PractitionersPage() {
-  const [practitioners, users, organizations, locations, roles] = await Promise.all([
-    callBackend<PractitionerRow[]>('/api/v1/practitioners'),
+const PAGE_SIZE = 25;
+
+export default async function PractitionersPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
+  const { page: pageParam } = await searchParams;
+  const page = Math.max(0, Number(pageParam ?? '0') || 0);
+  const [fetched, users, organizations, locations, roles] = await Promise.all([
+    callBackend<PractitionerRow[]>('/api/v1/practitioners', { query: { limit: String(PAGE_SIZE + 1), offset: String(page * PAGE_SIZE) } }),
     callBackend<UserRow[]>('/api/v1/users'),
     callBackend<OrganizationRow[]>('/api/v1/organizations'),
     callBackend<LocationRow[]>('/api/v1/locations'),
     callBackend<RoleRow[]>('/api/v1/roles'),
   ]);
+  const hasMore = fetched.length > PAGE_SIZE;
+  const practitioners = hasMore ? fetched.slice(0, PAGE_SIZE) : fetched;
   const orgName = (id: string) => organizations.find((o) => o.id === id)?.name ?? id;
 
   // No "assignments for these practitioners" bulk endpoint — same N+1-via-detail pattern already
@@ -29,7 +36,6 @@ export default async function PractitionersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Practitioners</h1>
-          <p className="text-sm text-muted-foreground">{practitioners.length} practitioners</p>
         </div>
         <NewPractitionerDialog users={users} organizations={organizations} />
       </div>
@@ -76,6 +82,7 @@ export default async function PractitionersPage() {
               </TableBody>
             </Table>
           )}
+          <Pagination page={page} hasMore={hasMore} />
         </CardContent>
       </Card>
     </div>

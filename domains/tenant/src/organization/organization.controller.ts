@@ -1,10 +1,10 @@
-import { Body, Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { getCurrentTransaction } from '@ehr/db';
 import { ForbiddenError, type RequestContext } from '@ehr/domain-common';
 import { Audited } from '@ehr/audit';
 import { PERMISSION_KEYS, RequirePermission } from '@ehr/authz';
-import { ZodValidationPipe } from '@ehr/api-contracts';
+import { PaginationQuerySchema, ZodValidationPipe, type PaginationQuery } from '@ehr/api-contracts';
 import {
   CreateOrganizationSchema,
   UpdateOrganizationSchema,
@@ -34,8 +34,8 @@ export class OrganizationController {
   @Get()
   @RequirePermission(PERMISSION_KEYS.ORGANIZATION_MANAGE)
   @Audited('organization.list', 'Organization')
-  async list(@Req() req: FastifyRequest) {
-    return this.service.list(getCurrentTransaction(), requireCtx(req));
+  async list(@Query(new ZodValidationPipe(PaginationQuerySchema)) query: PaginationQuery, @Req() req: FastifyRequest) {
+    return this.service.list(getCurrentTransaction(), requireCtx(req), query);
   }
 
   @Patch(':id')

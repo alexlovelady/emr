@@ -65,8 +65,8 @@ export class UserService {
     return user;
   }
 
-  async list(trx: Executor, ctx: RequestContext): Promise<UserRow[]> {
-    return this.repo.list(trx, ctx.tenantId);
+  async list(trx: Executor, ctx: RequestContext, pagination: { limit?: number | undefined; offset?: number | undefined } = {}): Promise<UserRow[]> {
+    return this.repo.list(trx, ctx.tenantId, pagination);
   }
 }
 

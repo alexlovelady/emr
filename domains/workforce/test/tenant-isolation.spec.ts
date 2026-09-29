@@ -37,6 +37,16 @@ describe('tenant isolation — users', () => {
     expect(users.some((u) => u.id === tenantAUserId)).toBe(false);
   });
 
+  it('list() pagination (limit/offset) slices the same order as an unpaginated call', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const all = await withTenantContext(handle.db, ctxA.tenantId, (trx) => userService.list(trx, ctxA));
+    expect(all.length).toBeGreaterThanOrEqual(2);
+
+    const firstTwo = await withTenantContext(handle.db, ctxA.tenantId, (trx) => userService.list(trx, ctxA, { limit: 2, offset: 0 }));
+    expect(firstTwo).toHaveLength(2);
+    expect(firstTwo.map((u) => u.id)).toEqual(all.slice(0, 2).map((u) => u.id));
+  });
+
   it('Row-Level Security blocks a query with no tenant_id predicate at all', async () => {
     const rows = await withTenantContext(handle.db, handle.seed.tenantB.tenantId, (trx) =>
       trx.selectFrom('users').selectAll().where('id', '=', tenantAUserId).execute(),

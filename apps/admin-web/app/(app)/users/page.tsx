@@ -3,15 +3,22 @@ import { callBackend } from '@/lib/api-proxy';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import { Pagination } from '@/components/ui/pagination';
 import { NewUserDialog } from '@/components/users/new-user-dialog';
 import { AssignRoleDialog } from '@/components/users/assign-role-dialog';
 import type { RoleRow, UserRoleGrant, UserRow } from '@/lib/types';
 
-export default async function UsersPage() {
-  const [users, roles] = await Promise.all([
-    callBackend<UserRow[]>('/api/v1/users'),
+const PAGE_SIZE = 25;
+
+export default async function UsersPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
+  const { page: pageParam } = await searchParams;
+  const page = Math.max(0, Number(pageParam ?? '0') || 0);
+  const [fetched, roles] = await Promise.all([
+    callBackend<UserRow[]>('/api/v1/users', { query: { limit: String(PAGE_SIZE + 1), offset: String(page * PAGE_SIZE) } }),
     callBackend<RoleRow[]>('/api/v1/roles'),
   ]);
+  const hasMore = fetched.length > PAGE_SIZE;
+  const users = hasMore ? fetched.slice(0, PAGE_SIZE) : fetched;
   const grants =
     users.length > 0
       ? await callBackend<UserRoleGrant[]>('/api/v1/users/roles/bulk', { method: 'POST', body: { userIds: users.map((u) => u.id) } })
@@ -28,7 +35,6 @@ export default async function UsersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
-          <p className="text-sm text-muted-foreground">{users.length} users</p>
         </div>
         <NewUserDialog />
       </div>
@@ -78,6 +84,7 @@ export default async function UsersPage() {
               </TableBody>
             </Table>
           )}
+          <Pagination page={page} hasMore={hasMore} />
         </CardContent>
       </Card>
     </div>

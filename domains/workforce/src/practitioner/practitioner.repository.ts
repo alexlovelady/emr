@@ -75,15 +75,17 @@ export class PractitionerRepository {
     return row ? toRow(row, row.organization_id) : null;
   }
 
-  async list(trx: Executor, tenantId: string): Promise<PractitionerRow[]> {
-    const rows = await trx
+  async list(trx: Executor, tenantId: string, pagination: { limit?: number | undefined; offset?: number | undefined } = {}): Promise<PractitionerRow[]> {
+    let query = trx
       .selectFrom('practitioners')
       .innerJoin('workforce_identities', 'workforce_identities.id', 'practitioners.workforce_identity_id')
       .selectAll('practitioners')
       .select('workforce_identities.organization_id as organization_id')
       .where('practitioners.tenant_id', '=', tenantId)
-      .orderBy('practitioners.created_at', 'asc')
-      .execute();
+      .orderBy('practitioners.created_at', 'asc');
+    if (pagination.limit !== undefined) query = query.limit(pagination.limit);
+    if (pagination.offset !== undefined) query = query.offset(pagination.offset);
+    const rows = await query.execute();
     return rows.map((row) => toRow(row, row.organization_id));
   }
 

@@ -48,8 +48,8 @@ export class PractitionerService {
     return practitioner;
   }
 
-  async list(trx: Executor, ctx: RequestContext): Promise<PractitionerRow[]> {
-    return this.repo.list(trx, ctx.tenantId);
+  async list(trx: Executor, ctx: RequestContext, pagination: { limit?: number | undefined; offset?: number | undefined } = {}): Promise<PractitionerRow[]> {
+    return this.repo.list(trx, ctx.tenantId, pagination);
   }
 
   async update(trx: Executor, ctx: RequestContext, id: string, input: UpdatePractitionerInput): Promise<PractitionerRow> {

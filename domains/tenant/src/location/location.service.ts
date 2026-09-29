@@ -58,8 +58,8 @@ export class LocationService {
     return location;
   }
 
-  async list(trx: Executor, ctx: RequestContext): Promise<LocationRow[]> {
-    return this.repo.list(trx, ctx.tenantId);
+  async list(trx: Executor, ctx: RequestContext, pagination: { limit?: number | undefined; offset?: number | undefined } = {}): Promise<LocationRow[]> {
+    return this.repo.list(trx, ctx.tenantId, pagination);
   }
 
   async update(trx: Executor, ctx: RequestContext, id: string, input: UpdateLocationInput): Promise<LocationRow> {
