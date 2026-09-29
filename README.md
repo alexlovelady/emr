@@ -1009,6 +1009,59 @@ time-bound a grant manually, but nothing ever noticed when that mattered.
   does not fire for a minor, does not fire for a self-grant, does not fire for an already-expired
   grant, respects a custom higher threshold).
 
+### Remaining-gaps build-out — authz layers 4, 5, and 8 (resource-relationship, purpose-sensitivity, break-glass)
+
+Closes item 22. Research surfaced that `packages/authz/src/layers/stub-layers.ts` actually stubbed
+**5** layers (4-8), not 2 — this repo's `PolicyEngine` implements EHR_BUILD_SPEC.md §6.2's full
+8-layer model: tenant membership → user status → role permission → resource relationship → purpose/
+sensitivity → consent/proxy → state/special-law → break-glass, with a fixed composition rule ("any
+layer can veto with DENY; only role-permission can grant"). Given that composition rule, a real
+enforcing layer 4/5 risked a genuine security-relevant behavior change — every practitioner with
+`patient.read.clinical` can see every patient in the tenant today, and the whole existing test suite
+assumes that. **Explicitly checked with the user before writing any code** given the blast-radius
+risk; the agreed scope for all three was "build the real mechanism, keep enforcement off by default
+— zero effect on any existing role or route unless someone explicitly opts in."
+
+- **Layer 4 (resource-relationship)** — new `resourceRelationshipLayer` is active ONLY for a new,
+  unused-by-default permission key, `patient.read.care_team_scoped` (narrower than
+  `patient.read.clinical` — no seeded role grants it). When THAT key is checked, it vetoes unless the
+  acting user resolves (via `workforce_identities`) to a practitioner with at least one real
+  `encounters`/`appointments` row for the target patient. Every existing role/route is completely
+  unaffected.
+- **Layer 5 (purpose-sensitivity)** — new nullable `problems.sensitivity` tag (migration 0055; a
+  plain tag, not real per-category legal content — e.g. actual 42 CFR Part 2 handling of
+  substance-use records is business/legal-review content, out of scope, same as item 20's framing).
+  New optional `X-Purpose-Of-Use` request header (`treatment`/`payment`/`operations`), parsed into
+  `RequestContext.purpose` — an existing field nothing populated before this. `purposeSensitivityLayer`
+  only vetoes `problem.manage` access to a tagged-sensitive problem when a caller EXPLICITLY asserts
+  a non-treatment purpose; an absent header (every current caller) defaults to "treatment," so this
+  cannot affect existing traffic regardless of which problems get tagged.
+- **Layer 8 (break-glass)** — genuinely new, additive capability (not in the original item scope,
+  added after confirming with the user it's low-risk since it's purely opt-in). New
+  `breakglass_grants` table (migration 0056) implementing spec §6.3 end to end: an explicit
+  `POST /api/v1/auth/breakglass` action (reason code + free-text justification, time-limited —
+  capped at 4 hours), a real elevated audit event (the invoking request's own `@Audited` entry, which
+  captures the reason/justification/patient), and a compliance review queue via a new
+  `breakglass_review` alert rule (`packages/alerting`, wired into `apps/worker`) that keeps a
+  critical alert open for every un-reviewed grant until `POST /api/v1/auth/breakglass/:id/review`
+  closes it. **`PolicyEngine.authorize()`'s composition rule was extended**, carefully, to let an
+  active break-glass grant override a contextual DENY from layers 4-7 specifically — a DENY from
+  layers 1-3 (tenant membership, user status, role permission) is NEVER overridable, preserving the
+  exact pre-item-22 short-circuit behavior for those three untouched. Since layers 4-7 always
+  returned `NOT_APPLICABLE` before this item, this composition change has zero observable effect on
+  any pre-existing call.
+- **Live-verified** against the running dev stack: invoked a real break-glass grant via
+  `POST /api/v1/auth/breakglass` for a real patient, confirmed it appears in `GET .../breakglass`,
+  confirmed `POST .../breakglass/{id}/review` marks it reviewed, and confirmed the
+  `breakglass_review` alert fired for a second, still-unreviewed grant on the next evaluation tick
+  and cleared once that one was reviewed too. Full repo-wide lint/typecheck/build (174 tasks) and
+  test/test:integration/test:tenant-isolation (138 tasks) all green — including apps/api's own
+  golden-path e2e test, which exercises the real `PolicyEngine` pipeline through every existing
+  production route and confirms the composition rewrite changed nothing for them. 28 new tests
+  across `packages/authz` (unit: policy-engine override logic, each new layer in isolation;
+  integration: real encounters/appointments/problems/breakglass_grants against Postgres, plus a
+  full 8-layer end-to-end override test) and `packages/alerting` (the new review-queue rule).
+
 ## Verification status
 
 Docker Desktop's backend would not start in the environment this was built in (its WSL2

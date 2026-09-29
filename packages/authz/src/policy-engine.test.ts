@@ -57,4 +57,59 @@ describe('PolicyEngine', () => {
     expect(decision).toEqual({ allowed: false, deniedBy: 'user-status' });
     expect(laterLayerCalled).toBe(false);
   });
+
+  describe('item 22: break-glass override', () => {
+    it('an active break-glass grant overrides a contextual DENY from a layer-4-7 veto', async () => {
+      const engine = new PolicyEngine([
+        fakeLayer('role-permission', 'ALLOW'),
+        fakeLayer('resource-relationship', 'DENY'),
+        fakeLayer('break-glass', 'ALLOW'),
+      ]);
+      const decision = await engine.authorize(ctx, fakeDb);
+      expect(decision).toEqual({ allowed: true, breakGlass: true, overrodeDeny: 'resource-relationship' });
+    });
+
+    it('break-glass cannot override a hard DENY from role-permission (no underlying grant to override with)', async () => {
+      const engine = new PolicyEngine([
+        fakeLayer('role-permission', 'DENY'),
+        fakeLayer('break-glass', 'ALLOW'),
+      ]);
+      const decision = await engine.authorize(ctx, fakeDb);
+      expect(decision).toEqual({ allowed: false, deniedBy: 'role-permission' });
+    });
+
+    it('break-glass cannot override a hard DENY from user-status or tenant-membership (layers 1-3 still short-circuit immediately)', async () => {
+      let breakGlassCalled = false;
+      const engine = new PolicyEngine([
+        fakeLayer('user-status', 'DENY'),
+        fakeLayer('role-permission', 'ALLOW'),
+        {
+          name: 'break-glass',
+          evaluate: async () => {
+            breakGlassCalled = true;
+            return 'ALLOW';
+          },
+        },
+      ]);
+      const decision = await engine.authorize(ctx, fakeDb);
+      expect(decision).toEqual({ allowed: false, deniedBy: 'user-status' });
+      expect(breakGlassCalled).toBe(false);
+    });
+
+    it('a contextual DENY without an active break-glass grant still denies normally', async () => {
+      const engine = new PolicyEngine([
+        fakeLayer('role-permission', 'ALLOW'),
+        fakeLayer('purpose-sensitivity', 'DENY'),
+        fakeLayer('break-glass', 'NOT_APPLICABLE'),
+      ]);
+      const decision = await engine.authorize(ctx, fakeDb);
+      expect(decision).toEqual({ allowed: false, deniedBy: 'purpose-sensitivity' });
+    });
+
+    it('break-glass ALLOW with no contextual DENY at all has no effect (nothing to override)', async () => {
+      const engine = new PolicyEngine([fakeLayer('role-permission', 'ALLOW'), fakeLayer('break-glass', 'ALLOW')]);
+      const decision = await engine.authorize(ctx, fakeDb);
+      expect(decision).toEqual({ allowed: true });
+    });
+  });
 });

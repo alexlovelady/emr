@@ -9,6 +9,7 @@ import { createBackupHealthRule } from './rules/backup-health.rule.js';
 import { createOutboxBacklogRule } from './rules/outbox-backlog.rule.js';
 import { createHl7DeadLetterRule } from './rules/hl7-dead-letter.rule.js';
 import { createMinorConsentTransitionRule } from './rules/minor-consent-transition.rule.js';
+import { createBreakglassReviewRule } from './rules/breakglass-review.rule.js';
 
 /**
  * Every rule here queries a genuinely cross-tenant or global table (`backup_runs`, `outbox_events`,
@@ -302,6 +303,59 @@ describe('alerting rules + repository (integration)', () => {
       const strictRule = createMinorConsentTransitionRule({ ageThresholdYears: 21 });
       const findings = await strictRule.evaluate(handle.ownerDb);
       expect(findings.some((f) => f.dedupeKey === grantId)).toBe(false);
+    });
+  });
+
+  describe('createBreakglassReviewRule', () => {
+    async function createPatientForBreakglass(): Promise<string> {
+      const patient = await handle.ownerDb
+        .insertInto('patients')
+        .values({
+          tenant_id: handle.seed.tenantA.tenantId,
+          given_name: 'Breakglass',
+          family_name: `Review-${randomUUID()}`,
+          date_of_birth: '1985-01-01',
+          status: 'active',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      return patient.id;
+    }
+
+    async function createGrant(opts: { reviewedAt?: Date | null } = {}): Promise<{ id: string; patientId: string }> {
+      const patientId = await createPatientForBreakglass();
+      const grant = await handle.ownerDb
+        .insertInto('breakglass_grants')
+        .values({
+          tenant_id: handle.seed.tenantA.tenantId,
+          user_id: handle.seed.tenantA.adminUserId,
+          patient_id: patientId,
+          reason_code: 'emergency_treatment',
+          justification: 'Integration test grant.',
+          expires_at: new Date(Date.now() + 3600_000),
+          reviewed_at: opts.reviewedAt ?? null,
+          status: 'active',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      return { id: grant.id, patientId };
+    }
+
+    it('flags an un-reviewed grant', async () => {
+      const { id } = await createGrant();
+      const rule = createBreakglassReviewRule();
+      const findings = await rule.evaluate(handle.ownerDb);
+      const found = findings.find((f) => f.dedupeKey === id);
+      expect(found).toBeDefined();
+      expect(found?.severity).toBe('critical');
+      expect(found?.tenantId).toBe(handle.seed.tenantA.tenantId);
+    });
+
+    it('does not flag a grant that has already been reviewed', async () => {
+      const { id } = await createGrant({ reviewedAt: new Date() });
+      const rule = createBreakglassReviewRule();
+      const findings = await rule.evaluate(handle.ownerDb);
+      expect(findings.some((f) => f.dedupeKey === id)).toBe(false);
     });
   });
 

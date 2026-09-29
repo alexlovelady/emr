@@ -6,3 +6,4 @@ export { createBackupHealthRule, type BackupHealthRuleOptions } from './rules/ba
 export { createOutboxBacklogRule, type OutboxBacklogRuleOptions } from './rules/outbox-backlog.rule.js';
 export { createHl7DeadLetterRule, type Hl7DeadLetterRuleOptions } from './rules/hl7-dead-letter.rule.js';
 export { createMinorConsentTransitionRule, type MinorConsentTransitionRuleOptions } from './rules/minor-consent-transition.rule.js';
+export { createBreakglassReviewRule } from './rules/breakglass-review.rule.js';

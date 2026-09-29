@@ -14,6 +14,7 @@ function buildRow(overrides: Partial<ProblemRow> = {}): ProblemRow {
     clinicalStatus: 'active',
     onsetDate: '2024-01-15',
     notes: null,
+    sensitivity: null,
     status: 'active',
     metadata: {},
     createdAt: new Date(),

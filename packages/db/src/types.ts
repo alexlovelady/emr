@@ -210,6 +210,8 @@ export interface ProblemsTable extends CommonColumnsTable {
   clinical_status: Generated<string>;
   onset_date: Timestamp | null;
   notes: string | null;
+  /** Item 22 layer 5's tag mechanism — see migration 0055's doc comment. */
+  sensitivity: string | null;
 }
 
 export interface AllergiesTable extends CommonColumnsTable {
@@ -454,6 +456,20 @@ export interface PrescriptionRefillRequestsTable extends CommonColumnsTable {
   responded_at: Timestamp | null;
   responded_by: string | null;
   denial_reason: string | null;
+}
+
+/** Item 22 layer 8 — see migration 0056's doc comment. */
+export interface BreakglassGrantsTable extends CommonColumnsTable {
+  user_id: string;
+  patient_id: string;
+  reason_code: string;
+  justification: string;
+  granted_at: GeneratedTimestamp;
+  expires_at: Timestamp;
+  revoked_at: Timestamp | null;
+  revoked_by: string | null;
+  reviewed_at: Timestamp | null;
+  reviewed_by: string | null;
 }
 
 /** Global system table (no tenant_id RLS) — see migration 0053's doc comment. `tenant_id` is an
@@ -885,6 +901,7 @@ export interface DB {
   diagnostic_reports: DiagnosticReportsTable;
   hl7_messages: Hl7MessagesTable;
   alerts: AlertsTable;
+  breakglass_grants: BreakglassGrantsTable;
   external_candidates: ExternalCandidatesTable;
   smart_clients: SmartClientsTable;
   smart_authorization_codes: SmartAuthorizationCodesTable;

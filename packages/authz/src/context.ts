@@ -35,4 +35,10 @@ export interface AuthzDecision {
   allowed: boolean;
   /** Name of the layer that produced a DENY, or (on a default-deny) the layer that had to grant. */
   deniedBy?: string;
+  /** True when this ALLOW only happened because an active break-glass grant (layer 8) overrode a
+   * contextual DENY from layers 4-7 — see `PolicyEngine.authorize()`'s doc comment. Callers (e.g.
+   * `AuthzInterceptor`) can use this to emit a more prominent audit trail for the request. */
+  breakGlass?: boolean;
+  /** The specific layer whose DENY was overridden, only set when `breakGlass` is true. */
+  overrodeDeny?: string;
 }

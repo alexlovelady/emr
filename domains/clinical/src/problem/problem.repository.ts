@@ -12,6 +12,7 @@ export interface ProblemRow {
   clinicalStatus: string;
   onsetDate: string | null;
   notes: string | null;
+  sensitivity: string | null;
   status: string;
   metadata: Record<string, unknown>;
   createdAt: Date;
@@ -33,6 +34,7 @@ export class ProblemRepository {
       displayName: string;
       onsetDate: string | null;
       notes: string | null;
+      sensitivity: string | null;
       createdBy: string;
     },
   ): Promise<ProblemRow> {
@@ -48,6 +50,7 @@ export class ProblemRepository {
         clinical_status: 'active',
         onset_date: input.onsetDate,
         notes: input.notes,
+        sensitivity: input.sensitivity,
         status: 'active',
         created_by: input.createdBy,
         updated_by: input.createdBy,
@@ -123,6 +126,7 @@ function toRow(dbRow: Selectable<DB['problems']>): ProblemRow {
     clinicalStatus: dbRow.clinical_status,
     onsetDate: formatDate(dbRow.onset_date),
     notes: dbRow.notes,
+    sensitivity: dbRow.sensitivity,
     status: dbRow.status,
     metadata: dbRow.metadata,
     createdAt: dbRow.created_at,

@@ -95,6 +95,13 @@ export const PERMISSION_KEYS = {
   AI_GENERATION_MANAGE: 'ai_generation.manage',
   SECURITY_KEY_ROTATE: 'security.key_rotate',
   ALERT_MANAGE: 'alert.manage',
+  /** Item 22 layer 4 (resource-relationship): opt-in, narrower than `PATIENT_READ_CLINICAL` — a
+   * role granted THIS key instead can only read a patient's clinical data when the requesting
+   * practitioner has a documented encounter/appointment relationship with that patient (see
+   * `packages/authz/src/layers/resource-relationship.layer.ts`). No seeded role uses it; it exists
+   * for a tenant admin to assign to a narrower role (e.g. a locum/resident) if they choose to. */
+  PATIENT_READ_CARE_TEAM_SCOPED: 'patient.read.care_team_scoped',
+  BREAKGLASS_REVIEW: 'breakglass.review',
 } as const;
 
 export interface SeededTenant {

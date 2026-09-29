@@ -43,6 +43,7 @@ export class ProblemService {
       displayName: input.displayName,
       onsetDate: input.onsetDate ?? null,
       notes: input.notes ?? null,
+      sensitivity: input.sensitivity ?? null,
       createdBy: actorId ?? ctx.tenantId,
     });
 

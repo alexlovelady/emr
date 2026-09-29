@@ -4,14 +4,12 @@ export { PolicyEngine, DEFAULT_LAYERS } from './policy-engine.js';
 export { tenantMembershipLayer } from './layers/tenant-membership.layer.js';
 export { userStatusLayer } from './layers/user-status.layer.js';
 export { rolePermissionLayer, ROLE_PERMISSION_LAYER_NAME } from './layers/role-permission.layer.js';
+export { resourceRelationshipLayer } from './layers/resource-relationship.layer.js';
+export { purposeSensitivityLayer } from './layers/purpose-sensitivity.layer.js';
+export { breakGlassLayer, BREAK_GLASS_LAYER_NAME } from './layers/break-glass.layer.js';
 export { getEffectivePermissions } from './effective-permissions.js';
-export {
-  resourceRelationshipLayer,
-  purposeSensitivityLayer,
-  consentProxyLayer,
-  stateSpecialLawLayer,
-  breakGlassLayer,
-} from './layers/stub-layers.js';
+export { consentProxyLayer, stateSpecialLawLayer } from './layers/stub-layers.js';
+export { BreakglassGrantRepository, type BreakglassGrantRow } from './breakglass/breakglass.repository.js';
 export {
   RequirePermission,
   SkipAuthz,

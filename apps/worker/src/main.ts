@@ -14,6 +14,7 @@ import {
   createOutboxBacklogRule,
   createHl7DeadLetterRule,
   createMinorConsentTransitionRule,
+  createBreakglassReviewRule,
 } from '@ehr/alerting';
 import { S3ObjectStorageGateway } from '@ehr/object-storage';
 import { startTracing, createLogger, getMetrics } from '@ehr/observability';
@@ -115,6 +116,7 @@ async function main(): Promise<void> {
       createOutboxBacklogRule({ lagThresholdSeconds: env.ALERT_OUTBOX_LAG_THRESHOLD_SECONDS }),
       createHl7DeadLetterRule({ countThreshold: env.ALERT_HL7_DEAD_LETTER_THRESHOLD }),
       createMinorConsentTransitionRule({ ageThresholdYears: env.ALERT_MINOR_CONSENT_AGE_THRESHOLD_YEARS }),
+      createBreakglassReviewRule(),
     ],
     new NoopNotificationGateway(),
     undefined,

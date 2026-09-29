@@ -11,6 +11,15 @@ function asUuidOrGenerate(value: string | undefined): string {
   return value && UUID_RE.test(value) ? value : randomUUID();
 }
 
+/** Item 22 layer 5's "purpose of use" signal — a real HIPAA minimum-necessary concept, not
+ * per-category legal content (see `purpose-sensitivity.layer.ts`'s doc comment). An absent or
+ * unrecognized value is simply left unset, which `purpose-sensitivity.layer.ts` treats the same as
+ * "treatment" (never vetoes) — this header is additive, never a new way to fail a request. */
+const KNOWN_PURPOSES = new Set(['treatment', 'payment', 'operations']);
+function purposeOfUse(value: string | undefined): string | undefined {
+  return value !== undefined && KNOWN_PURPOSES.has(value) ? value : undefined;
+}
+
 /**
  * Registered as a Fastify `onRequest` hook in main.ts — deliberately NOT a Nest `NestMiddleware`
  * (the `MiddlewareConsumer`/`NestModule` abstraction). Under `@nestjs/platform-fastify`, Nest's
@@ -34,12 +43,14 @@ export function attachEhrContext(keyRingStore: KeyRingStore, env: Pick<Env, 'JWT
     const requestId = asUuidOrGenerate(req.headers['x-request-id'] as string | undefined);
     const correlationId = asUuidOrGenerate((req.headers['x-correlation-id'] as string | undefined) ?? requestId);
 
+    const purpose = purposeOfUse(req.headers['x-purpose-of-use'] as string | undefined);
     req.ehrContext = {
       tenantId: '',
       requestId,
       correlationId,
       ip: req.ip,
       ...(req.headers['user-agent'] !== undefined ? { userAgent: req.headers['user-agent'] } : {}),
+      ...(purpose !== undefined ? { purpose } : {}),
     };
 
     const authHeader = req.headers.authorization;
