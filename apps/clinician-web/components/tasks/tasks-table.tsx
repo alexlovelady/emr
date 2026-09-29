@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useTransition } from 'react';
+import { useOptimistic, useTransition } from 'react';
 import { toast } from 'sonner';
 import { ListChecks } from 'lucide-react';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
@@ -19,15 +19,28 @@ const PRIORITY_VARIANT: Record<Task['priority'], 'outline' | 'warning' | 'destru
   urgent: 'destructive',
 };
 
+/**
+ * Item 26 — was a single shared `isPending` disabling every row's buttons while ANY one row's
+ * action was in flight, not just the row being acted on. `useOptimistic` over the task list fixes
+ * both problems at once: the acted-on row's status flips immediately (hiding its own action
+ * buttons, which also naturally prevents a double-click on that same row) while every other row
+ * stays fully interactive the whole time. `completeTask`/`cancelTask` already call
+ * `revalidatePath('/tasks')` on success, so once the transition settles the real server-rendered
+ * `tasks` prop already matches what was shown optimistically.
+ */
 export function TasksTable({ tasks }: { tasks: Task[] }) {
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
+  const [optimisticTasks, setOptimisticStatus] = useOptimistic(tasks, (state, update: { id: string; status: Task['status'] }) =>
+    state.map((t) => (t.id === update.id ? { ...t, status: update.status } : t)),
+  );
 
-  if (tasks.length === 0) {
+  if (optimisticTasks.length === 0) {
     return <EmptyState icon={ListChecks} message="No tasks — you're all caught up." />;
   }
 
-  function run(action: () => Promise<{ ok: boolean; error?: string }>) {
+  function run(taskId: string, nextStatus: Task['status'], action: () => Promise<{ ok: boolean; error?: string }>) {
     startTransition(async () => {
+      setOptimisticStatus({ id: taskId, status: nextStatus });
       const result = await action();
       if (!result.ok) toast.error(result.error);
     });
@@ -46,7 +59,7 @@ export function TasksTable({ tasks }: { tasks: Task[] }) {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {tasks.map((t) => (
+        {optimisticTasks.map((t) => (
           <TableRow key={t.id}>
             <TableCell className="font-medium">{t.title}</TableCell>
             <TableCell className="text-muted-foreground">{t.taskType.replace(/_/g, ' ')}</TableCell>
@@ -66,11 +79,11 @@ export function TasksTable({ tasks }: { tasks: Task[] }) {
             <TableCell>
               {t.status === 'open' && (
                 <div className="flex gap-1.5">
-                  <Button size="sm" variant="outline" disabled={isPending} onClick={() => run(() => completeTask(t.id))}>
+                  <Button size="sm" variant="outline" onClick={() => run(t.id, 'completed', () => completeTask(t.id))}>
                     Complete
                   </Button>
                   <ReassignTaskDialog taskId={t.id} />
-                  <Button size="sm" variant="ghost" disabled={isPending} onClick={() => run(() => cancelTask(t.id))}>
+                  <Button size="sm" variant="ghost" onClick={() => run(t.id, 'cancelled', () => cancelTask(t.id))}>
                     Cancel
                   </Button>
                 </div>

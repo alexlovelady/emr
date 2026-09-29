@@ -1207,6 +1207,44 @@ the documented gap was the delivery *format* (a bare JSON dump), not missing dat
   test:integration/test:tenant-isolation green (262 tasks) aside from the same known pre-existing
   `@ehr/query` flaky timeout.
 
+### Remaining-gaps build-out — optimistic UI (`useOptimistic`)
+
+Closes item 26, the last item of this build-out. Every interactive button across
+`apps/clinician-web`/`apps/admin-web`/`apps/patient-portal` followed the same shape: disable the
+control, await a Server Action round trip, then `router.refresh()` a full page-data reload — no
+optimistic UI anywhere. React 19 (already in use in all three apps) ships `useOptimistic` for
+free, so this needed no new dependency; it's the first use of that hook in this codebase (the team
+already reaches for React 19's `useActionState` in ~18 create-dialogs, just not `useOptimistic`
+yet). Converted one representative, low-risk, single-status-change interaction per app rather than
+a wholesale rewrite (~30 `useTransition` call sites exist across the two heavier apps):
+
+- **`apps/admin-web/components/billing-rules/toggle-rule-status-button.tsx`** — a boolean
+  active/inactive toggle now flips its own label instantly instead of waiting on the round trip.
+  `updateBillingRuleStatus` already calls `revalidatePath` on success, so `router.refresh()` was
+  redundant and is gone; on failure `useOptimistic` automatically reverts once the transition ends.
+- **`apps/clinician-web/components/tasks/tasks-table.tsx`** — fixed a real bug in passing: a
+  single shared `isPending` disabled every row's action buttons while ANY one row's action was in
+  flight, not just the row being acted on. `useOptimistic` over the task list flips the acted-on
+  row's status immediately (hiding just its own buttons) while every other row stays fully
+  interactive the whole time.
+- **`apps/patient-portal`** — replaced `CancelAppointmentButton` (which had zero visible effect on
+  the appointment's status badge until the full round trip completed) with a new
+  `components/appointments/appointment-row.tsx` that flips the status badge to "cancelled" and
+  hides the cancel action the instant confirm is clicked.
+- **Live-verified** against the running dev stack for all three: clicked each control and confirmed
+  the UI updated before a full round trip could plausibly complete, confirmed the real Server
+  Action POST fired and returned 200, and confirmed a hard page reload afterward showed the exact
+  same state the optimistic update had already shown (real persistence, not just local optimism).
+  For the tasks-table fix specifically, confirmed a second, unrelated open task's buttons stayed
+  fully enabled (`disabled: false`) the entire time the first task's completion was in flight,
+  proving the shared-pending bug is actually fixed. Full repo-wide build/lint/typecheck/test/
+  test:integration/test:tenant-isolation green aside from the two already-documented pre-existing
+  flakes (`@ehr/clinician-web`'s typecheck/`next build` Turbo race, `@ehr/query`'s tenant-isolation
+  timeout) — both confirmed passing standalone.
+
+This closes the "do all but vendor gated stuff" remaining-gaps build-out — all ~28 items are now
+either DONE or explicitly excluded as vendor/business-gated.
+
 ## Verification status
 
 Docker Desktop's backend would not start in the environment this was built in (its WSL2
