@@ -8,6 +8,7 @@ import type { AlertFinding } from './alert.types.js';
 import { createBackupHealthRule } from './rules/backup-health.rule.js';
 import { createOutboxBacklogRule } from './rules/outbox-backlog.rule.js';
 import { createHl7DeadLetterRule } from './rules/hl7-dead-letter.rule.js';
+import { createMinorConsentTransitionRule } from './rules/minor-consent-transition.rule.js';
 
 /**
  * Every rule here queries a genuinely cross-tenant or global table (`backup_runs`, `outbox_events`,
@@ -188,6 +189,119 @@ describe('alerting rules + repository (integration)', () => {
       const rule = createHl7DeadLetterRule({ countThreshold: 1_000_000 });
       const findings = await rule.evaluate(handle.ownerDb);
       expect(findings).toEqual([]);
+    });
+  });
+
+  describe('createMinorConsentTransitionRule', () => {
+    const tenantId = () => handle.seed.tenantA.tenantId;
+
+    async function createPatient(dateOfBirth: string): Promise<string> {
+      const patient = await handle.ownerDb
+        .insertInto('patients')
+        .values({
+          tenant_id: tenantId(),
+          given_name: 'Consent',
+          family_name: `Transition-${randomUUID()}`,
+          date_of_birth: dateOfBirth,
+          status: 'active',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      return patient.id;
+    }
+
+    async function createPortalAccount(): Promise<string> {
+      const account = await handle.ownerDb
+        .insertInto('portal_accounts')
+        .values({ tenant_id: tenantId(), email: `consent-test-${randomUUID()}@example.test`, password_hash: 'unused-in-this-test', status: 'active' })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      return account.id;
+    }
+
+    async function createProxyGrant(
+      patientId: string,
+      portalAccountId: string,
+      opts: { relationshipType?: string; effectiveEnd?: string | null } = {},
+    ): Promise<string> {
+      const grant = await handle.ownerDb
+        .insertInto('patient_proxy_grants')
+        .values({
+          tenant_id: tenantId(),
+          patient_id: patientId,
+          portal_account_id: portalAccountId,
+          relationship_type: opts.relationshipType ?? 'parent',
+          status: 'active',
+          effective_end: opts.effectiveEnd ?? null,
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      return grant.id;
+    }
+
+    it('flags an active non-self grant once the patient has reached the age threshold', async () => {
+      const dob = new Date();
+      dob.setUTCFullYear(dob.getUTCFullYear() - 20); // clearly past any reasonable threshold
+      const patientId = await createPatient(dob.toISOString().slice(0, 10));
+      const portalAccountId = await createPortalAccount();
+      const grantId = await createProxyGrant(patientId, portalAccountId);
+
+      const rule = createMinorConsentTransitionRule({ ageThresholdYears: 18 });
+      const findings = await rule.evaluate(handle.ownerDb);
+      const found = findings.find((f) => f.dedupeKey === grantId);
+
+      expect(found).toBeDefined();
+      expect(found?.tenantId).toBe(tenantId());
+      expect((found?.detail as { patientAge: number }).patientAge).toBeGreaterThanOrEqual(18);
+    });
+
+    it('does not flag a grant for a patient still below the age threshold', async () => {
+      const dob = new Date();
+      dob.setUTCFullYear(dob.getUTCFullYear() - 10); // clearly a minor
+      const patientId = await createPatient(dob.toISOString().slice(0, 10));
+      const portalAccountId = await createPortalAccount();
+      const grantId = await createProxyGrant(patientId, portalAccountId);
+
+      const rule = createMinorConsentTransitionRule({ ageThresholdYears: 18 });
+      const findings = await rule.evaluate(handle.ownerDb);
+      expect(findings.some((f) => f.dedupeKey === grantId)).toBe(false);
+    });
+
+    it('does not flag a self grant even past the age threshold', async () => {
+      const dob = new Date();
+      dob.setUTCFullYear(dob.getUTCFullYear() - 25);
+      const patientId = await createPatient(dob.toISOString().slice(0, 10));
+      const portalAccountId = await createPortalAccount();
+      const grantId = await createProxyGrant(patientId, portalAccountId, { relationshipType: 'self' });
+
+      const rule = createMinorConsentTransitionRule({ ageThresholdYears: 18 });
+      const findings = await rule.evaluate(handle.ownerDb);
+      expect(findings.some((f) => f.dedupeKey === grantId)).toBe(false);
+    });
+
+    it('does not flag a grant that has already expired', async () => {
+      const dob = new Date();
+      dob.setUTCFullYear(dob.getUTCFullYear() - 25);
+      const patientId = await createPatient(dob.toISOString().slice(0, 10));
+      const portalAccountId = await createPortalAccount();
+      const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+      const grantId = await createProxyGrant(patientId, portalAccountId, { effectiveEnd: yesterday });
+
+      const rule = createMinorConsentTransitionRule({ ageThresholdYears: 18 });
+      const findings = await rule.evaluate(handle.ownerDb);
+      expect(findings.some((f) => f.dedupeKey === grantId)).toBe(false);
+    });
+
+    it('respects a custom, higher age threshold', async () => {
+      const dob = new Date();
+      dob.setUTCFullYear(dob.getUTCFullYear() - 20);
+      const patientId = await createPatient(dob.toISOString().slice(0, 10));
+      const portalAccountId = await createPortalAccount();
+      const grantId = await createProxyGrant(patientId, portalAccountId);
+
+      const strictRule = createMinorConsentTransitionRule({ ageThresholdYears: 21 });
+      const findings = await strictRule.evaluate(handle.ownerDb);
+      expect(findings.some((f) => f.dedupeKey === grantId)).toBe(false);
     });
   });
 

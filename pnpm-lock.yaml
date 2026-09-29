@@ -891,6 +891,9 @@ importers:
 
   domains/claims:
     dependencies:
+      '@ehr/age-utils':
+        specifier: workspace:*
+        version: link:../../packages/age-utils
       '@ehr/api-contracts':
         specifier: workspace:*
         version: link:../../packages/api-contracts
@@ -1948,6 +1951,15 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@26.6.2)(supports-color@7.2.0)
 
+  packages/age-utils:
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@26.6.2)(supports-color@7.2.0)
+
   packages/ai-adapter:
     devDependencies:
       typescript:
@@ -1959,6 +1971,9 @@ importers:
 
   packages/alerting:
     dependencies:
+      '@ehr/age-utils':
+        specifier: workspace:*
+        version: link:../age-utils
       '@ehr/db':
         specifier: workspace:*
         version: link:../db

@@ -3,6 +3,7 @@ import type { DB } from '@ehr/db';
 import type { ChargeRow } from '@ehr/billing';
 import type { CoverageRow, PatientRow } from '@ehr/patient';
 import { TerminologyService } from '@ehr/terminology';
+import { ageInYears } from '@ehr/age-utils';
 
 type Executor = Kysely<DB> | Transaction<DB>;
 
@@ -133,13 +134,4 @@ function checkSexConflict(diagnosisCode: string, sexAtBirth: string | null): str
     if (rule.test(diagnosisCode) && rule.sex !== normalized) return rule.label;
   }
   return null;
-}
-
-function ageInYears(dateOfBirth: string, asOf: Date): number {
-  const dob = new Date(dateOfBirth);
-  let age = asOf.getUTCFullYear() - dob.getUTCFullYear();
-  const hadBirthdayThisYear =
-    asOf.getUTCMonth() > dob.getUTCMonth() || (asOf.getUTCMonth() === dob.getUTCMonth() && asOf.getUTCDate() >= dob.getUTCDate());
-  if (!hadBirthdayThisYear) age -= 1;
-  return age;
 }

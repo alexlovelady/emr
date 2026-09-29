@@ -974,6 +974,41 @@ question), these three are genuinely buildable with no vendor gate.
   28 unit tests, `domains/medication`'s new DTO-level dose-validation tests (8), and 4 new
   `domains/clinical` tenant-isolation tests covering the full note-staleness lifecycle.
 
+### Remaining-gaps build-out — minor/state-law consent transition mechanism
+
+Closes item 20 of the post-Tier-2 gap sweep, framed exactly as the gap itself: real state-by-state
+age-of-majority/age-of-consent legal RULE CONTENT is a business/legal-review question (already
+tracked in `docs/ecw-athena-parity-manual-action-items.md` as needing state-by-state counsel), but
+the MECHANISM for noticing a proxy grant needs review as a patient ages is a pure engineering
+problem with no vendor or legal gate. `domains/consent`'s own README and migration
+`0029_patient_proxy_grants.ts` already documented this split explicitly: "Minor/state-law consent
+transition rules are explicitly NOT computed here" — `effective_end` existed so staff *could*
+time-bound a grant manually, but nothing ever noticed when that mattered.
+
+- **New `packages/age-utils`** (`ageInYears()`) — pure arithmetic, no age-of-majority table or any
+  other legal content. Promoted out of `domains/claims`'s `scrub-claim.ts`, which had a private,
+  unshared copy of the exact same function for its newborn-diagnosis-code age check; both now use
+  the one shared implementation. 7 unit tests (including a leap-year birthday).
+- **New `minor_consent_transition` alert rule** (`packages/alerting`, following that package's own
+  established `AlertRule` pattern from item 18) — queries `patient_proxy_grants` joined to
+  `patients` across every tenant (the same owner-role cross-tenant pattern `hl7_dead_letter` already
+  uses), flags an active, non-self, not-yet-expired grant once `ageInYears(patient.dateOfBirth) >=`
+  a plain configurable `ALERT_MINOR_CONSENT_AGE_THRESHOLD_YEARS` (default 18 — an honest engineering
+  default for "flag this for a human," explicitly documented as never a legal conclusion). The rule
+  only detects and flags; it never auto-revokes or auto-extends anything — the actual decision
+  (revoke via the already-existing `POST /proxy-grants/:id/revoke`, extend `effectiveEnd`, or leave
+  it as clinically/legally appropriate) stays a human call, resolved the same way any other alert is
+  resolved (`POST /alerts/:id/resolve`, from item 18's admin-web Alerts page) once reviewed. Wired
+  into `apps/worker` alongside the other three alert rules.
+- **Live-verified** against the running dev stack: inserted a real patient (age 20, computed from a
+  real `date_of_birth`), a real portal account, and a real active `parent` proxy grant directly into
+  the dev database; confirmed the rule fired a real alert on `apps/worker`'s next evaluation tick,
+  correctly carrying the patient's tenant id and computed age in its detail. Full repo-wide
+  lint/typecheck/build and test/test:integration/test:tenant-isolation all green, including
+  `packages/age-utils`' 7 unit tests and 5 new integration tests for the rule (fires past threshold,
+  does not fire for a minor, does not fire for a self-grant, does not fire for an already-expired
+  grant, respects a custom higher threshold).
+
 ## Verification status
 
 Docker Desktop's backend would not start in the environment this was built in (its WSL2

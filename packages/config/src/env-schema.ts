@@ -86,6 +86,10 @@ export const envSchema = z.object({
   ALERT_BACKUP_STALE_THRESHOLD_MS: z.coerce.number().int().positive().default(2 * 86_400_000),
   ALERT_OUTBOX_LAG_THRESHOLD_SECONDS: z.coerce.number().int().positive().default(300),
   ALERT_HL7_DEAD_LETTER_THRESHOLD: z.coerce.number().int().positive().default(5),
+  // A plain engineering default for "flag this for staff review," NOT a real state-by-state
+  // age-of-majority/age-of-consent legal determination — see item 20 / minor-consent-transition
+  // rule's own doc comment.
+  ALERT_MINOR_CONSENT_AGE_THRESHOLD_YEARS: z.coerce.number().int().positive().default(18),
   // Empty (the default) disables notification dispatch — alerts are still evaluated/persisted and
   // readable via GET /api/v1/alerts either way; see AlertEvaluatorOptions.notifyEmail.
   ALERT_NOTIFY_EMAIL: z.string().optional().or(z.literal('')),

@@ -15,6 +15,11 @@ Self-access is just another grant (`relationship_type: 'self'`), auto-created by
 authorization code. `scope` exists as a real column but is not yet enforced per-category (any
 active grant currently grants full access). Minor/state-law consent transition rules are
 explicitly NOT computed here — see migration `0029_patient_proxy_grants.ts`'s doc comment.
+Item 20's `minor_consent_transition` alert rule (`packages/alerting`) DOES exist and runs in
+`apps/worker`, but it only detects/flags a non-self grant once the patient crosses a plain
+configurable age threshold — it never auto-revokes or auto-extends anything. The actual decision
+stays a human's call, made through this domain's existing `revoke()`/create endpoints once staff
+reviews the flagged alert.
 
 The staff-facing controller (`PROXY_GRANT_MANAGE` permission) covers create/list/revoke; portal
 accounts never manage their own grants through this API.

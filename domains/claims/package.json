@@ -13,6 +13,7 @@
     "test:tenant-isolation": "vitest run --config vitest.tenant-isolation.config.ts"
   },
   "dependencies": {
+    "@ehr/age-utils": "workspace:*",
     "@ehr/api-contracts": "workspace:*",
     "@ehr/audit": "workspace:*",
     "@ehr/authz": "workspace:*",

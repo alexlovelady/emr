@@ -7,7 +7,14 @@ import { DomainEventBus, OutboxRelay } from '@ehr/outbox';
 import { BulkExportRelay } from '@ehr/bulk-export';
 import { DatabaseBackupJob, BackupScheduler } from '@ehr/db-backup';
 import { NoopNotificationGateway } from '@ehr/notification-adapter';
-import { AlertEvaluator, AlertScheduler, createBackupHealthRule, createOutboxBacklogRule, createHl7DeadLetterRule } from '@ehr/alerting';
+import {
+  AlertEvaluator,
+  AlertScheduler,
+  createBackupHealthRule,
+  createOutboxBacklogRule,
+  createHl7DeadLetterRule,
+  createMinorConsentTransitionRule,
+} from '@ehr/alerting';
 import { S3ObjectStorageGateway } from '@ehr/object-storage';
 import { startTracing, createLogger, getMetrics } from '@ehr/observability';
 
@@ -107,6 +114,7 @@ async function main(): Promise<void> {
       createBackupHealthRule({ staleThresholdMs: env.ALERT_BACKUP_STALE_THRESHOLD_MS }),
       createOutboxBacklogRule({ lagThresholdSeconds: env.ALERT_OUTBOX_LAG_THRESHOLD_SECONDS }),
       createHl7DeadLetterRule({ countThreshold: env.ALERT_HL7_DEAD_LETTER_THRESHOLD }),
+      createMinorConsentTransitionRule({ ageThresholdYears: env.ALERT_MINOR_CONSENT_AGE_THRESHOLD_YEARS }),
     ],
     new NoopNotificationGateway(),
     undefined,

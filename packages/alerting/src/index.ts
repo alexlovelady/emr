@@ -5,3 +5,4 @@ export type { AlertFinding, AlertRule, AlertRow, AlertSeverity, AlertStatus } fr
 export { createBackupHealthRule, type BackupHealthRuleOptions } from './rules/backup-health.rule.js';
 export { createOutboxBacklogRule, type OutboxBacklogRuleOptions } from './rules/outbox-backlog.rule.js';
 export { createHl7DeadLetterRule, type Hl7DeadLetterRuleOptions } from './rules/hl7-dead-letter.rule.js';
+export { createMinorConsentTransitionRule, type MinorConsentTransitionRuleOptions } from './rules/minor-consent-transition.rule.js';

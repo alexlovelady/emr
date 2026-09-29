@@ -13,6 +13,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts --passWithNoTests"
   },
   "dependencies": {
+    "@ehr/age-utils": "workspace:*",
     "@ehr/db": "workspace:*",
     "@ehr/notification-adapter": "workspace:*",
     "kysely": "^0.28.17"
