@@ -19,6 +19,9 @@ export interface SmartTokenClaims {
   scope: string[];
   /** SMART launch context — set only for a token issued via the authorization_code grant. */
   patientId?: string;
+  /** SMART's optional `encounter` launch context (item 24, EHR launch only — standalone launch
+   * never has an encounter since the patient picks their own chart with no visit in progress). */
+  encounterId?: string;
 }
 
 export class InvalidSmartTokenError extends Error {}
@@ -35,6 +38,7 @@ export async function signSmartAccessToken(claims: SmartTokenClaims, keys: KeyMa
     tenant_id: claims.tenantId,
     scope: claims.scope.join(' '),
     ...(claims.patientId ? { patient: claims.patientId } : {}),
+    ...(claims.encounterId ? { encounter: claims.encounterId } : {}),
   })
     .setProtectedHeader({ alg: JWT_ALG, kid: keys.kid })
     .setSubject(claims.clientId)
@@ -64,5 +68,6 @@ export async function verifySmartAccessToken(
     tenantId: payload.tenant_id,
     scope: payload.scope.split(' ').filter(Boolean),
     ...(typeof payload.patient === 'string' ? { patientId: payload.patient } : {}),
+    ...(typeof payload.encounter === 'string' ? { encounterId: payload.encounter } : {}),
   };
 }

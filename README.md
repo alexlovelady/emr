@@ -1117,6 +1117,51 @@ SAML/OIDC verifier is plugged in.
   (`@ehr/query`'s tenant-isolation reindex test hitting its known pre-existing 5-second timeout under
   heavy concurrent load) passed cleanly in isolation, confirming it's unrelated.
 
+### Remaining-gaps build-out — SMART EHR launch
+
+Closes item 24. Migration 0049 already deliberately deferred this ("EHR launch... needs to be
+embedded inside a host EHR's own UI with a launch-context token — a different, larger feature");
+this closes it now that the rest of the launch machinery (standalone launch, key rotation, bulk
+`$export`) already exists.
+
+- **`packages/db/migrations/0059_smart_client_launch_uri.ts`** (new) — a nullable `launch_uri` on
+  `smart_clients`: the URL the EHR redirects a clinician's browser to when starting a launch. Null
+  means a client simply isn't EHR-launchable — every client seeded before this item is unaffected.
+- **`packages/db/migrations/0060_smart_ehr_launch.ts`** (new) — new `smart_launch_contexts` table
+  (tenant-scoped, RLS-enabled), keyed by an opaque `launch` id; `smart_authorization_codes` gains
+  optional `encounter_id`/`launched_by_user_id` and `portal_account_id` becomes nullable (an
+  EHR-launch code has no portal account at all).
+- **New `POST /api/v1/patients/:id/smart-launch`** (`apps/api`) — a clinician viewing a patient's
+  chart mints a launch context (gated on `PATIENT_READ_CLINICAL`, same reasoning `POST
+  /practitioners/names` used: handing a registered app the same context a clinician already has
+  legitimate read access to grants nothing new) and gets back the app's `launch_uri` with `iss`/
+  `launch` query params to navigate to. New `GET /api/v1/smart-clients` lists which clients are
+  EHR-launchable for the caller's tenant.
+- **`AuthorizeController`'s new `launch`-param branch** (`apps/interop-fhir`) — when the app's own
+  `/authorize` request carries `launch`, this validates `aud` matches the FHIR base URL (per spec),
+  resolves the single-use launch context, checks requested scopes against the client's allowlist,
+  and mints a `smart_authorization_codes` row directly — skipping `apps/patient-portal`'s consent/
+  picker UI entirely, since the context is already fixed by the EHR and the clinician already had
+  legitimate access to it. From there, token exchange is identical to standalone launch: the same
+  `TokenService`/PKCE/single-use-code machinery, now also propagating an optional `encounter` claim
+  end to end (`smart-token.ts`, the token response, `apps/api`'s originating endpoint).
+- **`.well-known/smart-configuration`** now declares `launch-ehr` alongside `launch-standalone`,
+  and lists the `launch` scope.
+- **Live-verified** against the running dev stack, playing both sides of a real EHR launch: minted
+  a launch context from a patient's chart via `POST .../smart-launch`, fed the returned `launch` id
+  into a real `GET /authorize` call (as a third-party app would), confirmed it redirected straight
+  back with a code with no consent step, exchanged that code at `/token` and confirmed the access
+  token's `patient` claim matched the chart it was launched from, used that token to fetch the real
+  FHIR `Patient` resource, and confirmed replaying the same `launch` id a second time is rejected
+  (single-use). Also clicked the new "Launch app" button on a real patient chart in
+  `apps/clinician-web` and confirmed it triggers the same mechanism (a genuine cross-origin
+  navigation attempt to the registered `launch_uri`). 18 new/updated integration tests
+  (`apps/interop-fhir`, real Postgres): `aud` mismatch, unknown/expired/already-consumed launch
+  contexts, disallowed scope, a full successful launch-to-code-to-token walkthrough, and encounter
+  context propagating through to both the code and the signed token. Full repo-wide build/lint/
+  typecheck/test/test:integration/test:tenant-isolation green aside from the same known pre-existing
+  `@ehr/query` flaky timeout (confirmed passing in isolation).
+
 ## Verification status
 
 Docker Desktop's backend would not start in the environment this was built in (its WSL2

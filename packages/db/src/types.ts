@@ -537,16 +537,33 @@ export interface SmartClientsTable extends CommonColumnsTable {
   allowed_scopes: string[];
   redirect_uris: Generated<string[]>;
   client_type: Generated<string>;
+  /** Item 24 — see migration 0059's doc comment. Null means this client isn't EHR-launchable. */
+  launch_uri: string | null;
 }
 
 export interface SmartAuthorizationCodesTable extends CommonColumnsTable {
   client_id: string;
   patient_id: string;
-  portal_account_id: string;
+  /** Null for an EHR-launch code (see `launched_by_user_id` instead) — see migration 0060. */
+  portal_account_id: string | null;
   scope: string;
   redirect_uri: string;
   code_challenge: string;
   code_challenge_method: string;
+  expires_at: Timestamp;
+  consumed_at: Timestamp | null;
+  /** Item 24 — SMART's optional `encounter` launch context. */
+  encounter_id: string | null;
+  /** Item 24 — the clinician who triggered an EHR launch; null for a standalone-launch code. */
+  launched_by_user_id: string | null;
+}
+
+/** Item 24 — see migration 0060's doc comment. */
+export interface SmartLaunchContextsTable extends CommonColumnsTable {
+  client_id: string;
+  patient_id: string;
+  encounter_id: string | null;
+  user_id: string;
   expires_at: Timestamp;
   consumed_at: Timestamp | null;
 }
@@ -924,6 +941,7 @@ export interface DB {
   external_candidates: ExternalCandidatesTable;
   smart_clients: SmartClientsTable;
   smart_authorization_codes: SmartAuthorizationCodesTable;
+  smart_launch_contexts: SmartLaunchContextsTable;
   bulk_export_jobs: BulkExportJobsTable;
   ai_rate_limit_counters: AiRateLimitCountersTable;
   backup_runs: BackupRunsTable;

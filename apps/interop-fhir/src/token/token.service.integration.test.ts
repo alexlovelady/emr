@@ -204,6 +204,87 @@ describe('SMART authorization_code grant + PKCE', () => {
     expect(claims.scope).toEqual(['patient/Patient.read']);
   });
 
+  it('item 24: an EHR-launch code carrying an encounter_id issues a token with the encounter launch-context claim', async () => {
+    const verifier = 'a-real-code-verifier-with-enough-entropy-ehr-launch';
+    const ctxA = handle.seed.tenantA;
+    const encounterId = await withTenantContext(handle.db, ctxA.tenantId, async (trx) => {
+      const workforceIdentity = await trx
+        .insertInto('workforce_identities')
+        .values({ tenant_id: ctxA.tenantId, user_id: ctxA.staffUserId, organization_id: ctxA.organizationId, status: 'active' })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const practitioner = await trx
+        .insertInto('practitioners')
+        .values({ tenant_id: ctxA.tenantId, workforce_identity_id: workforceIdentity.id, display_name: 'Dr. Token Test', status: 'active' })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const appointment = await trx
+        .insertInto('appointments')
+        .values({
+          tenant_id: ctxA.tenantId,
+          patient_id: patientId,
+          location_id: ctxA.locationId,
+          practitioner_id: practitioner.id,
+          appointment_type: 'office_visit',
+          scheduled_start: new Date(Date.now() + 3600_000),
+          scheduled_end: new Date(Date.now() + 7200_000),
+          status: 'checked_in',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const encounter = await trx
+        .insertInto('encounters')
+        .values({
+          tenant_id: ctxA.tenantId,
+          patient_id: patientId,
+          appointment_id: appointment.id,
+          location_id: ctxA.locationId,
+          practitioner_id: practitioner.id,
+          encounter_type: 'office_visit',
+          status: 'roomed',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      return encounter.id;
+    });
+
+    const code = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      trx
+        .insertInto('smart_authorization_codes')
+        .values({
+          tenant_id: ctxA.tenantId,
+          client_id: ctxA.smartClientId,
+          patient_id: patientId,
+          encounter_id: encounterId,
+          launched_by_user_id: ctxA.staffUserId,
+          portal_account_id: null,
+          scope: 'launch patient/Patient.read',
+          redirect_uri: REDIRECT_URI,
+          code_challenge: challengeFor(verifier),
+          code_challenge_method: 'S256',
+          expires_at: new Date(Date.now() + 5 * 60_000),
+          status: 'issued',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow(),
+    ).then((r) => r.id);
+
+    const service = new TokenService(handle.ownerDb, keyRingStore, TEST_ENV_CONFIG);
+    const response = await service.issueToken({
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: REDIRECT_URI,
+      client_id: ctxA.smartClientId,
+      client_secret: DEV_SMART_CLIENT_SECRET,
+      code_verifier: verifier,
+    });
+
+    expect(response.patient).toBe(patientId);
+    expect(response.encounter).toBe(encounterId);
+    const claims = await verifySmartAccessToken(response.access_token, keys.publicKey, TEST_VERIFY_CONFIG);
+    expect(claims.encounterId).toBe(encounterId);
+  });
+
   it('rejects a mismatched PKCE code_verifier', async () => {
     const code = await insertCode({ codeChallenge: challengeFor('the-real-verifier') });
     const service = new TokenService(handle.ownerDb, keyRingStore, TEST_ENV_CONFIG);

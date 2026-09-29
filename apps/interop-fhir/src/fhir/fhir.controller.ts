@@ -50,11 +50,13 @@ export class FhirController {
   }
 
   /**
-   * SMART App Launch's discovery document, published relative to the FHIR base URL per spec.
-   * Standalone launch only (no EHR launch — that needs to be embedded inside a host EHR's own UI
-   * with a launch-context token, a different, larger feature); the interactive consent/patient-
-   * picker UI itself lives in `apps/patient-portal`'s `/smart/authorize` page, not here — see
-   * `AuthorizeController`'s doc comment for the full split.
+   * SMART App Launch's discovery document, published relative to the FHIR base URL per spec. Both
+   * launch types now work: standalone launch's interactive consent/patient-picker UI lives in
+   * `apps/patient-portal`'s `/smart/authorize` page; EHR launch (item 24) originates from
+   * `apps/api`'s `POST .../patients/:id/smart-launch` and is resolved directly by
+   * `AuthorizeController`'s `launch`-param branch, with no picker step (the clinician already
+   * fixed the context and already had access) — see that controller's doc comment for the full
+   * split.
    */
   @Get('.well-known/smart-configuration')
   smartConfiguration(): Record<string, unknown> {
@@ -67,6 +69,7 @@ export class FhirController {
       grant_types_supported: ['client_credentials', 'authorization_code'],
       code_challenge_methods_supported: ['S256'],
       scopes_supported: [
+        'launch',
         'patient/Patient.read',
         'patient/Observation.read',
         'patient/Encounter.read',
@@ -81,6 +84,7 @@ export class FhirController {
         'client-confidential-symmetric',
         'client-public',
         'launch-standalone',
+        'launch-ehr',
         'permission-patient',
         'permission-v2',
       ],

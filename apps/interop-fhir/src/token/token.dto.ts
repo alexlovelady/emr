@@ -31,4 +31,7 @@ export interface TokenResponse {
   scope: string;
   /** SMART launch context — present only for an authorization_code exchange. */
   patient?: string;
+  /** SMART's optional `encounter` launch context — present only for an EHR-launch code that
+   * carried one (item 24). */
+  encounter?: string;
 }

@@ -112,7 +112,13 @@ export class TokenService {
 
     const scope = code.scope.split(' ').filter(Boolean);
     const accessToken = await signSmartAccessToken(
-      { tenantId: code.tenant_id, clientId: client.client_id, scope, patientId: code.patient_id },
+      {
+        tenantId: code.tenant_id,
+        clientId: client.client_id,
+        scope,
+        patientId: code.patient_id,
+        ...(code.encounter_id ? { encounterId: code.encounter_id } : {}),
+      },
       getCurrentKey(this.keyRingStore.get()),
       { issuer: this.env.JWT_ISSUER, audience: this.env.JWT_AUDIENCE, ttlSeconds: this.env.ACCESS_TOKEN_TTL_SECONDS },
     );
@@ -123,6 +129,7 @@ export class TokenService {
       expires_in: this.env.ACCESS_TOKEN_TTL_SECONDS,
       scope: code.scope,
       patient: code.patient_id,
+      ...(code.encounter_id ? { encounter: code.encounter_id } : {}),
     };
   }
 }

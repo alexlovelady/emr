@@ -16,6 +16,8 @@ import type { DB } from './types.js';
 export const DEV_PASSWORD = 'Dev-Passw0rd!';
 export const DEV_SMART_CLIENT_SECRET = 'Dev-Smart-Client-Secr3t!';
 export const DEV_SMART_CLIENT_REDIRECT_URIS = ['https://example-smart-app.test/callback'];
+/** Item 24 — where the EHR redirects to start an EHR launch for the seeded test client. */
+export const DEV_SMART_CLIENT_LAUNCH_URI = 'https://example-smart-app.test/launch';
 export const DEV_SMART_CLIENT_SCOPES = [
   'patient/Patient.read',
   'patient/Observation.read',
@@ -25,6 +27,7 @@ export const DEV_SMART_CLIENT_SCOPES = [
   'patient/MedicationRequest.read',
   'patient/DocumentReference.read',
   'system/*.read',
+  'launch',
 ];
 
 export const SYSTEM_ROLE_KEYS = {
@@ -242,6 +245,7 @@ async function seedTenant(
       display_name: `${opts.name} SMART Test Client`,
       allowed_scopes: DEV_SMART_CLIENT_SCOPES,
       redirect_uris: DEV_SMART_CLIENT_REDIRECT_URIS,
+      launch_uri: DEV_SMART_CLIENT_LAUNCH_URI,
       status: 'active',
     })
     .onConflict((oc) =>
@@ -249,6 +253,7 @@ async function seedTenant(
         client_secret_hash: opts.smartClientSecretHash,
         allowed_scopes: DEV_SMART_CLIENT_SCOPES,
         redirect_uris: DEV_SMART_CLIENT_REDIRECT_URIS,
+        launch_uri: DEV_SMART_CLIENT_LAUNCH_URI,
       }),
     )
     .execute();

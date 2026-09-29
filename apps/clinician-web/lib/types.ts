@@ -640,6 +640,14 @@ export interface ExternalCandidate {
   createdAt: string;
 }
 
+/** Item 24 — a registered third-party app the current tenant can launch from a patient's chart. */
+export interface LaunchableSmartClient {
+  id: string;
+  clientId: string;
+  displayName: string;
+  launchUri: string;
+}
+
 export interface PriorAuthorization {
   id: string;
   patientId: string;

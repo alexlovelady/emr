@@ -1,6 +1,7 @@
 import { callBackend, callBackendOr } from '@/lib/api-proxy';
 import { PatientBanner } from '@/components/chart/patient-banner';
 import { ChartTabs } from '@/components/chart/chart-tabs';
+import { LaunchAppMenu } from '@/components/chart/launch-app-menu';
 import type {
   Patient,
   Problem,
@@ -26,6 +27,7 @@ import type {
   Referral,
   PriorAuthorization,
   ExternalCandidate,
+  LaunchableSmartClient,
 } from '@/lib/types';
 
 export default async function PatientChartPage({ params }: { params: Promise<{ id: string }> }) {
@@ -55,6 +57,7 @@ export default async function PatientChartPage({ params }: { params: Promise<{ i
     externalCandidates,
     denials,
     appeals,
+    launchableApps,
   ] = await Promise.all([
     callBackend<Patient>(`/api/v1/patients/${id}`),
     callBackend<Problem[]>(`/api/v1/patients/${id}/problems`),
@@ -79,6 +82,7 @@ export default async function PatientChartPage({ params }: { params: Promise<{ i
     callBackendOr<ExternalCandidate[]>(`/api/v1/patients/${id}/external-candidates`, []),
     callBackendOr<Denial[]>(`/api/v1/patients/${id}/denials`, []),
     callBackendOr<Appeal[]>(`/api/v1/patients/${id}/appeals`, []),
+    callBackendOr<LaunchableSmartClient[]>('/api/v1/smart-clients', []),
   ]);
 
   // The list endpoint returns bare plans (no installments) — same N+1-via-detail pattern as claim
@@ -90,6 +94,7 @@ export default async function PatientChartPage({ params }: { params: Promise<{ i
   return (
     <div className="space-y-5">
       <PatientBanner patient={patient} allergies={allergies} />
+      <LaunchAppMenu patientId={id} apps={launchableApps} />
       <ChartTabs
         patientId={id}
         problems={problems}
