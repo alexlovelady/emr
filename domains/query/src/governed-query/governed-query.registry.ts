@@ -37,6 +37,10 @@ const QualityMeasureAnnualWellnessVisitParams = z.object({
   lookbackDays: z.number().int().min(1).max(1000).default(365),
 });
 
+const AiGenerationQualityByFeatureParams = z.object({
+  since: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(),
+});
+
 /** LOINC code for Hemoglobin A1c — same code the cohort compiler's `latest_hba1c` measure uses. */
 const HBA1C_LOINC_CODE = '4548-4';
 
@@ -261,6 +265,70 @@ export const GOVERNED_QUERIES: Record<string, GovernedQueryDefinition> = {
       const denominator = Number(row.denominator);
       const numerator = Number(row.numerator);
       return { denominator, numerator, rate: denominator === 0 ? null : numerator / denominator, lookbackDays: params.lookbackDays };
+    },
+  },
+  /**
+   * The AI eval/quality telemetry harness this repo never had: `ai_generations.status` (set only
+   * by a human reviewer via AiGenerationService.accept()/reject()) is the one real signal this
+   * system has for "was this output actually good" — no LLM vendor exists to score outputs itself
+   * (docs/adr/0004-deferred-ai-vendor.md), so human accept/edit/reject decisions are the ground
+   * truth. `accepted_with_edits` + `rejected` as a share of reviewed generations is a real, if
+   * rough, hallucination/quality-issue proxy: it's exactly the rate at which a clinician had to
+   * catch and fix or throw out what the model produced, per feature and per prompt template
+   * version — the natural axis for spotting a regression after a prompt change.
+   */
+  ai_generation_quality_by_feature: {
+    description:
+      'Per-feature/prompt-template AI generation outcomes (accepted/edited/rejected/pending) and derived rates — the human-review signal stands in for a real eval harness (no LLM vendor is connected to score outputs itself).',
+    paramsSchema: AiGenerationQualityByFeatureParams,
+    async run(trx, tenantId, rawParams) {
+      const params = AiGenerationQualityByFeatureParams.parse(rawParams);
+      const sinceFilter = params.since ? sql`and created_at >= ${new Date(params.since)}` : sql``;
+      const result = await sql<{
+        feature: string;
+        prompt_template_version: string;
+        total: string;
+        accepted: string;
+        accepted_with_edits: string;
+        rejected: string;
+        pending: string;
+      }>`
+        select
+          feature,
+          prompt_template_version,
+          count(*) as total,
+          count(*) filter (where status = 'accepted') as accepted,
+          count(*) filter (where status = 'accepted_with_edits') as accepted_with_edits,
+          count(*) filter (where status = 'rejected') as rejected,
+          count(*) filter (where status = 'pending') as pending
+        from ai_generations
+        where tenant_id = ${tenantId}
+        ${sinceFilter}
+        group by feature, prompt_template_version
+      `.execute(trx);
+
+      return result.rows
+        .map((r) => {
+          const total = Number(r.total);
+          const accepted = Number(r.accepted);
+          const acceptedWithEdits = Number(r.accepted_with_edits);
+          const rejected = Number(r.rejected);
+          const pending = Number(r.pending);
+          const reviewed = accepted + acceptedWithEdits + rejected;
+          return {
+            feature: r.feature,
+            promptTemplateVersion: r.prompt_template_version,
+            total,
+            accepted,
+            acceptedWithEdits,
+            rejected,
+            pending,
+            reviewed,
+            acceptanceRate: reviewed === 0 ? null : accepted / reviewed,
+            correctionRate: reviewed === 0 ? null : (acceptedWithEdits + rejected) / reviewed,
+          };
+        })
+        .sort((a, b) => a.feature.localeCompare(b.feature) || a.promptTemplateVersion.localeCompare(b.promptTemplateVersion));
     },
   },
 };

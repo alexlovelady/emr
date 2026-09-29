@@ -663,4 +663,68 @@ describe('tenant isolation — query platform', () => {
       withTenantContext(handle.db, ctxA.tenantId, (trx) => cohortService.exportExecution(trx, ctxA, execution.id)),
     ).rejects.toBeInstanceOf(ConflictError);
   });
+
+  it('ai_generation_quality_by_feature aggregates by feature+prompt version and derives rates', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    // A unique prompt_template_version per run sidesteps this shared, never-reset dev DB
+    // accumulating rows across test runs — this test's GROUP BY key is otherwise-unused, so
+    // exactly the 4 rows inserted here land in its result row.
+    const promptVersion = `test-v-${randomUUID()}`;
+    const statuses = ['accepted', 'accepted_with_edits', 'rejected', 'pending'];
+
+    await withTenantContext(handle.db, ctxA.tenantId, async (trx) => {
+      for (const status of statuses) {
+        await trx
+          .insertInto('ai_generations')
+          .values({
+            tenant_id: ctxA.tenantId,
+            feature: 'task_summary',
+            input_text: 'quality harness test',
+            model_provider: 'noop',
+            model_id: 'noop-deterministic-stub',
+            model_version: '1.0.0',
+            prompt_template_version: promptVersion,
+            output_text: 'stub output',
+            output_hash: 'deadbeef',
+            generated_at: new Date(),
+            status,
+            created_by: handle.seed.tenantA.adminUserId,
+            updated_by: handle.seed.tenantA.adminUserId,
+          })
+          .execute();
+      }
+    });
+
+    const rows = (await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      GOVERNED_QUERIES.ai_generation_quality_by_feature!.run(trx, ctxA.tenantId, {}),
+    )) as Array<{
+      feature: string;
+      promptTemplateVersion: string;
+      total: number;
+      accepted: number;
+      acceptedWithEdits: number;
+      rejected: number;
+      pending: number;
+      reviewed: number;
+      acceptanceRate: number | null;
+      correctionRate: number | null;
+    }>;
+    const row = rows.find((r) => r.promptTemplateVersion === promptVersion);
+    expect(row).toBeDefined();
+    expect(row?.feature).toBe('task_summary');
+    expect(row?.total).toBe(4);
+    expect(row?.accepted).toBe(1);
+    expect(row?.acceptedWithEdits).toBe(1);
+    expect(row?.rejected).toBe(1);
+    expect(row?.pending).toBe(1);
+    expect(row?.reviewed).toBe(3);
+    expect(row?.acceptanceRate).toBeCloseTo(1 / 3);
+    expect(row?.correctionRate).toBeCloseTo(2 / 3);
+
+    const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
+    const tenantBRows = (await withTenantContext(handle.db, ctxB.tenantId, (trx) =>
+      GOVERNED_QUERIES.ai_generation_quality_by_feature!.run(trx, ctxB.tenantId, {}),
+    )) as Array<{ promptTemplateVersion: string }>;
+    expect(tenantBRows.some((r) => r.promptTemplateVersion === promptVersion)).toBe(false);
+  });
 });

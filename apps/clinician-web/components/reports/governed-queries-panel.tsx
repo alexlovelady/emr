@@ -380,6 +380,104 @@ function QualityMeasureAnnualWellnessVisit({ query }: { query: GovernedQuery }) 
   );
 }
 
+interface AiGenerationQualityRow {
+  feature: string;
+  promptTemplateVersion: string;
+  total: number;
+  accepted: number;
+  acceptedWithEdits: number;
+  rejected: number;
+  pending: number;
+  reviewed: number;
+  acceptanceRate: number | null;
+  correctionRate: number | null;
+}
+
+function pct(rate: number | null): string {
+  return rate === null ? '—' : `${(rate * 100).toFixed(1)}%`;
+}
+
+function AiGenerationQualityByFeature({ query }: { query: GovernedQuery }) {
+  const [since, setSince] = useState('');
+  const [result, setResult] = useState<AiGenerationQualityRow[] | undefined>(undefined);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function run() {
+    setPending(true);
+    setError(null);
+    const res = await executeGovernedQuery(query.name, { since: since || undefined });
+    setPending(false);
+    if (!res.ok) setError(res.error);
+    else setResult(res.data as AiGenerationQualityRow[]);
+  }
+
+  return (
+    <div className="space-y-3 rounded-md border border-border p-4">
+      <div>
+        <h3 className="text-sm font-semibold">{query.name.replace(/_/g, ' ')}</h3>
+        <p className="text-xs text-muted-foreground">{query.description}</p>
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="space-y-1.5">
+          <Label>Since (optional)</Label>
+          <Input type="date" value={since} onChange={(e) => setSince(e.target.value)} className="w-40" />
+        </div>
+        <Button type="button" size="sm" disabled={pending} onClick={run}>
+          {pending ? 'Running…' : 'Run'}
+        </Button>
+      </div>
+      {error && <Alert variant="destructive">{error}</Alert>}
+      {result && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                <th className="py-1.5 pr-4 font-medium">Feature</th>
+                <th className="py-1.5 pr-4 font-medium">Prompt version</th>
+                <th className="py-1.5 pr-4 font-medium">Total</th>
+                <th className="py-1.5 pr-4 font-medium">Accepted</th>
+                <th className="py-1.5 pr-4 font-medium">Edited</th>
+                <th className="py-1.5 pr-4 font-medium">Rejected</th>
+                <th className="py-1.5 pr-4 font-medium">Pending</th>
+                <th className="py-1.5 pr-4 font-medium">Acceptance rate</th>
+                <th className="py-1.5 font-medium">Correction rate</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {result.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="py-3 text-center text-muted-foreground">
+                    No AI generations yet.
+                  </td>
+                </tr>
+              ) : (
+                result.map((row) => (
+                  <tr key={`${row.feature}-${row.promptTemplateVersion}`}>
+                    <td className="py-1.5 pr-4">{row.feature}</td>
+                    <td className="py-1.5 pr-4">{row.promptTemplateVersion}</td>
+                    <td className="py-1.5 pr-4">{row.total}</td>
+                    <td className="py-1.5 pr-4">{row.accepted}</td>
+                    <td className="py-1.5 pr-4">{row.acceptedWithEdits}</td>
+                    <td className="py-1.5 pr-4">{row.rejected}</td>
+                    <td className="py-1.5 pr-4">{row.pending}</td>
+                    <td className="py-1.5 pr-4">{pct(row.acceptanceRate)}</td>
+                    <td className="py-1.5">{pct(row.correctionRate)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+          <p className="mt-2 text-xs text-muted-foreground">
+            &quot;Correction rate&quot; is the share of reviewed generations a human edited or rejected — the closest proxy this
+            system has for a hallucination/quality-issue rate, since no LLM vendor is connected to score its own output.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function GovernedQueriesPanel({ queries }: { queries: GovernedQuery[] }) {
   return (
     <div className="space-y-4">
@@ -391,6 +489,7 @@ export function GovernedQueriesPanel({ queries }: { queries: GovernedQuery[] }) 
         if (q.name === 'remittance_trends_by_month') return <RemittanceTrendsByMonth key={q.name} query={q} />;
         if (q.name === 'quality_measure_diabetes_hba1c_control') return <QualityMeasureDiabetesHba1cControl key={q.name} query={q} />;
         if (q.name === 'quality_measure_annual_wellness_visit') return <QualityMeasureAnnualWellnessVisit key={q.name} query={q} />;
+        if (q.name === 'ai_generation_quality_by_feature') return <AiGenerationQualityByFeature key={q.name} query={q} />;
         return null;
       })}
     </div>
