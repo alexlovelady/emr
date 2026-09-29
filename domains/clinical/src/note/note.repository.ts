@@ -1,5 +1,7 @@
 import type { Kysely, Selectable, Transaction } from 'kysely';
-import type { DB } from '@ehr/db';
+import type { DB, NoteSectionMeta } from '@ehr/db';
+
+export type { NoteSectionMeta };
 
 export interface NoteRow {
   id: string;
@@ -9,6 +11,7 @@ export interface NoteRow {
   templateId: string | null;
   noteType: string;
   content: Record<string, string>;
+  sectionMetadata: Record<string, NoteSectionMeta>;
   amendsNoteId: string | null;
   signedAt: Date | null;
   signedBy: string | null;
@@ -31,6 +34,7 @@ export class NoteRepository {
       templateId: string | null;
       noteType: string;
       content: Record<string, string>;
+      sectionMetadata: Record<string, NoteSectionMeta>;
       amendsNoteId: string | null;
       createdBy: string;
     },
@@ -44,6 +48,7 @@ export class NoteRepository {
         template_id: input.templateId,
         note_type: input.noteType,
         content: JSON.stringify(input.content),
+        section_metadata: JSON.stringify(input.sectionMetadata),
         amends_note_id: input.amendsNoteId,
         status: 'draft',
         created_by: input.createdBy,
@@ -100,10 +105,22 @@ export class NoteRepository {
     return rows.map(toRow);
   }
 
-  async updateContent(trx: Executor, tenantId: string, id: string, content: Record<string, string>, updatedBy: string): Promise<NoteRow> {
+  async updateContent(
+    trx: Executor,
+    tenantId: string,
+    id: string,
+    content: Record<string, string>,
+    sectionMetadata: Record<string, NoteSectionMeta>,
+    updatedBy: string,
+  ): Promise<NoteRow> {
     const row = await trx
       .updateTable('notes')
-      .set({ content: JSON.stringify(content), updated_by: updatedBy, updated_at: new Date() })
+      .set({
+        content: JSON.stringify(content),
+        section_metadata: JSON.stringify(sectionMetadata),
+        updated_by: updatedBy,
+        updated_at: new Date(),
+      })
       .where('tenant_id', '=', tenantId)
       .where('id', '=', id)
       .returningAll()
@@ -139,6 +156,7 @@ function toRow(dbRow: Selectable<DB['notes']>): NoteRow {
     templateId: dbRow.template_id,
     noteType: dbRow.note_type,
     content: dbRow.content,
+    sectionMetadata: dbRow.section_metadata,
     amendsNoteId: dbRow.amends_note_id,
     signedAt: dbRow.signed_at,
     signedBy: dbRow.signed_by,

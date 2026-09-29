@@ -190,6 +190,15 @@ export interface NotesTable extends CommonColumnsTable {
   signed_at: Timestamp | null;
   signed_by: string | null;
   void_reason: string | null;
+  section_metadata: GeneratedJsonColumn<Record<string, NoteSectionMeta>>;
+}
+
+/** Item 19: one entry per `content` key, tracking whether that section reflects the signing
+ * clinician's own review — see `domains/clinical/src/note/note.service.ts` for the transitions. */
+export interface NoteSectionMeta {
+  source: 'template_default' | 'copied_forward' | 'edited';
+  copiedFromNoteId?: string;
+  lastTouchedAt: string;
 }
 
 export interface ProblemsTable extends CommonColumnsTable {

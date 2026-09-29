@@ -111,6 +111,15 @@ export interface ProblemCreateResult {
   codeValidation: CodeValidation | null;
 }
 
+/** Mirrors `@ehr/dose-utils`'s `DoseValidationResult` — `errors` is always empty by the time this
+ * reaches the frontend (an unparseable dose is rejected before the record is ever created);
+ * `warnings` is the only half a caller ever needs to render. */
+export interface DoseValidation {
+  parsed: { amount: number; unit: string; dimension: string } | null;
+  errors: string[];
+  warnings: string[];
+}
+
 export interface Allergy {
   id: string;
   substance: string;
@@ -133,6 +142,7 @@ export interface MedicationItem {
 export interface MedicationCreateResult {
   medication: MedicationItem;
   codeValidation: CodeValidation | null;
+  doseValidation: DoseValidation | null;
 }
 
 export interface SignedNote {
@@ -202,6 +212,14 @@ export interface Encounter {
   endedAt: string | null;
 }
 
+/** Item 19: tracks whether a `content` section reflects the signing clinician's own review, versus
+ * still being exactly as a template default or a copy-forward left it. */
+export interface NoteSectionMeta {
+  source: 'template_default' | 'copied_forward' | 'edited';
+  copiedFromNoteId?: string;
+  lastTouchedAt: string;
+}
+
 export interface Note {
   id: string;
   encounterId: string;
@@ -209,11 +227,19 @@ export interface Note {
   templateId: string | null;
   noteType: string;
   content: Record<string, string>;
+  sectionMetadata: Record<string, NoteSectionMeta>;
   amendsNoteId: string | null;
   signedAt: string | null;
   signedBy: string | null;
   voidReason: string | null;
   status: 'draft' | 'ready_for_review' | 'signed' | 'voided' | 'entered_in_error';
+}
+
+/** `POST /notes/:id/sign`'s response shape — signing itself is never blocked by stale sections
+ * (see `NoteService.sign()`'s doc comment), just reported back for the UI to warn about. */
+export interface NoteSignResult {
+  note: Note;
+  staleSections: string[];
 }
 
 export interface NoteTemplateSection {
@@ -276,6 +302,7 @@ export interface PrescriptionCreateResult {
   prescription: Prescription;
   interactionFindings: InteractionFinding[];
   codeValidation: CodeValidation | null;
+  doseValidation: DoseValidation | null;
 }
 
 export interface RefillRequest {

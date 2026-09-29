@@ -14,7 +14,10 @@ export function AddMedicationDialog({ patientId }: { patientId: string }) {
   const [open, setOpen] = useState(false);
   const [state, formAction, isPending] = useActionState(createMedication, null);
 
-  useCloseOnSuccess(state, () => setOpen(false));
+  useCloseOnSuccess(state, () => {
+    if (!state?.ok) return;
+    if ((state.data.doseValidation?.warnings.length ?? 0) === 0) setOpen(false);
+  });
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -47,6 +50,11 @@ export function AddMedicationDialog({ patientId }: { patientId: string }) {
               <Input id="frequency" name="frequency" placeholder="daily" />
             </div>
           </div>
+          {state &&
+            state.ok &&
+            state.data.doseValidation?.warnings.map((w, i) => (
+              <Alert key={i}>{w}</Alert>
+            ))}
           {state && !state.ok && <Alert variant="destructive">{state.error}</Alert>}
           <DialogFooter>
             <Button type="submit" disabled={isPending}>

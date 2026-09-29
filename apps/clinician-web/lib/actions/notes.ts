@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { callBackend } from '@/lib/api-proxy';
 import { runAction, type ActionResult } from './action-result';
-import type { Note } from '@/lib/types';
+import type { Note, NoteSignResult } from '@/lib/types';
 
 export async function createNote(encounterId: string, noteType: string, templateId?: string): Promise<ActionResult<Note>> {
   const result = await runAction(() =>
@@ -28,8 +28,16 @@ export async function submitNoteForReview(id: string, encounterId: string): Prom
   return result;
 }
 
-export async function signNote(id: string, encounterId: string): Promise<ActionResult<Note>> {
-  const result = await runAction(() => callBackend<Note>(`/api/v1/notes/${id}/sign`, { method: 'POST' }));
+export async function signNote(id: string, encounterId: string): Promise<ActionResult<NoteSignResult>> {
+  const result = await runAction(() => callBackend<NoteSignResult>(`/api/v1/notes/${id}/sign`, { method: 'POST' }));
+  if (result.ok) revalidatePath(`/encounters/${encounterId}`);
+  return result;
+}
+
+export async function createNoteFromPrior(encounterId: string, priorNoteId: string, noteType: string): Promise<ActionResult<Note>> {
+  const result = await runAction(() =>
+    callBackend<Note>('/api/v1/notes/from-prior', { method: 'POST', body: { encounterId, priorNoteId, noteType } }),
+  );
   if (result.ok) revalidatePath(`/encounters/${encounterId}`);
   return result;
 }

@@ -919,6 +919,61 @@ aggregate view.
   real DB — plus 13 integration tests against real Postgres covering the repository's
   upsert/resolve/recur semantics and all three rules).
 
+### Remaining-gaps build-out — clinical safety: dose/unit validation and stale copy-forward tracking
+
+Closes item 19 of the post-Tier-2 gap sweep. `docs/pilot-readiness-checklist.md` named this exact
+gap: "Medication dose/unit validation, unit conversion, and stale copied-forward note tracking still
+have no control at all" — distinct from Phase K's drug-interaction plumbing (a licensed-vendor
+question), these three are genuinely buildable with no vendor gate.
+
+- **New `packages/dose-utils`** — `parseDose()`/`validateDose()`/`convertDose()`, a purely
+  structural sanity check (parseable numeric amount + a recognized unit, positive, not wildly
+  implausible), deliberately NOT a per-drug clinical dosing check (no licensed drug database exists
+  to validate against — same honest-stub reasoning as `packages/interaction-adapter`). Mass
+  (mcg/mg/g/kg) and volume (mL/L) units are genuinely interconvertible; count-like units (tablet,
+  capsule, patch, puff, drop, spray, "unit" as in insulin dosing, mEq) are each their own isolated
+  dimension — a tablet and a capsule are never interconvertible, and "10 units" of insulin has no
+  fixed mass equivalent across drugs. 28 unit tests.
+- **Wired into `CreatePrescriptionSchema`/`CreateMedicationSchema`** (`domains/medication`): an
+  unparseable or non-positive dose is a hard 422 (via Zod `superRefine`, alongside the existing DEA
+  schedule/controlled-substance checks); an implausibly large amount only warns — surfaced as a new
+  `doseValidation` field on `MedicationService.create()`/`PrescriptionService.create()`'s response,
+  same "warn, don't hard-block" shape as this domain's existing RxNorm `codeValidation`. Wired into
+  `apps/clinician-web`'s prescribe and add-medication dialogs (a warning banner; the dialog doesn't
+  auto-close over it, same pattern as an unrecognized RxNorm code or a real interaction finding).
+- **Stale copied-forward-note tracking** (`domains/clinical`'s Note feature): new
+  `notes.section_metadata` column (migration `0054`), one entry per `content` key —
+  `{source: 'template_default'|'copied_forward'|'edited', copiedFromNoteId?, lastTouchedAt}`.
+  `create()` marks a template-default-seeded section `template_default` and a caller-typed one
+  `edited`; `updateContent()` diffs old vs. new VALUE per key (it always receives the whole content
+  map, not a patch, so a key resent unchanged must not be reclassified as reviewed) and only flips a
+  key to `edited` when its value actually changed; `amend()`'s existing full-content copy now starts
+  every section `copied_forward` instead of silently looking identical to a freshly-typed one.
+  `sign()` returns a non-blocking `staleSections` list (sections still exactly as a template default
+  or copy-forward left them) — signing itself is never blocked (real workflows routinely sign a note
+  where an unchanged section, e.g. "no relevant family history," is correct as-is), just warned.
+- **New `NoteService.createFromPrior()`** — item 19's literal "copy forward" gap: unlike `amend()`
+  (which corrects the SAME encounter's already-signed note), this seeds a brand-new note for a
+  DIFFERENT (typically later) encounter from an unrelated prior note's content — the everyday "start
+  today's note from last visit's" workflow, which had no mechanism at all before this (confirmed via
+  research: only template-default seeding and `amend()`'s same-encounter copy existed). Rejects
+  copying from a different patient's note (a real safety/privacy check, not just data quality). New
+  `POST /api/v1/notes/from-prior`. `apps/clinician-web`'s note editor shows a "Not yet reviewed" /
+  "Carried over — not yet reviewed" badge per section and a toast warning naming the stale sections
+  if any remain at sign time.
+- **Live-verified** against the running dev stack: POSTed a medication with an unparseable dose
+  ("500", no unit) and got a real 422 with the exact parse-failure message; a well-formed dose
+  ("10 mg") succeeded with an empty `doseValidation.warnings`; an implausible one ("50000 mg")
+  succeeded with a real warning message. Confirmed `POST /notes/from-prior` is correctly wired,
+  authenticated, and permission-gated (a bogus encounter id returns a real 404, not a 500). The full
+  copy-forward/staleness/sign-warning/cross-patient-rejection behavior is exercised end-to-end
+  against real Postgres by new tenant-isolation tests (below), since constructing the multi-resource
+  fixture (patient/appointment/encounter/prior-note) by hand over curl would just re-derive what
+  those tests already prove deterministically. Full repo-wide lint/typecheck/build (171 tasks) and
+  test/test:integration/test:tenant-isolation (136 tasks) all green, including `packages/dose-utils`'
+  28 unit tests, `domains/medication`'s new DTO-level dose-validation tests (8), and 4 new
+  `domains/clinical` tenant-isolation tests covering the full note-staleness lifecycle.
+
 ## Verification status
 
 Docker Desktop's backend would not start in the environment this was built in (its WSL2

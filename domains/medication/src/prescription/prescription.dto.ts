@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { validateDose } from '@ehr/dose-utils';
 
 /**
  * `isControlledSubstance`/`deaSchedule` consistency and the Schedule II no-refills rule
@@ -6,6 +7,11 @@ import { z } from 'zod';
  * are enforced here at the DTO layer, cheaply, regardless of which route (ordinary vs.
  * `/controlled`) receives the payload. See `prescription.service.ts` for the route/payload
  * consistency check (`expectedControlled`), which is a separate concern from this shape validation.
+ *
+ * The final `superRefine` is item 19's dose/unit structural sanity check — same "unparseable dose
+ * blocks, implausible magnitude only warns" posture as `CreateMedicationSchema`'s own copy of this
+ * check (duplicated rather than shared, since these are two independently-validated DTOs whose
+ * fields only coincidentally overlap — see `packages/dose-utils` for the actual parsing logic).
  */
 export const CreatePrescriptionSchema = z
   .object({
@@ -36,6 +42,12 @@ export const CreatePrescriptionSchema = z
   .refine((v) => !(v.deaSchedule === 'II' && v.refillsAuthorized > 0), {
     message: 'Schedule II controlled substances cannot be authorized with refills',
     path: ['refillsAuthorized'],
+  })
+  .superRefine((v, ctx) => {
+    if (v.dose == null) return;
+    for (const message of validateDose(v.dose).errors) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message, path: ['dose'] });
+    }
   });
 export type CreatePrescriptionInput = z.infer<typeof CreatePrescriptionSchema>;
 

@@ -8,11 +8,13 @@ export { NoteTemplateService } from './note-template/note-template.service.js';
 export { NoteTemplateRepository, type NoteTemplateRow } from './note-template/note-template.repository.js';
 export { CreateNoteTemplateSchema, type CreateNoteTemplateInput } from './note-template/note-template.dto.js';
 
-export { NoteService, type NoteWithChain } from './note/note.service.js';
-export { NoteRepository, type NoteRow } from './note/note.repository.js';
+export { NoteService, type NoteWithChain, staleSectionKeys } from './note/note.service.js';
+export { NoteRepository, type NoteRow, type NoteSectionMeta } from './note/note.repository.js';
 export {
   CreateNoteSchema,
   type CreateNoteInput,
+  CreateNoteFromPriorSchema,
+  type CreateNoteFromPriorInput,
   UpdateNoteContentSchema,
   type UpdateNoteContentInput,
   VoidNoteSchema,

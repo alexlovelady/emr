@@ -8,6 +8,15 @@ export const CreateNoteSchema = z.object({
 });
 export type CreateNoteInput = z.infer<typeof CreateNoteSchema>;
 
+/** Item 19's copy-forward creation path — see `NoteService.createFromPrior()`'s doc comment for
+ * how this differs from `amend()`. */
+export const CreateNoteFromPriorSchema = z.object({
+  encounterId: z.string().uuid(),
+  priorNoteId: z.string().uuid(),
+  noteType: z.string().min(1).max(200),
+});
+export type CreateNoteFromPriorInput = z.infer<typeof CreateNoteFromPriorSchema>;
+
 export const UpdateNoteContentSchema = z.object({
   content: z.record(z.string(), z.string()),
 });

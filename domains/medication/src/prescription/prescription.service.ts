@@ -6,6 +6,7 @@ import { PatientRepository } from '@ehr/patient';
 import type { PrescribingGateway } from '@ehr/erx-adapter';
 import type { InteractionCheckGateway, InteractionFinding } from '@ehr/interaction-adapter';
 import type { CodeValidation } from '@ehr/terminology';
+import type { DoseValidationResult } from '@ehr/dose-utils';
 import { MedicationService } from '../medication/medication.service.js';
 import { MedicationRepository } from '../medication/medication.repository.js';
 import type { CreatePrescriptionInput } from './prescription.dto.js';
@@ -46,7 +47,12 @@ export class PrescriptionService {
     patientId: string,
     input: CreatePrescriptionInput,
     expectedControlled: boolean,
-  ): Promise<{ prescription: PrescriptionRow; interactionFindings: InteractionFinding[]; codeValidation: CodeValidation | null }> {
+  ): Promise<{
+    prescription: PrescriptionRow;
+    interactionFindings: InteractionFinding[];
+    codeValidation: CodeValidation | null;
+    doseValidation: DoseValidationResult | null;
+  }> {
     if (input.isControlledSubstance !== expectedControlled) {
       throw new ValidationError(
         expectedControlled
@@ -61,7 +67,7 @@ export class PrescriptionService {
 
     const actorId = ctx.actor?.id ?? null;
 
-    const { medication, codeValidation } = await this.medicationService.create(trx, ctx, patientId, {
+    const { medication, codeValidation, doseValidation } = await this.medicationService.create(trx, ctx, patientId, {
       encounterId: input.encounterId ?? null,
       medicationName: input.medicationName,
       rxnormCode: input.rxnormCode ?? null,
@@ -115,7 +121,7 @@ export class PrescriptionService {
       gatewayStatus: receipt.status,
     });
 
-    return { prescription, interactionFindings, codeValidation };
+    return { prescription, interactionFindings, codeValidation, doseValidation };
   }
 
   /**

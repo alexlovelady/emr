@@ -7,9 +7,11 @@ import { PERMISSION_KEYS, RequirePermission } from '@ehr/authz';
 import { ZodValidationPipe } from '@ehr/api-contracts';
 import {
   CreateNoteSchema,
+  CreateNoteFromPriorSchema,
   UpdateNoteContentSchema,
   VoidNoteSchema,
   type CreateNoteInput,
+  type CreateNoteFromPriorInput,
   type UpdateNoteContentInput,
   type VoidNoteInput,
 } from './note.dto.js';
@@ -24,6 +26,13 @@ export class NoteController {
   @Audited('note.create', 'Note')
   async create(@Body(new ZodValidationPipe(CreateNoteSchema)) body: CreateNoteInput, @Req() req: FastifyRequest) {
     return this.service.create(getCurrentTransaction(), requireCtx(req), body);
+  }
+
+  @Post('from-prior')
+  @RequirePermission(PERMISSION_KEYS.NOTE_CREATE)
+  @Audited('note.create_from_prior', 'Note')
+  async createFromPrior(@Body(new ZodValidationPipe(CreateNoteFromPriorSchema)) body: CreateNoteFromPriorInput, @Req() req: FastifyRequest) {
+    return this.service.createFromPrior(getCurrentTransaction(), requireCtx(req), body.encounterId, body.priorNoteId, body.noteType);
   }
 
   @Get(':id')

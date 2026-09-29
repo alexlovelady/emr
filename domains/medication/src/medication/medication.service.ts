@@ -4,6 +4,7 @@ import { ConflictError, NotFoundError, type RequestContext } from '@ehr/domain-c
 import { buildOutboxInsert } from '@ehr/outbox';
 import { PatientRepository } from '@ehr/patient';
 import { TerminologyService, RXNORM_SYSTEM, type CodeValidation } from '@ehr/terminology';
+import { validateDose, type DoseValidationResult } from '@ehr/dose-utils';
 import type { CreateMedicationInput } from './medication.dto.js';
 import { MedicationRepository, type MedicationRow } from './medication.repository.js';
 
@@ -23,17 +24,23 @@ export class MedicationService {
    * external-import medications often have none) — distinct from `{valid: false, checked: ...}`,
    * which means a code WAS given and didn't match. "Warn, don't hard-block" per the plan: an
    * unrecognized code never blocks recording the medication.
+   *
+   * `doseValidation` is similarly null when no `dose` was given, and non-null with an empty
+   * `warnings` array for an ordinary, plausible dose — see item 19 / `packages/dose-utils`. The DTO
+   * layer (`CreateMedicationSchema`) already hard-blocks an unparseable dose before this method
+   * ever runs; what's returned here is only ever the non-blocking `warnings` half.
    */
   async create(
     trx: Executor,
     ctx: RequestContext,
     patientId: string,
     input: CreateMedicationInput,
-  ): Promise<{ medication: MedicationRow; codeValidation: CodeValidation | null }> {
+  ): Promise<{ medication: MedicationRow; codeValidation: CodeValidation | null; doseValidation: DoseValidationResult | null }> {
     const patient = await this.patientRepo.findById(trx, ctx.tenantId, patientId);
     if (!patient) throw new NotFoundError('Patient not found', { patientId });
 
     const codeValidation = input.rxnormCode ? await this.terminology.validateCode(trx, RXNORM_SYSTEM, input.rxnormCode) : null;
+    const doseValidation = input.dose ? validateDose(input.dose) : null;
 
     const actorId = ctx.actor?.id ?? null;
     const medication = await this.repo.create(trx, {
@@ -69,7 +76,7 @@ export class MedicationService {
       )
       .execute();
 
-    return { medication, codeValidation };
+    return { medication, codeValidation, doseValidation };
   }
 
   async getById(trx: Executor, ctx: RequestContext, id: string): Promise<MedicationRow> {

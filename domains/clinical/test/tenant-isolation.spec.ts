@@ -156,6 +156,9 @@ describe('tenant isolation — clinical', () => {
       noteService.create(trx, ctxA, { encounterId: tenantAEncounterId, templateId: template.id, noteType: 'progress_note' }),
     );
     expect(note.status).toBe('draft');
+    // item 19: a section seeded purely from the template's default text (no caller content
+    // supplied at creation) starts flagged template_default, not edited.
+    expect(note.sectionMetadata.assessment?.source).toBe('template_default');
 
     await expect(
       withTenantContext(handle.db, ctxA.tenantId, (trx) => noteService.sign(trx, ctxA, note.id)),
@@ -166,7 +169,11 @@ describe('tenant isolation — clinical', () => {
     );
     await withTenantContext(handle.db, ctxA.tenantId, (trx) => noteService.submitForReview(trx, ctxA, note.id));
     const signed = await withTenantContext(handle.db, ctxA.tenantId, (trx) => noteService.sign(trx, ctxA, note.id));
-    expect(signed.status).toBe('signed');
+    expect(signed.note.status).toBe('signed');
+    // The only section this note has ('assessment') was explicitly edited via updateContent()
+    // above, so signing it reports no stale (template-default/copied-forward, never-touched)
+    // sections — see item 19's staleSectionKeys().
+    expect(signed.staleSections).toEqual([]);
 
     // A signed note can never be voided.
     await expect(
@@ -180,12 +187,18 @@ describe('tenant isolation — clinical', () => {
     const amendment = await withTenantContext(handle.db, ctxA.tenantId, (trx) => noteService.amend(trx, ctxA, note.id));
     expect(amendment.amendsNoteId).toBe(note.id);
     expect(amendment.status).toBe('draft');
+    // item 19: a freshly-amended note's copied content starts flagged copied_forward, not edited —
+    // it hasn't actually been reviewed/corrected yet, just carried over from the original.
+    expect(amendment.sectionMetadata.assessment?.source).toBe('copied_forward');
+    expect(amendment.sectionMetadata.assessment?.copiedFromNoteId).toBe(note.id);
 
     await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
       noteService.updateContent(trx, ctxA, amendment.id, { assessment: 'Corrected: improving, reduce medication.' }),
     );
     await withTenantContext(handle.db, ctxA.tenantId, (trx) => noteService.submitForReview(trx, ctxA, amendment.id));
-    await withTenantContext(handle.db, ctxA.tenantId, (trx) => noteService.sign(trx, ctxA, amendment.id));
+    const signedAmendment = await withTenantContext(handle.db, ctxA.tenantId, (trx) => noteService.sign(trx, ctxA, amendment.id));
+    // Actually corrected before signing, so no stale sections remain.
+    expect(signedAmendment.staleSections).toEqual([]);
 
     const originalAfterAmendment = await withTenantContext(handle.db, ctxA.tenantId, (trx) => noteService.getById(trx, ctxA, note.id));
     expect(originalAfterAmendment.content).toEqual({ assessment: 'Stable, continue current plan.' });
@@ -199,6 +212,107 @@ describe('tenant isolation — clinical', () => {
     await expect(
       withTenantContext(handle.db, ctxB.tenantId, (trx) => noteService.getById(trx, ctxB, note.id)),
     ).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it('item 19: createFromPrior() copies a prior note forward into a new encounter, flagged stale until edited, and signing a still-stale note warns but does not block', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+
+    const priorNote = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      noteService.create(trx, ctxA, {
+        encounterId: tenantAEncounterId,
+        noteType: 'progress_note',
+        content: { subjective: 'Patient reports feeling well.', plan: 'Continue current medications.' },
+      }),
+    );
+
+    // A second, later encounter for the same patient — the everyday "start today's note from last
+    // visit's" workflow createFromPrior() is meant to serve.
+    const laterAppointmentId = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      trx
+        .insertInto('appointments')
+        .values({
+          tenant_id: ctxA.tenantId,
+          patient_id: tenantAPatientId,
+          location_id: handle.seed.tenantA.locationId,
+          practitioner_id: tenantAPractitionerId,
+          appointment_type: 'office_visit',
+          scheduled_start: new Date(Date.now() + 86_400_000),
+          scheduled_end: new Date(Date.now() + 90_000_000),
+          status: 'checked_in',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow()
+        .then((r) => r.id),
+    );
+    const laterEncounter = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      encounterService.create(trx, ctxA, { appointmentId: laterAppointmentId, encounterType: 'office_visit' }),
+    );
+
+    const copied = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      noteService.createFromPrior(trx, ctxA, laterEncounter.id, priorNote.id, 'progress_note'),
+    );
+    expect(copied.encounterId).toBe(laterEncounter.id);
+    expect(copied.content).toEqual(priorNote.content);
+    expect(copied.sectionMetadata.subjective?.source).toBe('copied_forward');
+    expect(copied.sectionMetadata.subjective?.copiedFromNoteId).toBe(priorNote.id);
+    expect(copied.sectionMetadata.plan?.source).toBe('copied_forward');
+
+    // Only ONE of the two copied-forward sections gets actually reviewed before signing.
+    await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      noteService.updateContent(trx, ctxA, copied.id, {
+        subjective: 'Patient reports new-onset headache since last visit.',
+        plan: 'Continue current medications.', // resent unchanged — still stale
+      }),
+    );
+    await withTenantContext(handle.db, ctxA.tenantId, (trx) => noteService.submitForReview(trx, ctxA, copied.id));
+    const signedCopy = await withTenantContext(handle.db, ctxA.tenantId, (trx) => noteService.sign(trx, ctxA, copied.id));
+
+    // Signing succeeds regardless (never a hard block — see staleSectionKeys()'s doc comment) but
+    // reports the one section that was never actually reviewed.
+    expect(signedCopy.note.status).toBe('signed');
+    expect(signedCopy.staleSections).toEqual(['plan']);
+  });
+
+  it("createFromPrior() rejects copying a note forward from a different patient", async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+
+    const otherPatientId = await withTenantContext(handle.db, ctxA.tenantId, async (trx) => {
+      const patient = await trx
+        .insertInto('patients')
+        .values({ tenant_id: ctxA.tenantId, given_name: 'Other', family_name: `Patient-${Date.now()}`, date_of_birth: '1990-01-01', status: 'active' })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      return patient.id;
+    });
+    const otherAppointmentId = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      trx
+        .insertInto('appointments')
+        .values({
+          tenant_id: ctxA.tenantId,
+          patient_id: otherPatientId,
+          location_id: handle.seed.tenantA.locationId,
+          practitioner_id: tenantAPractitionerId,
+          appointment_type: 'office_visit',
+          scheduled_start: new Date(Date.now() + 3600_000),
+          scheduled_end: new Date(Date.now() + 7200_000),
+          status: 'checked_in',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow()
+        .then((r) => r.id),
+    );
+    const otherEncounter = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      encounterService.create(trx, ctxA, { appointmentId: otherAppointmentId, encounterType: 'office_visit' }),
+    );
+    const otherPatientNote = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      noteService.create(trx, ctxA, { encounterId: otherEncounter.id, noteType: 'progress_note', content: { assessment: 'Unrelated patient note.' } }),
+    );
+
+    await expect(
+      withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+        noteService.createFromPrior(trx, ctxA, tenantAEncounterId, otherPatientNote.id, 'progress_note'),
+      ),
+    ).rejects.toBeInstanceOf(ConflictError);
   });
 
   it('problem/allergy/observation/procedure are isolated per tenant', async () => {

@@ -39,6 +39,21 @@ export function NoteEditor({ note, encounterId }: { note: Note; encounterId: str
     });
   }
 
+  function onSign() {
+    startTransition(async () => {
+      const result = await signNote(note.id, encounterId);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      // Item 19: signing itself is never blocked by stale sections — this is advisory only.
+      if (result.data.staleSections.length > 0) {
+        toast.warning(`Signed with ${result.data.staleSections.length} section(s) never reviewed: ${result.data.staleSections.join(', ')}`);
+      }
+      router.refresh();
+    });
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
@@ -57,7 +72,15 @@ export function NoteEditor({ note, encounterId }: { note: Note; encounterId: str
 
       {Object.entries(content).map(([section, text]) => (
         <div key={section} className="space-y-1.5">
-          <Label>{section}</Label>
+          <div className="flex items-center gap-2">
+            <Label>{section}</Label>
+            {note.sectionMetadata[section]?.source === 'template_default' && (
+              <Badge variant="outline">Not yet reviewed</Badge>
+            )}
+            {note.sectionMetadata[section]?.source === 'copied_forward' && (
+              <Badge variant="warning">Carried over — not yet reviewed</Badge>
+            )}
+          </div>
           {editable ? (
             <Textarea
               value={text}
@@ -86,7 +109,7 @@ export function NoteEditor({ note, encounterId }: { note: Note; encounterId: str
           </Button>
         )}
         {note.status === 'ready_for_review' && has(PERMISSION_KEYS.NOTE_SIGN) && (
-          <Button size="sm" disabled={isPending} onClick={() => run(() => signNote(note.id, encounterId))}>
+          <Button size="sm" disabled={isPending} onClick={onSign}>
             Sign note
           </Button>
         )}

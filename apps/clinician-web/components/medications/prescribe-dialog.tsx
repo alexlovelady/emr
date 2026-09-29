@@ -48,7 +48,8 @@ export function PrescribeDialog({ patientId }: { patientId: string }) {
     if (!state?.ok) return;
     const validation = state.data.codeValidation;
     const codeIsSuspect = validation !== null && validation.checked && !validation.valid;
-    if (state.data.interactionFindings.length === 0 && !codeIsSuspect) setOpen(false);
+    const hasDoseWarning = (state.data.doseValidation?.warnings.length ?? 0) > 0;
+    if (state.data.interactionFindings.length === 0 && !codeIsSuspect && !hasDoseWarning) setOpen(false);
   });
 
   const canPrescribeControlled = has(PERMISSION_KEYS.CONTROLLED_SUBSTANCE_PRESCRIBE);
@@ -193,6 +194,11 @@ export function PrescribeDialog({ patientId }: { patientId: string }) {
           {state && state.ok && state.data.codeValidation?.checked && !state.data.codeValidation.valid && (
             <Alert>RxNorm code not recognized — recorded anyway, since this may be a real code RxNav doesn&apos;t have.</Alert>
           )}
+          {state &&
+            state.ok &&
+            state.data.doseValidation?.warnings.map((w, i) => (
+              <Alert key={i}>{w}</Alert>
+            ))}
           {state && !state.ok && <Alert variant="destructive">{state.error}</Alert>}
           <DialogFooter>
             <Button type="submit" disabled={isPending}>

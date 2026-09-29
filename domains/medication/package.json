@@ -18,6 +18,7 @@
     "@ehr/authz": "workspace:*",
     "@ehr/db": "workspace:*",
     "@ehr/domain-common": "workspace:*",
+    "@ehr/dose-utils": "workspace:*",
     "@ehr/erx-adapter": "workspace:*",
     "@ehr/interaction-adapter": "workspace:*",
     "@ehr/outbox": "workspace:*",
