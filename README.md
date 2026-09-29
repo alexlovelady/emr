@@ -787,6 +787,75 @@ aging key without invalidating every session.
   rotation-specific integration test (old token verifies after rotation, new token uses the new
   kid, JWKS reflects both keys) and 11 new `keyring.test.ts` unit tests.
 
+### Remaining-gaps build-out — HL7 dead-letter-queue/retry-scheduling
+
+Closes item 15 of the post-Tier-2 gap sweep. `docs/pilot-readiness-checklist.md` called this out
+explicitly: HL7 ingestion was idempotent on redelivery (tested), but a failed message just sat
+`status='failed'` forever with no automatic retry and no structural dead-letter concept — the only
+way it could ever be revisited was the sending interface resending the exact same bytes, and even
+then `ingest()`'s idempotency check only replays the stored outcome rather than actually
+reprocessing.
+
+- **Permanent vs. transient classification**: new `Hl7PermanentProcessingError`
+  (`packages/hl7/src/errors.ts`, alongside the existing `Hl7ParseError`) marks a failure that
+  resending the identical bytes can never fix — a missing required field, or no matching
+  order/patient/appointment/encounter. Every one of `Hl7IngestionService`'s 16 existing
+  `throw new Error(...)` correlation/validation failures (`apps/interop-hl7/src/hl7/hl7.service.ts`)
+  now throws this instead. Anything else — an unexpected exception, most plausibly a transient
+  database/connectivity failure — defaults to retryable; this default-open classification is
+  deliberate, since a codebase with no real interface partner has no way to enumerate every genuine
+  transient-failure shape in advance.
+- **New `hl7_messages` columns** (migration `0052_hl7_message_retry.ts`): `retry_count`,
+  `next_retry_at`, `dead_letter`. A retryable failure schedules `next_retry_at`; a permanent one (or
+  a retryable one that has exhausted `HL7_RETRY_MAX_ATTEMPTS`) sets `dead_letter=true` — the
+  terminal "a human must look at this, it will never be auto-retried again" signal.
+- **`Hl7RetryRelay`** (new `apps/interop-hl7/src/hl7/hl7-retry-relay.ts`), shaped exactly like
+  `packages/outbox`'s `OutboxRelay`: `start()`/`stop()` around a `setInterval`, a `running`
+  re-entrancy guard, a public `tick()` for tests/manual triggering. Runs **in-process inside
+  apps/interop-hl7 itself**, not in `apps/worker` (where `OutboxRelay`/`BulkExportRelay`/
+  `BackupScheduler` live) — a deliberate deviation, since actually reprocessing a message needs
+  `Hl7IngestionService`'s full dispatch logic and its entire domain dependency graph (`@ehr/orders`,
+  `@ehr/results`, `@ehr/patient`, `@ehr/scheduling`, `@ehr/clinical`), which apps/worker doesn't have
+  and shouldn't need to duplicate just to run one relay. The relay's cross-tenant due-retries poll
+  (`Hl7MessageRepository.claimDueRetries()`) uses a new owner/bootstrap-role `OWNER_DB_CONNECTION`
+  (mirroring `apps/interop-fhir`'s existing pattern for its own one cross-tenant need) — same
+  justification `OutboxRelay` already documents for why a single tenant-scoped `ehr_app` connection
+  can't poll across every tenant in one query. The actual reprocessing of each claimed row, however,
+  runs through `withTenantContext` on that same connection, scoped to that row's own tenant. Same
+  documented at-least-once caveat as `OutboxRelay`: two concurrent `interop-hl7` replicas could in
+  principle both claim the same due row, acceptable since it mirrors an existing, already-accepted
+  limitation rather than introducing a new one.
+- **A real bug caught by the test suite, not shipped**: `Hl7RetryRelay`'s constructor originally
+  took the concrete `Hl7IngestionService` class; extracted a minimal `Hl7Reprocessor` interface (the
+  one `reprocess()` method the relay actually calls) specifically so tests could supply a
+  deterministic fake (fails N times, then succeeds) instead of driving real HL7 parsing and domain
+  writes just to exercise retry/backoff/dead-letter bookkeeping.
+- New env vars: `HL7_RETRY_POLL_INTERVAL_MS` (30s), `HL7_RETRY_BATCH_SIZE` (20),
+  `HL7_RETRY_MAX_ATTEMPTS` (5), `HL7_RETRY_BACKOFF_BASE_MS` (60s, linear backoff:
+  attempt N waits N × this value). Also backfilled `BACKUP_INTERVAL_MS`/`BACKUP_PG_DUMP_PATH` into
+  `.env.example`, a pre-existing drift from an earlier item that added them to the schema but not
+  the example file.
+- **Found and fixed in passing, unrelated to this item**: this session's own local `.env` had
+  `JWT_KEYRING_PATH` unset (defaulting to a relative path), which — exactly like the legacy
+  `JWT_PRIVATE_KEY_PATH`/`JWT_PUBLIC_KEY_PATH`'s own documented caveat — resolves to a *different*
+  file per app, since `pnpm --filter <app> run dev` runs each app's script with that package's own
+  directory as its working directory. `apps/api` (already rotated once during this session's own
+  live verification of item 16) and a freshly-started `apps/interop-hl7` ended up with two
+  completely disjoint keyrings, so a token apps/api issued failed verification at interop-hl7 with a
+  generic 403 until traced to this. Fixed by adding an explicit absolute `JWT_KEYRING_PATH` to this
+  machine's local `.env` (gitignored, not a code change) — a running apps/api process started before
+  this fix needs a restart to pick it up.
+- **Live-verified** against the running dev stack: POSTed a real ORU^R01 message with an
+  uncorrelatable order number through `apps/interop-hl7`'s HTTP endpoint and confirmed the resulting
+  `hl7_messages` row was dead-lettered immediately (`dead_letter=true`, `next_retry_at=null`,
+  `retry_count=1`) rather than scheduled for retry; separately confirmed `Hl7RetryRelay` genuinely
+  claims and reprocesses due rows across the live database (it picked up and correctly dead-lettered
+  a leftover malformed-message row from this session's own integration-test run within its first
+  poll after startup). Full repo-wide lint/typecheck/build (165 tasks) and
+  test/test:integration/test:tenant-isolation (131 tasks) all green, including 6 new tests (5 for
+  `Hl7RetryRelay`'s retry/backoff/dead-letter/claim-filtering mechanics via a fake reprocessor
+  against real Postgres, plus a new dead-letter assertion in the existing ORU ingestion suite).
+
 ## Verification status
 
 Docker Desktop's backend would not start in the environment this was built in (its WSL2

@@ -74,6 +74,12 @@ export const envSchema = z.object({
   // --- Scheduled database backup (packages/db-backup) ---
   BACKUP_INTERVAL_MS: z.coerce.number().int().positive().default(86_400_000),
   BACKUP_PG_DUMP_PATH: z.string().min(1).default('pg_dump'),
+
+  // --- HL7 dead-letter/retry relay (apps/interop-hl7) ---
+  HL7_RETRY_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(30_000),
+  HL7_RETRY_BATCH_SIZE: z.coerce.number().int().positive().default(20),
+  HL7_RETRY_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
+  HL7_RETRY_BACKOFF_BASE_MS: z.coerce.number().int().positive().default(60_000),
 });
 
 export type Env = z.infer<typeof envSchema>;

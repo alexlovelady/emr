@@ -189,6 +189,21 @@ describe('Hl7IngestionService — ORU^R01 ingestion', () => {
     expect(result.detail).toMatch(/No order found/);
   });
 
+  it('a permanent correlation failure (item 15) is dead-lettered immediately, not scheduled for retry', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const message = buildOruMessage(`MSG-DEADLETTER-${Date.now()}`, '00000000-0000-4000-8000-000000000000');
+
+    const result = await withTenantContext(handle.db, ctxA.tenantId, (trx) => ingestionService.ingest(trx, ctxA, message));
+    expect(result.ackCode).toBe('AE');
+
+    const row = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      trx.selectFrom('hl7_messages').selectAll().where('id', '=', result.messageId).executeTakeFirstOrThrow(),
+    );
+    expect(row.dead_letter).toBe(true);
+    expect(row.next_retry_at).toBeNull();
+    expect(row.retry_count).toBe(1);
+  });
+
   it('a genuinely malformed message is stored failed, preserving the raw text, without crashing', async () => {
     const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
     const garbage = 'this is not an HL7 message at all';

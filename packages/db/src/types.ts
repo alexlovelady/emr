@@ -454,6 +454,9 @@ export interface Hl7MessagesTable extends CommonColumnsTable {
   direction: Generated<string>;
   parse_error: string | null;
   processed_at: Timestamp | null;
+  retry_count: Generated<number>;
+  next_retry_at: Timestamp | null;
+  dead_letter: Generated<boolean>;
 }
 
 export interface ExternalCandidatesTable extends CommonColumnsTable {

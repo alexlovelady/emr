@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Kysely, Transaction } from 'kysely';
 import type { DB } from '@ehr/db';
 import type { RequestContext } from '@ehr/domain-common';
-import { peekMessageType, parseOruR01, parseAdtMessage, parseSiuMessage, parseOrmMessage, Hl7ParseError } from '@ehr/hl7';
+import { peekMessageType, parseOruR01, parseAdtMessage, parseSiuMessage, parseOrmMessage, Hl7ParseError, Hl7PermanentProcessingError } from '@ehr/hl7';
 import { OrderRepository, OrderService } from '@ehr/orders';
 import { NoopLabOrderGateway } from '@ehr/lab-adapter';
 import { DiagnosticReportService, type CreateDiagnosticReportInput } from '@ehr/results';
@@ -21,6 +21,25 @@ export interface Hl7IngestResult {
 
 const CRITICAL_FLAGS = new Set(['HH', 'LL', 'AA']);
 const NORMAL_FLAGS = new Set(['N', '']);
+
+/**
+ * `Hl7ParseError`/`Hl7PermanentProcessingError` mean resending the exact same bytes will never
+ * succeed (malformed message, or no matching order/patient/appointment/encounter) — those are
+ * dead-lettered immediately. Anything else is an unexpected exception, most plausibly a transient
+ * database/connectivity failure, so it defaults to retryable — see `Hl7RetryRelay`.
+ */
+function isRetryableFailure(err: unknown): boolean {
+  return !(err instanceof Hl7ParseError || err instanceof Hl7PermanentProcessingError);
+}
+
+/** The very first scheduled retry's delay, when a brand-new message fails synchronously during
+ * `ingest()` — matches `HL7_RETRY_BACKOFF_BASE_MS`'s own config default. Every SUBSEQUENT attempt
+ * made by `Hl7RetryRelay` uses the live configured value (passed explicitly to
+ * `Hl7MessageRepository.recordRetryFailure`), so only this one first-failure delay is fixed rather
+ * than configurable — deliberately simple rather than threading config through this service's
+ * Nest-DI-friendly zero-arg construction (every other constructor parameter here is a plain
+ * default-valued dependency, not environment config). */
+const INITIAL_RETRY_BACKOFF_MS = 60_000;
 
 /**
  * EHR_BUILD_SPEC.md §12.1's pipeline: "Listener -> raw immutable message store -> parse ->
@@ -88,34 +107,14 @@ export class Hl7IngestionService {
     const stored = await this.messageRepo.create(trx, { tenantId: ctx.tenantId, messageControlId, messageType: messageTypeKey, rawMessage, createdBy: actorId });
 
     try {
-      switch (messageTypeKey) {
-        case 'ORU^R01':
-          await this.processOru(trx, ctx, rawMessage);
-          break;
-        case 'ADT^A01':
-        case 'ADT^A02':
-        case 'ADT^A03':
-        case 'ADT^A08':
-          await this.processAdt(trx, ctx, rawMessage);
-          break;
-        case 'SIU^S12':
-          await this.processSiuNew(trx, ctx, rawMessage);
-          break;
-        case 'SIU^S14':
-          await this.processSiuUpdate(trx, ctx, rawMessage);
-          break;
-        case 'SIU^S15':
-          await this.processSiuCancel(trx, ctx, rawMessage);
-          break;
-        case 'ORM^O01':
-          await this.processOrm(trx, ctx, rawMessage);
-          break;
-        default:
-          throw new Hl7ParseError(`Unsupported message type: ${messageTypeKey}`);
-      }
+      await this.dispatch(trx, ctx, messageTypeKey, rawMessage);
     } catch (err) {
+      const retryable = isRetryableFailure(err);
       const detail = err instanceof Error ? err.message : String(err);
-      await this.messageRepo.markFailed(trx, ctx.tenantId, stored.id, detail, actorId);
+      await this.messageRepo.markFailed(trx, ctx.tenantId, stored.id, detail, actorId, {
+        retryable,
+        backoffMs: INITIAL_RETRY_BACKOFF_MS,
+      });
       return { ackCode: 'AE', messageId: stored.id, detail };
     }
 
@@ -123,14 +122,47 @@ export class Hl7IngestionService {
     return { ackCode: 'AA', messageId: stored.id };
   }
 
+  /**
+   * Re-runs the same dispatch `ingest()` uses, against an EXISTING stored row — what
+   * `Hl7RetryRelay` calls for a message previously classified as a transient failure. Deliberately
+   * does not touch `hl7_messages` itself (no idempotency re-check, no status write); the relay owns
+   * recording the outcome via `Hl7MessageRepository.recordRetryFailure`/`markProcessed`, since it
+   * also needs to compute the next backoff or dead-letter the row.
+   */
+  async reprocess(trx: Executor, ctx: RequestContext, messageTypeKey: string, rawMessage: string): Promise<void> {
+    await this.dispatch(trx, ctx, messageTypeKey, rawMessage);
+  }
+
+  private async dispatch(trx: Executor, ctx: RequestContext, messageTypeKey: string, rawMessage: string): Promise<void> {
+    switch (messageTypeKey) {
+      case 'ORU^R01':
+        return this.processOru(trx, ctx, rawMessage);
+      case 'ADT^A01':
+      case 'ADT^A02':
+      case 'ADT^A03':
+      case 'ADT^A08':
+        return this.processAdt(trx, ctx, rawMessage);
+      case 'SIU^S12':
+        return this.processSiuNew(trx, ctx, rawMessage);
+      case 'SIU^S14':
+        return this.processSiuUpdate(trx, ctx, rawMessage);
+      case 'SIU^S15':
+        return this.processSiuCancel(trx, ctx, rawMessage);
+      case 'ORM^O01':
+        return this.processOrm(trx, ctx, rawMessage);
+      default:
+        throw new Hl7ParseError(`Unsupported message type: ${messageTypeKey}`);
+    }
+  }
+
   private async processOru(trx: Executor, ctx: RequestContext, rawMessage: string): Promise<void> {
     const parsed = parseOruR01(rawMessage);
 
     if (!parsed.placerOrderNumber) {
-      throw new Error('Missing OBR-2 (placer order number) — cannot correlate this result to an order');
+      throw new Hl7PermanentProcessingError('Missing OBR-2 (placer order number) — cannot correlate this result to an order');
     }
     const order = await this.orderRepo.findById(trx, ctx.tenantId, parsed.placerOrderNumber);
-    if (!order) throw new Error(`No order found matching placer order number ${parsed.placerOrderNumber}`);
+    if (!order) throw new Hl7PermanentProcessingError(`No order found matching placer order number ${parsed.placerOrderNumber}`);
 
     const results: CreateDiagnosticReportInput['results'] = parsed.observations.map((obs) => {
       const numeric = obs.value !== null && obs.value !== '' && !Number.isNaN(Number(obs.value));
@@ -158,10 +190,10 @@ export class Hl7IngestionService {
 
   private async processAdt(trx: Executor, ctx: RequestContext, rawMessage: string): Promise<void> {
     const parsed = parseAdtMessage(rawMessage);
-    if (!parsed.patientIdentifier) throw new Error('Missing PID-3 (patient identifier)');
+    if (!parsed.patientIdentifier) throw new Hl7PermanentProcessingError('Missing PID-3 (patient identifier)');
 
     const patient = await this.patientRepo.findById(trx, ctx.tenantId, parsed.patientIdentifier);
-    if (!patient) throw new Error(`No patient found matching identifier ${parsed.patientIdentifier}`);
+    if (!patient) throw new Hl7PermanentProcessingError(`No patient found matching identifier ${parsed.patientIdentifier}`);
 
     await this.patientService.updateDemographics(trx, ctx, patient.id, {
       ...(parsed.givenName ? { givenName: parsed.givenName } : {}),
@@ -174,13 +206,13 @@ export class Hl7IngestionService {
 
   private async processSiuNew(trx: Executor, ctx: RequestContext, rawMessage: string): Promise<void> {
     const parsed = parseSiuMessage(rawMessage);
-    if (!parsed.patientIdentifier) throw new Error('Missing PID-3 (patient identifier)');
-    if (!parsed.practitionerId) throw new Error('Missing AIP-3 (practitioner resource id)');
-    if (!parsed.locationId) throw new Error('Missing AIL-3 (location resource id)');
-    if (!parsed.scheduledStart || !parsed.scheduledEnd) throw new Error('Missing or invalid SCH-11 (appointment timing)');
+    if (!parsed.patientIdentifier) throw new Hl7PermanentProcessingError('Missing PID-3 (patient identifier)');
+    if (!parsed.practitionerId) throw new Hl7PermanentProcessingError('Missing AIP-3 (practitioner resource id)');
+    if (!parsed.locationId) throw new Hl7PermanentProcessingError('Missing AIL-3 (location resource id)');
+    if (!parsed.scheduledStart || !parsed.scheduledEnd) throw new Hl7PermanentProcessingError('Missing or invalid SCH-11 (appointment timing)');
 
     const patient = await this.patientRepo.findById(trx, ctx.tenantId, parsed.patientIdentifier);
-    if (!patient) throw new Error(`No patient found matching identifier ${parsed.patientIdentifier}`);
+    if (!patient) throw new Hl7PermanentProcessingError(`No patient found matching identifier ${parsed.patientIdentifier}`);
 
     await this.appointmentService.create(trx, ctx, {
       patientId: patient.id,
@@ -195,12 +227,12 @@ export class Hl7IngestionService {
   private async processSiuUpdate(trx: Executor, ctx: RequestContext, rawMessage: string): Promise<void> {
     const parsed = parseSiuMessage(rawMessage);
     if (!parsed.placerAppointmentId) {
-      throw new Error('Missing SCH-1 (placer appointment id) — cannot correlate this update to an appointment');
+      throw new Hl7PermanentProcessingError('Missing SCH-1 (placer appointment id) — cannot correlate this update to an appointment');
     }
-    if (!parsed.scheduledStart || !parsed.scheduledEnd) throw new Error('Missing or invalid SCH-11 (appointment timing)');
+    if (!parsed.scheduledStart || !parsed.scheduledEnd) throw new Hl7PermanentProcessingError('Missing or invalid SCH-11 (appointment timing)');
 
     const appointment = await this.appointmentRepo.findById(trx, ctx.tenantId, parsed.placerAppointmentId);
-    if (!appointment) throw new Error(`No appointment found matching placer appointment id ${parsed.placerAppointmentId}`);
+    if (!appointment) throw new Hl7PermanentProcessingError(`No appointment found matching placer appointment id ${parsed.placerAppointmentId}`);
 
     await this.appointmentService.reschedule(trx, ctx, appointment.id, {
       scheduledStart: parsed.scheduledStart,
@@ -211,22 +243,22 @@ export class Hl7IngestionService {
   private async processSiuCancel(trx: Executor, ctx: RequestContext, rawMessage: string): Promise<void> {
     const parsed = parseSiuMessage(rawMessage);
     if (!parsed.placerAppointmentId) {
-      throw new Error('Missing SCH-1 (placer appointment id) — cannot correlate this cancellation to an appointment');
+      throw new Hl7PermanentProcessingError('Missing SCH-1 (placer appointment id) — cannot correlate this cancellation to an appointment');
     }
 
     const appointment = await this.appointmentRepo.findById(trx, ctx.tenantId, parsed.placerAppointmentId);
-    if (!appointment) throw new Error(`No appointment found matching placer appointment id ${parsed.placerAppointmentId}`);
+    if (!appointment) throw new Hl7PermanentProcessingError(`No appointment found matching placer appointment id ${parsed.placerAppointmentId}`);
 
     await this.appointmentService.cancel(trx, ctx, appointment.id, 'Cancelled via HL7 SIU message');
   }
 
   private async processOrm(trx: Executor, ctx: RequestContext, rawMessage: string): Promise<void> {
     const parsed = parseOrmMessage(rawMessage);
-    if (!parsed.encounterId) throw new Error('Missing PV1-19 (visit number) — cannot correlate this order to an encounter');
-    if (!parsed.orderingPractitionerId) throw new Error('Missing OBR-16 (ordering provider)');
+    if (!parsed.encounterId) throw new Hl7PermanentProcessingError('Missing PV1-19 (visit number) — cannot correlate this order to an encounter');
+    if (!parsed.orderingPractitionerId) throw new Hl7PermanentProcessingError('Missing OBR-16 (ordering provider)');
 
     const encounter = await this.encounterRepo.findById(trx, ctx.tenantId, parsed.encounterId);
-    if (!encounter) throw new Error(`No encounter found matching visit number ${parsed.encounterId}`);
+    if (!encounter) throw new Hl7PermanentProcessingError(`No encounter found matching visit number ${parsed.encounterId}`);
 
     await this.orderService.create(trx, ctx, {
       encounterId: encounter.id,
