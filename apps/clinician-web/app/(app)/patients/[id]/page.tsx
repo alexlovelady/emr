@@ -10,6 +10,7 @@ import type {
   Prescription,
   SignedNote,
   DiagnosticReport,
+  GenomicReport,
   Coverage,
   PatientIdentifier,
   IntakeFormResponse,
@@ -41,6 +42,7 @@ export default async function PatientChartPage({ params }: { params: Promise<{ i
     prescriptions,
     notes,
     results,
+    genomicReports,
     coverages,
     identifiers,
     intakeResponses,
@@ -66,6 +68,7 @@ export default async function PatientChartPage({ params }: { params: Promise<{ i
     callBackend<Prescription[]>(`/api/v1/patients/${id}/prescriptions`),
     callBackend<SignedNote[]>(`/api/v1/patients/${id}/notes`),
     callBackend<DiagnosticReport[]>(`/api/v1/patients/${id}/diagnostic-reports`),
+    callBackendOr<GenomicReport[]>(`/api/v1/patients/${id}/genomic-reports`, []),
     callBackendOr<Coverage[]>(`/api/v1/patients/${id}/coverages`, []),
     callBackendOr<PatientIdentifier[]>(`/api/v1/patients/${id}/identifiers`, []),
     callBackendOr<IntakeFormResponse[]>('/api/v1/intake-form-responses', [], { query: { patientId: id } }),
@@ -102,6 +105,7 @@ export default async function PatientChartPage({ params }: { params: Promise<{ i
         medications={medications}
         prescriptions={prescriptions}
         results={results}
+        genomicReports={genomicReports}
         notes={notes}
         coverages={coverages}
         identifiers={identifiers}

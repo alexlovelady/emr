@@ -14,6 +14,7 @@ import { ClinicalModule } from '@ehr/clinical';
 import { MedicationModule } from '@ehr/medication';
 import { OrdersModule } from '@ehr/orders';
 import { ResultsModule } from '@ehr/results';
+import { GenomicsModule } from '@ehr/genomics';
 import { BillingModule } from '@ehr/billing';
 import { ClaimsModule } from '@ehr/claims';
 import { PaymentsModule } from '@ehr/payments';
@@ -62,6 +63,7 @@ import { ProblemDetailsFilter } from './common/problem-details.filter.js';
     MedicationModule,
     OrdersModule,
     ResultsModule,
+    GenomicsModule,
     BillingModule,
     ClaimsModule,
     PaymentsModule,

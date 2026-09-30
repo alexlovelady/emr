@@ -29,6 +29,7 @@
     "@ehr/patient": "workspace:*",
     "@ehr/payment-adapter": "workspace:*",
     "@ehr/payments": "workspace:*",
+    "@ehr/genomics": "workspace:*",
     "@ehr/results": "workspace:*",
     "@ehr/scheduling": "workspace:*",
     "@ehr/tenant": "workspace:*",

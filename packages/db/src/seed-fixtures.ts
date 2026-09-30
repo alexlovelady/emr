@@ -76,6 +76,8 @@ export const PERMISSION_KEYS = {
   ORDER_MANAGE: 'order.manage',
   RESULT_MANAGE: 'result.manage',
   RESULT_REVIEW: 'result.review',
+  GENOMIC_RESULT_MANAGE: 'genomic_result.manage',
+  GENOMIC_RESULT_REVIEW: 'genomic_result.review',
   INTEROP_HL7_INGEST: 'interop.hl7.ingest',
   EXTERNAL_CANDIDATE_MANAGE: 'external_candidate.manage',
   CHARGE_CAPTURE: 'charge.capture',

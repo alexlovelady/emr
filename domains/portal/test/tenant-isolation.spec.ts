@@ -5,6 +5,7 @@ import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '@
 import { ConsentService } from '@ehr/consent';
 import { AiGenerationService } from '@ehr/ai';
 import { NoopAiGateway } from '@ehr/ai-adapter';
+import { GenomicReportService } from '@ehr/genomics';
 import type { PaymentGateway } from '@ehr/payment-adapter';
 import type { ObjectStorageGateway } from '@ehr/object-storage';
 import { setupTestDb, requestContextFor, type TestDbHandle } from '@ehr/testing';
@@ -332,6 +333,83 @@ describe('tenant isolation — portal', () => {
         withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
           chartService.updateAppointmentAgenda(trx, ctxOther, otherPatientId, appointmentId, 'should not work'),
         ),
+      ).rejects.toBeInstanceOf(NotFoundError);
+    });
+  });
+
+  describe('genomic reports (Epic-parity item 5)', () => {
+    const genomicReportService = new GenomicReportService();
+
+    async function createEncounter(): Promise<string> {
+      return withTenantContext(handle.db, handle.seed.tenantA.tenantId, async (trx) => {
+        const appointment = await trx
+          .insertInto('appointments')
+          .values({
+            tenant_id: handle.seed.tenantA.tenantId,
+            patient_id: tenantAPatientId,
+            location_id: handle.seed.tenantA.locationId,
+            practitioner_id: tenantAPractitionerId,
+            appointment_type: 'office_visit',
+            scheduled_start: new Date(Date.now() + 3600_000),
+            scheduled_end: new Date(Date.now() + 7200_000),
+            status: 'checked_in',
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        const encounter = await trx
+          .insertInto('encounters')
+          .values({
+            tenant_id: handle.seed.tenantA.tenantId,
+            patient_id: tenantAPatientId,
+            appointment_id: appointment.id,
+            location_id: handle.seed.tenantA.locationId,
+            practitioner_id: tenantAPractitionerId,
+            encounter_type: 'office_visit',
+            status: 'roomed',
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        return encounter.id;
+      });
+    }
+
+    it('a pending genomic report is invisible to the portal; a reviewed one is visible with its findings', async () => {
+      const encounterId = await createEncounter();
+      const ctxStaff = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+      const ctxPortal = requestContextFor(handle.seed.tenantA.tenantId, tenantAPortalAccountId, {
+        actor: { id: tenantAPortalAccountId, type: 'patient' },
+      });
+
+      const report = await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+        genomicReportService.create(trx, ctxStaff, tenantAPatientId, {
+          encounterId,
+          displayName: 'Pharmacogenomic panel',
+          findings: [{ geneSymbol: 'CYP2D6', phenotypeCategory: 'poor_metabolizer' }],
+        }),
+      );
+
+      const beforeReview = await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+        chartService.listGenomicReports(trx, ctxPortal, tenantAPatientId),
+      );
+      expect(beforeReview.some((r) => r.id === report.id)).toBe(false);
+
+      await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) => genomicReportService.review(trx, ctxStaff, report.id, 'reviewed'));
+
+      const afterReview = await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+        chartService.listGenomicReports(trx, ctxPortal, tenantAPatientId),
+      );
+      const found = afterReview.find((r) => r.id === report.id);
+      expect(found?.findings).toHaveLength(1);
+      expect(found?.findings[0]?.geneSymbol).toBe('CYP2D6');
+    });
+
+    it('a portal account with no grant cannot read genomic reports (404, not 403)', async () => {
+      const ungrantedAccountId = await createPortalAccount(handle.seed.tenantA.tenantId);
+      const ctxPortal = requestContextFor(handle.seed.tenantA.tenantId, ungrantedAccountId, {
+        actor: { id: ungrantedAccountId, type: 'patient' },
+      });
+      await expect(
+        withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) => chartService.listGenomicReports(trx, ctxPortal, tenantAPatientId)),
       ).rejects.toBeInstanceOf(NotFoundError);
     });
   });

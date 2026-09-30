@@ -435,6 +435,33 @@ export interface DiagnosticReportsTable extends CommonColumnsTable {
   amends_report_id: string | null;
 }
 
+/** Epic-parity item 5 — see migration 0065's doc comment. */
+export interface GenomicReportsTable extends CommonColumnsTable {
+  order_id: string | null;
+  patient_id: string;
+  encounter_id: string;
+  code_system: string | null;
+  code: string | null;
+  display_name: string;
+  conclusion: string | null;
+  performing_lab: string | null;
+  issued_at: GeneratedTimestamp;
+  review_status: Generated<string>;
+  reviewed_at: Timestamp | null;
+  reviewed_by: string | null;
+  amends_report_id: string | null;
+}
+
+export interface GenomicFindingsTable extends CommonColumnsTable {
+  genomic_report_id: string;
+  gene_symbol: string;
+  hgvs_notation: string | null;
+  variant_display: string | null;
+  clinical_significance: string | null;
+  phenotype_category: string | null;
+  interpretation: string | null;
+}
+
 export interface PrescriptionsTable extends CommonColumnsTable {
   patient_id: string;
   medication_id: string;
@@ -945,6 +972,8 @@ export interface DB {
   orders: OrdersTable;
   specimens: SpecimensTable;
   diagnostic_reports: DiagnosticReportsTable;
+  genomic_reports: GenomicReportsTable;
+  genomic_findings: GenomicFindingsTable;
   hl7_messages: Hl7MessagesTable;
   alerts: AlertsTable;
   breakglass_grants: BreakglassGrantsTable;

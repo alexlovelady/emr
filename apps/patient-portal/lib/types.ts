@@ -119,6 +119,29 @@ export interface DiagnosticReport {
   conclusion: string | null;
 }
 
+/** Epic-parity item 5 — discrete coded genomic test results, released (reviewed/acknowledged) only. */
+export interface GenomicFinding {
+  id: string;
+  genomicReportId: string;
+  geneSymbol: string;
+  hgvsNotation: string | null;
+  variantDisplay: string | null;
+  clinicalSignificance: string | null;
+  phenotypeCategory: string | null;
+  interpretation: string | null;
+}
+
+export interface GenomicReport {
+  id: string;
+  patientId: string;
+  encounterId: string;
+  displayName: string;
+  issuedAt: string;
+  reviewStatus: string;
+  conclusion: string | null;
+  findings: GenomicFinding[];
+}
+
 /** From `GET .../results/:reportId/explanation` — `null` means no staff-accepted explanation exists yet. */
 export interface ResultExplanation {
   explanation: string;

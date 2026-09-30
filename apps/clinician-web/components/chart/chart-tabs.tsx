@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   ClipboardList,
   CreditCard,
+  Dna,
   DollarSign,
   FileText,
   FlaskConical,
@@ -19,6 +20,7 @@ import { ProblemsPanel } from '@/components/chart/problems-panel';
 import { AllergiesPanel } from '@/components/chart/allergies-panel';
 import { MedicationsPanel } from '@/components/chart/medications-panel';
 import { ResultsList } from '@/components/chart/results-list';
+import { GenomicsList } from '@/components/chart/genomics-list';
 import { NotesList } from '@/components/chart/notes-list';
 import { CoveragePanel } from '@/components/chart/coverage-panel';
 import { IntakePanel } from '@/components/chart/intake-panel';
@@ -39,6 +41,7 @@ import type {
   DocumentItem,
   EligibilityCheck,
   ExternalCandidate,
+  GenomicReport,
   IntakeFormResponse,
   IntakeFormTemplate,
   MedicationItem,
@@ -72,6 +75,7 @@ interface ChartTabsProps {
   medications: MedicationItem[];
   prescriptions: Prescription[];
   results: DiagnosticReport[];
+  genomicReports: GenomicReport[];
   notes: SignedNote[];
   coverages: Coverage[];
   identifiers: PatientIdentifier[];
@@ -98,6 +102,7 @@ export function ChartTabs({
   medications,
   prescriptions,
   results,
+  genomicReports,
   notes,
   coverages,
   identifiers,
@@ -147,6 +152,9 @@ export function ChartTabs({
               <TabsTrigger value="results">
                 <FlaskConical className="mr-1.5 h-3.5 w-3.5" /> Results
               </TabsTrigger>
+              <TabsTrigger value="genomics">
+                <Dna className="mr-1.5 h-3.5 w-3.5" /> Genomics
+              </TabsTrigger>
               <TabsTrigger value="notes">
                 <FileText className="mr-1.5 h-3.5 w-3.5" /> Notes
               </TabsTrigger>
@@ -191,6 +199,9 @@ export function ChartTabs({
             </TabsContent>
             <TabsContent value="results">
               <ResultsList reports={results} patientId={patientId} />
+            </TabsContent>
+            <TabsContent value="genomics">
+              <GenomicsList reports={genomicReports} patientId={patientId} />
             </TabsContent>
             <TabsContent value="notes">
               <NotesList notes={notes} />

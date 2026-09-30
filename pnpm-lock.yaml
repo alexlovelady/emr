@@ -162,6 +162,9 @@ importers:
       '@ehr/erx-adapter':
         specifier: workspace:*
         version: link:../../packages/erx-adapter
+      '@ehr/genomics':
+        specifier: workspace:*
+        version: link:../../domains/genomics
       '@ehr/intake':
         specifier: workspace:*
         version: link:../../domains/intake
@@ -1127,6 +1130,64 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@26.6.2)(supports-color@7.2.0)
 
+  domains/genomics:
+    dependencies:
+      '@ehr/api-contracts':
+        specifier: workspace:*
+        version: link:../../packages/api-contracts
+      '@ehr/audit':
+        specifier: workspace:*
+        version: link:../../packages/audit
+      '@ehr/authz':
+        specifier: workspace:*
+        version: link:../../packages/authz
+      '@ehr/clinical':
+        specifier: workspace:*
+        version: link:../clinical
+      '@ehr/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@ehr/domain-common':
+        specifier: workspace:*
+        version: link:../../packages/domain-common
+      '@ehr/orders':
+        specifier: workspace:*
+        version: link:../orders
+      '@ehr/outbox':
+        specifier: workspace:*
+        version: link:../../packages/outbox
+      '@ehr/tasks':
+        specifier: workspace:*
+        version: link:../tasks
+      '@nestjs/common':
+        specifier: ^12.1.0
+        version: 12.1.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
+      kysely:
+        specifier: ^0.28.17
+        version: 0.28.17
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      '@ehr/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
+      '@types/pg':
+        specifier: ^8.11.10
+        version: 8.23.1
+      fastify:
+        specifier: ^5.12.5
+        version: 5.12.5
+      pg:
+        specifier: ^8.13.1
+        version: 8.23.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@26.6.2)(supports-color@7.2.0)
+
   domains/intake:
     dependencies:
       '@ehr/api-contracts':
@@ -1513,6 +1574,9 @@ importers:
       '@ehr/domain-common':
         specifier: workspace:*
         version: link:../../packages/domain-common
+      '@ehr/genomics':
+        specifier: workspace:*
+        version: link:../genomics
       '@ehr/medication':
         specifier: workspace:*
         version: link:../medication

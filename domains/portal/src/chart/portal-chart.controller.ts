@@ -70,6 +70,12 @@ export class PortalChartController {
     return this.service.listResults(getCurrentTransaction(), requirePortalCtx(req), patientId);
   }
 
+  @Get('genomic-reports')
+  @Audited('portal_chart.genomic_reports', 'GenomicReport')
+  async listGenomicReports(@Param('patientId') patientId: string, @Req() req: FastifyRequest) {
+    return this.service.listGenomicReports(getCurrentTransaction(), requirePortalCtx(req), patientId);
+  }
+
   @Get('results/:reportId/explanation')
   @Audited('portal_chart.result_explanation', 'DiagnosticReport')
   async getResultExplanation(@Param('patientId') patientId: string, @Param('reportId') reportId: string, @Req() req: FastifyRequest) {

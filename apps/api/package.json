@@ -47,6 +47,7 @@
     "@ehr/payments": "workspace:*",
     "@ehr/portal": "workspace:*",
     "@ehr/query": "workspace:*",
+    "@ehr/genomics": "workspace:*",
     "@ehr/results": "workspace:*",
     "@ehr/search-adapter": "workspace:*",
     "@ehr/scheduling": "workspace:*",

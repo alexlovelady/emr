@@ -5,6 +5,7 @@ import { ConsentService } from '@ehr/consent';
 import { AppointmentService, type AppointmentRow } from '@ehr/scheduling';
 import type { PortalBookAppointmentInput } from '../scheduling/portal-scheduling.dto.js';
 import { DiagnosticReportRepository, type DiagnosticReportRow } from '@ehr/results';
+import { GenomicReportService, type GenomicReportWithFindings } from '@ehr/genomics';
 import { AiGenerationRepository } from '@ehr/ai';
 import { NoteRepository, ProblemRepository, AllergyRepository, type NoteRow, type ProblemRow, type AllergyRow } from '@ehr/clinical';
 import { MedicationRepository, type MedicationRow } from '@ehr/medication';
@@ -27,6 +28,7 @@ export class PortalChartService {
     private readonly consentService: ConsentService = new ConsentService(),
     private readonly appointmentService: AppointmentService = new AppointmentService(),
     private readonly diagnosticReportRepo: DiagnosticReportRepository = new DiagnosticReportRepository(),
+    private readonly genomicReportService: GenomicReportService = new GenomicReportService(),
     private readonly aiGenerationRepo: AiGenerationRepository = new AiGenerationRepository(),
     private readonly noteRepo: NoteRepository = new NoteRepository(),
     private readonly problemRepo: ProblemRepository = new ProblemRepository(),
@@ -71,6 +73,12 @@ export class PortalChartService {
   async listResults(trx: Executor, ctx: RequestContext, patientId: string): Promise<DiagnosticReportRow[]> {
     await this.assertAccess(trx, ctx, patientId);
     return this.diagnosticReportRepo.listReleasedByPatient(trx, ctx.tenantId, patientId);
+  }
+
+  /** Epic-parity item 5 — same portal-visibility gate as `listResults`: excludes `'pending'`. */
+  async listGenomicReports(trx: Executor, ctx: RequestContext, patientId: string): Promise<GenomicReportWithFindings[]> {
+    await this.assertAccess(trx, ctx, patientId);
+    return this.genomicReportService.listReleased(trx, ctx, patientId);
   }
 
   /**

@@ -1408,6 +1408,46 @@ practice has registered, not a shared marketplace.
   `argon2.verify`. 3 new integration tests in `apps/api` (secret generation/verification, tenant
   isolation on update/deactivate, the update/deactivate/activate state-transition guards).
 
+### Item 5 — genomics domain (discrete coded genomic test results)
+
+Explicitly scoped to what's real: discrete, coded genomic test results (e.g. a pharmacogenomic
+panel's per-gene phenotype, or a hereditary-cancer gene-panel finding) — **not** a sequencing
+pipeline and **not** raw VCF/FASTQ handling, since no genomics lab partner exists. Confirmed nothing
+genomics-related existed anywhere in the repo before building (a plain grep for
+genomic/genetic/HGVS/ClinVar/PharmGKB/CPIC turned up only this build-out's own planning prose).
+
+- **New `domains/genomics`**, modeled directly on `@ehr/results`' `DiagnosticReportService` — the
+  same encounter-scoped report shape, the same additive-amendment pattern (`amend()` creates a new
+  row via `amendsReportId`, the original is never mutated), the same `reviewStatus` gate for portal
+  visibility (`listReleasedByPatient` excludes `'pending'`). One deliberate departure: individual
+  findings get their **own** table (`genomic_findings`, migration `0065`) rather than reusing
+  `@ehr/clinical`'s generic `observations` the way diagnostic reports do — a finding's natural
+  fields (gene symbol, HGVS variant notation, ClinVar-style clinical significance, a CPIC-style
+  phenotype category) don't fit `observations`' generic code/display/value shape, and forcing them
+  in would lose exactly the discrete structure this item exists to provide. No HGVS/ClinVar/PharmGKB
+  code-system precedent existed to constrain against, so `hgvsNotation`/`phenotypeCategory` stay
+  loose free text, matching `diagnostic_reports.code_system`/`code`'s own established convention.
+- **A pathogenic/likely-pathogenic finding automatically opens a durable `Task`**
+  (`taskType: 'genomic_finding_review'`), the same "durable workflow task, not a transient
+  notification" treatment `diagnostic_reports`' critical-flag rule already gives lab results — a
+  benign-only report opens nothing.
+- **`apps/clinician-web`** — a new "Genomics" chart tab (`GenomicsList`) showing each report's
+  findings inline (gene, HGVS notation, a color-coded significance badge, phenotype, interpretation)
+  with the same Mark-reviewed/Acknowledge actions as `ResultsList`; a "Record genomic result" dialog
+  on the encounter workspace (mirrors `RecordResultDialog`'s add/remove-row pattern) lets staff add
+  one or more findings to a new report.
+- **`apps/patient-portal`** — a new "Genomics" tab on the records page showing only
+  reviewed/acknowledged reports and their findings, via a new `PortalChartService
+  .listGenomicReports()` (same consent-gated `assertAccess` posture as every other portal read).
+- **Live-verified** end to end against the running dev stack: recorded a real two-finding report
+  (one pathogenic, one benign) via a direct API call, confirmed the pathogenic finding alone opened
+  a `genomic_finding_review` Task; confirmed the report was invisible to a real registered
+  patient-portal account until reviewed, then visible with both findings intact; confirmed the same
+  in the actual browser UI on both `clinician-web` (chart tab renders gene/HGVS/significance/
+  interpretation, review action works) and `patient-portal` (records tab shows the released report
+  and both findings only after review). 6 new tests in `domains/genomics/test/tenant-isolation.spec.ts`
+  plus 2 new tests in `domains/portal`'s existing suite (26 total, up from 24).
+
 ## Verification status
 
 Docker Desktop's backend would not start in the environment this was built in (its WSL2

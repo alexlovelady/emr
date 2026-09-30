@@ -166,6 +166,30 @@ export interface DiagnosticReport {
   conclusion: string | null;
 }
 
+/** Epic-parity item 5 — discrete coded genomic test results. */
+export interface GenomicFinding {
+  id: string;
+  genomicReportId: string;
+  geneSymbol: string;
+  hgvsNotation: string | null;
+  variantDisplay: string | null;
+  clinicalSignificance: string | null;
+  phenotypeCategory: string | null;
+  interpretation: string | null;
+}
+
+export interface GenomicReport {
+  id: string;
+  patientId: string;
+  encounterId: string;
+  displayName: string;
+  issuedAt: string;
+  reviewStatus: string;
+  conclusion: string | null;
+  performingLab: string | null;
+  findings: GenomicFinding[];
+}
+
 export interface Appointment {
   id: string;
   patientId: string;

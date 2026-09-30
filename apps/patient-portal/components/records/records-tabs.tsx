@@ -2,7 +2,7 @@
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import type { Allergy, DiagnosticReport, MedicationItem, Note, Problem } from '@/lib/types';
+import type { Allergy, DiagnosticReport, GenomicReport, MedicationItem, Note, Problem } from '@/lib/types';
 
 function EmptyRow({ message }: { message: string }) {
   return <p className="py-6 text-center text-sm text-muted-foreground">{message}</p>;
@@ -10,6 +10,7 @@ function EmptyRow({ message }: { message: string }) {
 
 export function RecordsTabs({
   results,
+  genomicReports,
   notes,
   problems,
   allergies,
@@ -17,6 +18,7 @@ export function RecordsTabs({
   explanations,
 }: {
   results: DiagnosticReport[];
+  genomicReports: GenomicReport[];
   notes: Note[];
   problems: Problem[];
   allergies: Allergy[];
@@ -27,6 +29,7 @@ export function RecordsTabs({
     <Tabs defaultValue="results">
       <TabsList className="flex-wrap">
         <TabsTrigger value="results">Results</TabsTrigger>
+        <TabsTrigger value="genomics">Genomics</TabsTrigger>
         <TabsTrigger value="notes">Visit notes</TabsTrigger>
         <TabsTrigger value="problems">Problems</TabsTrigger>
         <TabsTrigger value="allergies">Allergies</TabsTrigger>
@@ -55,6 +58,34 @@ export function RecordsTabs({
                     {explanations[r.id]}
                   </p>
                 )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </TabsContent>
+
+      <TabsContent value="genomics">
+        {genomicReports.length === 0 ? (
+          <EmptyRow message="No released genomic test results." />
+        ) : (
+          <ul className="divide-y divide-border">
+            {genomicReports.map((r) => (
+              <li key={r.id} className="space-y-2 py-3 text-sm">
+                <div className="font-medium">{r.displayName}</div>
+                <p className="text-xs text-muted-foreground">{new Date(r.issuedAt).toLocaleDateString()}</p>
+                {r.conclusion && <p className="text-muted-foreground">{r.conclusion}</p>}
+                <ul className="space-y-1.5">
+                  {r.findings.map((f) => (
+                    <li key={f.id} className="rounded-md bg-muted p-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-medium">{f.geneSymbol}</span>
+                        {f.clinicalSignificance && <Badge variant="outline">{f.clinicalSignificance.replace(/_/g, ' ')}</Badge>}
+                        {f.phenotypeCategory && <Badge variant="outline">{f.phenotypeCategory.replace(/_/g, ' ')}</Badge>}
+                      </div>
+                      {f.interpretation && <p className="mt-1 text-xs text-muted-foreground">{f.interpretation}</p>}
+                    </li>
+                  ))}
+                </ul>
               </li>
             ))}
           </ul>

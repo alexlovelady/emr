@@ -3,6 +3,7 @@ import { EncounterHeader } from '@/components/encounters/encounter-header';
 import { NotesPanel } from '@/components/encounters/notes-panel';
 import { OrdersPanel } from '@/components/encounters/orders-panel';
 import { RecordResultDialog } from '@/components/encounters/record-result-dialog';
+import { RecordGenomicResultDialog } from '@/components/encounters/record-genomic-result-dialog';
 import { ChargesPanel } from '@/components/encounters/charges-panel';
 import type { Charge, Encounter, Note, NoteTemplate, Order, Patient } from '@/lib/types';
 
@@ -24,8 +25,9 @@ export default async function EncounterWorkspacePage({ params }: { params: Promi
   return (
     <div className="space-y-5">
       <EncounterHeader encounter={encounter} patient={patient} />
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
         <RecordResultDialog encounterId={id} patientId={patient.id} />
+        <RecordGenomicResultDialog encounterId={id} patientId={patient.id} />
       </div>
       <OrdersPanel orders={orders} encounterId={id} />
       <ChargesPanel charges={charges} patientId={patient.id} encounterId={id} />
