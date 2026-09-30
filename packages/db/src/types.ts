@@ -542,6 +542,11 @@ export interface SmartClientsTable extends CommonColumnsTable {
   client_type: Generated<string>;
   /** Item 24 — see migration 0059's doc comment. Null means this client isn't EHR-launchable. */
   launch_uri: string | null;
+  /** Epic-parity item 4 — catalog display fields; see migration 0064's doc comment. */
+  description: string | null;
+  developer_name: string | null;
+  website_url: string | null;
+  logo_url: string | null;
 }
 
 export interface SmartAuthorizationCodesTable extends CommonColumnsTable {

@@ -1372,6 +1372,42 @@ only ever reach the patient after a human explicitly accepts them, and a plain p
   2 in `domains/scheduling`, 4 in `domains/portal`) — all in the domains' existing tenant-isolation
   suites (18/16/24 total passing in each package, up from 15/14/20).
 
+### Item 4 — SMART-app developer/marketplace catalog (App Orchard/Showroom-equivalent)
+
+Scoped to what's actually buildable: `smart_clients` is tenant-scoped with RLS (verified before
+building anything), so a real cross-tenant app directory would need vendor submission/certification
+— network-effect/vendor-gated, the same reasoning that excluded Care Everywhere/Cosmos. What this
+item builds instead is honest to that constraint: a **per-tenant** catalog of the SMART apps a
+practice has registered, not a shared marketplace.
+
+- **`smart_clients` gained four catalog display columns** (migration `0064`): `description`,
+  `developer_name`, `website_url`, `logo_url` — the table previously had only `display_name`, so
+  there was nothing to actually render in a catalog view.
+- **New `apps/api/src/smart-ehr-launch/smart-client-admin.controller.ts`** — full admin CRUD
+  (`GET/POST /api/v1/smart-clients/admin`, `PATCH .../:id`, `POST .../:id/{activate,deactivate}`),
+  deliberately a separate path from the existing `GET /api/v1/smart-clients` launch-picker endpoint
+  (different permission model, different response shape — see that endpoint's own doc comment)
+  rather than repurposing it. Raw Kysely in the controller, no new repository/service layer, matching
+  `SmartEhrLaunchController`'s existing style for this same table. Gated on `API_MANAGE_CLIENTS` — an
+  existing permission key that had been defined since an earlier build-out but was never actually
+  wired to anything, rather than minting a new one.
+- **Real client-secret issuance**: `create()` generates a random client id + a 32-byte secret, hashes
+  it with the identical `argon2.argon2id` call the token endpoint already uses to verify SMART client
+  credentials (`apps/interop-fhir/src/token/token.service.ts`), and returns the plaintext secret in
+  that one response only — never retrievable again, never present in any later read.
+- **`apps/admin-web`'s new `/smart-apps` page** — an app-store-style card grid (logo, developer,
+  description, scopes, status) rather than a flat table, since "catalog" is the actual UX goal here;
+  a register dialog collects the descriptive fields plus scopes/redirect URIs/launch URL, then swaps
+  to a one-time secret-reveal screen with copy buttons; each card has Edit (descriptive fields) and
+  an Activate/Deactivate toggle.
+- **Live-verified** against the running dev stack: registered a real app through the actual browser
+  UI, confirmed the one-time secret-reveal dialog rendered with a real 64-hex-char secret, confirmed
+  the app then appeared in the grid; toggled it to Inactive through the UI and confirmed the badge and
+  button both flipped correctly; confirmed via direct API calls that the endpoint returns real seeded
+  and newly-created rows and that the stored hash verifies against the returned plaintext secret via
+  `argon2.verify`. 3 new integration tests in `apps/api` (secret generation/verification, tenant
+  isolation on update/deactivate, the update/deactivate/activate state-transition guards).
+
 ## Verification status
 
 Docker Desktop's backend would not start in the environment this was built in (its WSL2

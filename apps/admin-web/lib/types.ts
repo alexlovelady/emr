@@ -150,6 +150,28 @@ export interface UserRoleGrant extends UserRoleRow {
   roleDisplayName: string;
 }
 
+/** Epic-parity item 4 — a per-tenant SMART-app catalog entry. */
+export interface SmartClientRow {
+  id: string;
+  clientId: string;
+  displayName: string;
+  description: string | null;
+  developerName: string | null;
+  websiteUrl: string | null;
+  logoUrl: string | null;
+  allowedScopes: string[];
+  redirectUris: string[];
+  clientType: string;
+  launchUri: string | null;
+  status: string;
+  createdAt: string;
+}
+
+/** Only present in the create response — the plaintext secret is never retrievable again. */
+export interface SmartClientCreateResult extends SmartClientRow {
+  clientSecret: string;
+}
+
 export interface ProblemDetails {
   type: string;
   title: string;
