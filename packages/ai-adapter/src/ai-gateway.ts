@@ -12,7 +12,8 @@ export type PromptTemplateId =
   | 'denial-summary-v1'
   | 'appeal-draft-v1'
   | 'task-summary-v1'
-  | 'nl-to-cohort-dsl-v1';
+  | 'nl-to-cohort-dsl-v1'
+  | 'lab-result-explanation-v1';
 
 /**
  * One retrieved, already-minimum-necessary fact (§15.1's "minimum-necessary context assembly") —

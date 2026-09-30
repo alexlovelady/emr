@@ -11,8 +11,10 @@ import { PortalChartService } from './portal-chart.service.js';
 import {
   PortalBookAppointmentSchema,
   PortalCancelAppointmentSchema,
+  PortalUpdateAgendaSchema,
   type PortalBookAppointmentInput,
   type PortalCancelAppointmentInput,
+  type PortalUpdateAgendaInput,
 } from '../scheduling/portal-scheduling.dto.js';
 
 @Controller('api/v1/portal/patients/:patientId')
@@ -51,10 +53,27 @@ export class PortalChartController {
     return this.service.cancelAppointment(getCurrentTransaction(), requirePortalCtx(req), patientId, appointmentId, body.reason ?? null);
   }
 
+  @Post('appointments/:appointmentId/agenda')
+  @Audited('portal_chart.update_agenda', 'Appointment')
+  async updateAgenda(
+    @Param('patientId') patientId: string,
+    @Param('appointmentId') appointmentId: string,
+    @Body(new ZodValidationPipe(PortalUpdateAgendaSchema)) body: PortalUpdateAgendaInput,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.service.updateAppointmentAgenda(getCurrentTransaction(), requirePortalCtx(req), patientId, appointmentId, body.agenda);
+  }
+
   @Get('results')
   @Audited('portal_chart.results', 'DiagnosticReport')
   async listResults(@Param('patientId') patientId: string, @Req() req: FastifyRequest) {
     return this.service.listResults(getCurrentTransaction(), requirePortalCtx(req), patientId);
+  }
+
+  @Get('results/:reportId/explanation')
+  @Audited('portal_chart.result_explanation', 'DiagnosticReport')
+  async getResultExplanation(@Param('patientId') patientId: string, @Param('reportId') reportId: string, @Req() req: FastifyRequest) {
+    return this.service.getResultExplanation(getCurrentTransaction(), requirePortalCtx(req), patientId, reportId);
   }
 
   @Get('notes')

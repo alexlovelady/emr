@@ -10,6 +10,7 @@ import { DenialSummaryController } from './denial-summary/denial-summary.control
 import { AppealDraftController } from './appeal-draft/appeal-draft.controller.js';
 import { TaskSummaryController } from './task-summary/task-summary.controller.js';
 import { NlToCohortDslProposeController, NlToCohortDslExecuteController } from './nl-to-cohort-dsl/nl-to-cohort-dsl.controller.js';
+import { LabResultExplanationController } from './lab-result-explanation/lab-result-explanation.controller.js';
 
 @Module({
   controllers: [
@@ -25,6 +26,7 @@ import { NlToCohortDslProposeController, NlToCohortDslExecuteController } from '
     TaskSummaryController,
     NlToCohortDslProposeController,
     NlToCohortDslExecuteController,
+    LabResultExplanationController,
   ],
 })
 export class AiModule {}

@@ -22,6 +22,9 @@ export interface AppointmentRow {
   videoProviderVisitId: string | null;
   videoJoinUrlPractitioner: string | null;
   videoJoinUrlPatient: string | null;
+  /** Epic-parity item 3 — pre-visit agenda capture, see migration 0063's doc comment. */
+  patientAgenda: string | null;
+  patientAgendaUpdatedAt: Date | null;
   status: string;
   createdAt: Date;
   updatedAt: Date;
@@ -251,6 +254,19 @@ export class AppointmentRepository {
       .executeTakeFirstOrThrow();
     return toRow(row);
   }
+
+  /** Not a status transition — the agenda is a plain free-text note, settable at any pre-visit
+   * status (a patient might update it right up until check-in). */
+  async updatePatientAgenda(trx: Executor, tenantId: string, id: string, agenda: string): Promise<AppointmentRow> {
+    const row = await trx
+      .updateTable('appointments')
+      .set({ patient_agenda: agenda, patient_agenda_updated_at: new Date(), updated_at: new Date() })
+      .where('tenant_id', '=', tenantId)
+      .where('id', '=', id)
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return toRow(row);
+  }
 }
 
 function toRow(dbRow: Selectable<DB['appointments']>): AppointmentRow {
@@ -275,6 +291,8 @@ function toRow(dbRow: Selectable<DB['appointments']>): AppointmentRow {
     videoProviderVisitId: dbRow.video_provider_visit_id,
     videoJoinUrlPractitioner: dbRow.video_join_url_practitioner,
     videoJoinUrlPatient: dbRow.video_join_url_patient,
+    patientAgenda: dbRow.patient_agenda,
+    patientAgendaUpdatedAt: dbRow.patient_agenda_updated_at,
     status: dbRow.status,
     createdAt: dbRow.created_at,
     updatedAt: dbRow.updated_at,

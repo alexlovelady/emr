@@ -16,6 +16,11 @@ export interface ProposeAiGenerationInput {
   subjectId: string | null;
   inputText: string;
   context: AiContextItemInput[];
+  /** `lab_result_explanation` only — unlike `linked_cohort_execution_id` (set after the fact via
+   * `acceptWithLinkedCohortExecution`, since that execution doesn't exist until accept time), the
+   * diagnostic report already exists before this generation does, so it's set directly at propose
+   * time here. */
+  linkedDiagnosticReportId?: string;
 }
 
 export const AcceptAiGenerationSchema = z.object({

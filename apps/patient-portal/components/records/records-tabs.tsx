@@ -14,12 +14,14 @@ export function RecordsTabs({
   problems,
   allergies,
   medications,
+  explanations,
 }: {
   results: DiagnosticReport[];
   notes: Note[];
   problems: Problem[];
   allergies: Allergy[];
   medications: MedicationItem[];
+  explanations: Record<string, string>;
 }) {
   return (
     <Tabs defaultValue="results">
@@ -47,6 +49,12 @@ export function RecordsTabs({
                 </div>
                 <p className="text-xs text-muted-foreground">{new Date(r.issuedAt).toLocaleDateString()}</p>
                 {r.conclusion && <p className="text-muted-foreground">{r.conclusion}</p>}
+                {explanations[r.id] && (
+                  <p className="rounded-md bg-muted p-2 text-muted-foreground">
+                    <span className="font-medium">What this means: </span>
+                    {explanations[r.id]}
+                  </p>
+                )}
               </li>
             ))}
           </ul>

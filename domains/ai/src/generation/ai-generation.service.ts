@@ -72,6 +72,7 @@ export class AiGenerationService {
       outputHash: result.outputHash,
       generatedAt: result.generatedAt,
       createdBy: actorId ?? ctx.tenantId,
+      ...(input.linkedDiagnosticReportId ? { linkedDiagnosticReportId: input.linkedDiagnosticReportId } : {}),
     });
 
     await this.emit(trx, ctx, row, 'ai_generation.proposed.v1', { feature: row.feature });

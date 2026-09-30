@@ -248,6 +248,17 @@ export class AppointmentService {
     return updated;
   }
 
+  /** Epic-parity item 3 — pre-visit agenda capture. Never blocked by `cancelled_at`/status the way
+   * `assertTransition` guards real state changes, since this is a plain free-text field, not a
+   * status transition — a patient can still leave a note on an appointment they're about to
+   * confirm or check into. */
+  async updatePatientAgenda(trx: Executor, ctx: RequestContext, id: string, agenda: string): Promise<AppointmentRow> {
+    await this.getById(trx, ctx, id); // 404s if this tenant has no such appointment
+    const updated = await this.repo.updatePatientAgenda(trx, ctx.tenantId, id, agenda);
+    await this.emit(trx, ctx, updated, 'appointment.patient_agenda_updated.v1', updated.version, {});
+    return updated;
+  }
+
   async markNoShow(trx: Executor, ctx: RequestContext, id: string): Promise<AppointmentRow> {
     const current = await this.getById(trx, ctx, id);
     this.assertTransition(current.status, 'no_show');

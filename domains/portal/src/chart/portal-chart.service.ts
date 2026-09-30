@@ -5,6 +5,7 @@ import { ConsentService } from '@ehr/consent';
 import { AppointmentService, type AppointmentRow } from '@ehr/scheduling';
 import type { PortalBookAppointmentInput } from '../scheduling/portal-scheduling.dto.js';
 import { DiagnosticReportRepository, type DiagnosticReportRow } from '@ehr/results';
+import { AiGenerationRepository } from '@ehr/ai';
 import { NoteRepository, ProblemRepository, AllergyRepository, type NoteRow, type ProblemRow, type AllergyRow } from '@ehr/clinical';
 import { MedicationRepository, type MedicationRow } from '@ehr/medication';
 import { DocumentService, type DocumentRow } from '@ehr/documents';
@@ -26,6 +27,7 @@ export class PortalChartService {
     private readonly consentService: ConsentService = new ConsentService(),
     private readonly appointmentService: AppointmentService = new AppointmentService(),
     private readonly diagnosticReportRepo: DiagnosticReportRepository = new DiagnosticReportRepository(),
+    private readonly aiGenerationRepo: AiGenerationRepository = new AiGenerationRepository(),
     private readonly noteRepo: NoteRepository = new NoteRepository(),
     private readonly problemRepo: ProblemRepository = new ProblemRepository(),
     private readonly allergyRepo: AllergyRepository = new AllergyRepository(),
@@ -56,9 +58,36 @@ export class PortalChartService {
     return stripPractitionerJoinUrl(cancelled);
   }
 
+  /** Same ownership-check reasoning as `cancelAppointment` — `getById` alone doesn't prove the
+   * appointment belongs to this exact patient. */
+  async updateAppointmentAgenda(trx: Executor, ctx: RequestContext, patientId: string, appointmentId: string, agenda: string): Promise<AppointmentRow> {
+    await this.assertAccess(trx, ctx, patientId);
+    const appointment = await this.appointmentService.getById(trx, ctx, appointmentId);
+    if (appointment.patientId !== patientId) throw new NotFoundError('Appointment not found', { appointmentId });
+    const updated = await this.appointmentService.updatePatientAgenda(trx, ctx, appointmentId, agenda);
+    return stripPractitionerJoinUrl(updated);
+  }
+
   async listResults(trx: Executor, ctx: RequestContext, patientId: string): Promise<DiagnosticReportRow[]> {
     await this.assertAccess(trx, ctx, patientId);
     return this.diagnosticReportRepo.listReleasedByPatient(trx, ctx.tenantId, patientId);
+  }
+
+  /**
+   * Epic-parity item 3 — only ever returns an already-STAFF-ACCEPTED plain-language explanation
+   * (`AiGenerationRepository.findAcceptedByLinkedDiagnosticReport`'s own doc comment); a `pending`/
+   * `rejected` draft is invisible here no matter what, same "never show unreviewed AI output to a
+   * patient" posture as every other AI feature's human-review gate. `null` (no explanation drafted
+   * or accepted yet) is a completely normal result, not an error.
+   */
+  async getResultExplanation(trx: Executor, ctx: RequestContext, patientId: string, reportId: string): Promise<{ explanation: string } | null> {
+    await this.assertAccess(trx, ctx, patientId);
+    const report = await this.diagnosticReportRepo.findById(trx, ctx.tenantId, reportId);
+    if (!report || report.patientId !== patientId) throw new NotFoundError('Result not found', { reportId });
+
+    const generation = await this.aiGenerationRepo.findAcceptedByLinkedDiagnosticReport(trx, ctx.tenantId, reportId);
+    if (!generation) return null;
+    return { explanation: generation.editedOutputText ?? generation.outputText };
   }
 
   async listNotes(trx: Executor, ctx: RequestContext, patientId: string): Promise<NoteRow[]> {

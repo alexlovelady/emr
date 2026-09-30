@@ -11,6 +11,7 @@ const TEMPLATE_LABELS: Record<PromptTemplateId, string> = {
   'appeal-draft-v1': 'Appeal draft',
   'task-summary-v1': 'Task summary',
   'nl-to-cohort-dsl-v1': 'Cohort DSL candidate',
+  'lab-result-explanation-v1': 'Plain-language result explanation',
 };
 
 /** A fixed, always-valid candidate matching @ehr/query's CohortDslSchema shape (not re-imported here — packages/ai-adapter has no domain dependencies, by design). */

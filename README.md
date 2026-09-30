@@ -1332,6 +1332,46 @@ needed zero new persistence or scheduling infrastructure.
 - **Found in passing, flagged as a separate follow-up (not fixed here, to keep this item's scope
   tight)**: `AlertsController.list()`'s pre-existing lack of tenant filtering, above.
 
+### Item 3 — patient-facing AI ("Emmie"-equivalent), reframed responsibly
+
+No LLM vendor is connected (`docs/adr/0004-deferred-ai-vendor.md`), so this is deliberately **not** a
+live unsupervised chatbot. Two narrower, honest capabilities: AI-drafted lab-result explanations that
+only ever reach the patient after a human explicitly accepts them, and a plain pre-visit agenda note
+(not AI at all — just a UX gap being closed).
+
+- **Lab-result explanations reuse the existing generic AI propose→review pipeline** (the same one
+  used by all 8 other `domains/ai` features) rather than inventing a parallel mechanism — a new
+  `lab_result_explanation` feature (migration `0062`, widening the `ai_generations_feature_check`
+  allowlist) and a `lab-result-explanation-v1` prompt template on the existing `NoopAiGateway` honest
+  stub. The one new field, `ai_generations.linked_diagnostic_report_id`, follows the precedent of
+  `linked_cohort_execution_id` but is set directly at `propose()` time rather than after `accept()`,
+  since (unlike a cohort execution) the diagnostic report already exists before the generation does.
+- **The patient-facing read never has a "draft" state to leak**: `AiGenerationRepository
+  .findAcceptedByLinkedDiagnosticReport()` only ever returns rows with `status IN ('accepted',
+  'accepted_with_edits')` — a `pending` or `rejected` explanation is structurally invisible to
+  `PortalChartService.getResultExplanation()` no matter what, the same "never show unreviewed AI
+  output to a patient" posture every other AI feature's human-review gate already has.
+- **Pre-visit agenda capture** — a new `patient_agenda`/`patient_agenda_updated_at` column pair on
+  `appointments` (migration `0063`), modeled directly on `cancellation_reason`'s existing
+  single-purpose-free-text-column precedent since there's no edit-history requirement for one
+  pre-visit note. Patient-only write (`PortalChartService.updateAppointmentAgenda`, with the same
+  ownership re-check as `cancelAppointment`); staff see it read-only in the schedule table.
+- **`apps/clinician-web`** — a "Explain for patient (AI)" trigger on each result row
+  (`results-list.tsx`), reusing the existing `AiProposeTrigger`/`AiGenerationReview` components
+  unchanged; the schedule table shows a patient's agenda note (if any) under the appointment type.
+  **`apps/patient-portal`** — the results tab shows the accepted explanation text under its report
+  (only once accepted); the appointments tab has an inline "what would you like to discuss" editor
+  for upcoming (`scheduled`/`confirmed`) appointments.
+- **Live-verified** end to end against the running dev stack: proposed a real explanation via the
+  clinician-web UI and confirmed the generic review panel rendered pending/Accept/Reject with correct
+  grounding metadata; confirmed via direct API calls that the portal-facing lookup returns `null`
+  before acceptance and the exact edited text after; registered a real patient-portal account and
+  confirmed the accepted explanation renders on the patient's own results page and nowhere before
+  that; set a pre-visit agenda as a patient in the actual browser UI and confirmed the same text
+  round-trips through `GET /api/v1/appointments` on the staff side. 9 new tests (3 in `domains/ai`,
+  2 in `domains/scheduling`, 4 in `domains/portal`) — all in the domains' existing tenant-isolation
+  suites (18/16/24 total passing in each package, up from 15/14/20).
+
 ## Verification status
 
 Docker Desktop's backend would not start in the environment this was built in (its WSL2

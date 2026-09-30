@@ -23,6 +23,7 @@ export interface AiGenerationRow {
   reviewedBy: string | null;
   editedOutputText: string | null;
   linkedCohortExecutionId: string | null;
+  linkedDiagnosticReportId: string | null;
   status: string;
   createdAt: Date;
   updatedAt: Date;
@@ -48,6 +49,7 @@ export interface CreateAiGenerationRecord {
   outputHash: string;
   generatedAt: string;
   createdBy: string;
+  linkedDiagnosticReportId?: string;
 }
 
 export class AiGenerationRepository {
@@ -70,6 +72,7 @@ export class AiGenerationRepository {
         output_json: input.outputJson ? JSON.stringify(input.outputJson) : null,
         output_hash: input.outputHash,
         generated_at: input.generatedAt,
+        linked_diagnostic_report_id: input.linkedDiagnosticReportId ?? null,
         status: 'pending',
         created_by: input.createdBy,
         updated_by: input.createdBy,
@@ -125,6 +128,21 @@ export class AiGenerationRepository {
     return toRow(row);
   }
 
+  /** Item 3's patient-facing read path — only ever returns an already-accepted explanation; a
+   * `pending`/`rejected` draft must never reach a patient. `executeTakeFirst` (not throw) since
+   * "no explanation drafted/accepted yet" is a completely normal, expected state. */
+  async findAcceptedByLinkedDiagnosticReport(trx: Executor, tenantId: string, diagnosticReportId: string): Promise<AiGenerationRow | null> {
+    const row = await trx
+      .selectFrom('ai_generations')
+      .selectAll()
+      .where('tenant_id', '=', tenantId)
+      .where('linked_diagnostic_report_id', '=', diagnosticReportId)
+      .where('status', 'in', ['accepted', 'accepted_with_edits'])
+      .orderBy('reviewed_at', 'desc')
+      .executeTakeFirst();
+    return row ? toRow(row) : null;
+  }
+
   async setLinkedCohortExecution(trx: Executor, tenantId: string, id: string, cohortExecutionId: string): Promise<void> {
     await trx
       .updateTable('ai_generations')
@@ -171,6 +189,7 @@ function toRow(dbRow: Selectable<DB['ai_generations']>): AiGenerationRow {
     reviewedBy: dbRow.reviewed_by,
     editedOutputText: dbRow.edited_output_text,
     linkedCohortExecutionId: dbRow.linked_cohort_execution_id,
+    linkedDiagnosticReportId: dbRow.linked_diagnostic_report_id,
     status: dbRow.status,
     createdAt: dbRow.created_at,
     updatedAt: dbRow.updated_at,

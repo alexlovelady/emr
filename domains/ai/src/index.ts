@@ -24,3 +24,4 @@ export {
   ExecuteCohortDslSchema,
   type ExecuteCohortDslInput,
 } from './nl-to-cohort-dsl/nl-to-cohort-dsl.dto.js';
+export { LabResultExplanationSchema, type LabResultExplanationInput } from './lab-result-explanation/lab-result-explanation.dto.js';

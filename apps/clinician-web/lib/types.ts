@@ -178,6 +178,9 @@ export interface Appointment {
   visitType: 'in_person' | 'telehealth';
   videoJoinUrlPractitioner: string | null;
   status: string;
+  /** Epic-parity item 3 — patient-authored pre-visit note; read-only here, written only via the portal. */
+  patientAgenda: string | null;
+  patientAgendaUpdatedAt: string | null;
 }
 
 /** Display name only — from the low-permission `POST /practitioners/names` lookup, not the

@@ -340,6 +340,9 @@ export interface AppointmentsTable extends CommonColumnsTable {
   video_provider_visit_id: string | null;
   video_join_url_practitioner: string | null;
   video_join_url_patient: string | null;
+  /** Epic-parity item 3 — see migration 0063's doc comment. */
+  patient_agenda: string | null;
+  patient_agenda_updated_at: Timestamp | null;
 }
 
 export interface ResourcesTable extends CommonColumnsTable {
@@ -836,6 +839,8 @@ export interface AiGenerationsTable extends CommonColumnsTable {
   reviewed_by: string | null;
   edited_output_text: string | null;
   linked_cohort_execution_id: string | null;
+  /** Epic-parity item 3 — see migration 0062's doc comment. */
+  linked_diagnostic_report_id: string | null;
 }
 
 export interface IdempotencyKeysTable {

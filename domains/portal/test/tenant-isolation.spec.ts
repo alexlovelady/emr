@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { withTenantContext } from '@ehr/db';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '@ehr/domain-common';
 import { ConsentService } from '@ehr/consent';
+import { AiGenerationService } from '@ehr/ai';
+import { NoopAiGateway } from '@ehr/ai-adapter';
 import type { PaymentGateway } from '@ehr/payment-adapter';
 import type { ObjectStorageGateway } from '@ehr/object-storage';
 import { setupTestDb, requestContextFor, type TestDbHandle } from '@ehr/testing';
@@ -205,6 +207,133 @@ describe('tenant isolation — portal', () => {
     await expect(
       withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) => sessionService.revoke(trx, ctxOther, firstSession.id)),
     ).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  describe('patient-facing AI + pre-visit agenda (Epic-parity item 3)', () => {
+    const aiGenerationService = new AiGenerationService(new NoopAiGateway());
+
+    async function createAppointmentAndReport(): Promise<{ appointmentId: string; reportId: string }> {
+      return withTenantContext(handle.db, handle.seed.tenantA.tenantId, async (trx) => {
+        const appointment = await trx
+          .insertInto('appointments')
+          .values({
+            tenant_id: handle.seed.tenantA.tenantId,
+            patient_id: tenantAPatientId,
+            location_id: handle.seed.tenantA.locationId,
+            practitioner_id: tenantAPractitionerId,
+            appointment_type: 'office_visit',
+            scheduled_start: new Date(Date.now() + 3600_000),
+            scheduled_end: new Date(Date.now() + 7200_000),
+            status: 'scheduled',
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        const encounter = await trx
+          .insertInto('encounters')
+          .values({
+            tenant_id: handle.seed.tenantA.tenantId,
+            patient_id: tenantAPatientId,
+            appointment_id: appointment.id,
+            location_id: handle.seed.tenantA.locationId,
+            practitioner_id: tenantAPractitionerId,
+            encounter_type: 'office_visit',
+            status: 'signed',
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        const report = await trx
+          .insertInto('diagnostic_reports')
+          .values({
+            tenant_id: handle.seed.tenantA.tenantId,
+            patient_id: tenantAPatientId,
+            encounter_id: encounter.id,
+            display_name: 'Basic Metabolic Panel',
+            review_status: 'reviewed',
+            status: 'final',
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        return { appointmentId: appointment.id, reportId: report.id };
+      });
+    }
+
+    it('getResultExplanation() returns null until staff accepts a drafted explanation, then returns the edited text', async () => {
+      const { reportId } = await createAppointmentAndReport();
+      const ctxPortal = requestContextFor(handle.seed.tenantA.tenantId, tenantAPortalAccountId, {
+        actor: { id: tenantAPortalAccountId, type: 'patient' },
+      });
+      const ctxStaff = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+
+      const beforeAccept = await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+        chartService.getResultExplanation(trx, ctxPortal, tenantAPatientId, reportId),
+      );
+      expect(beforeAccept).toBeNull();
+
+      const proposed = await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+        aiGenerationService.propose(trx, ctxStaff, {
+          feature: 'lab_result_explanation',
+          promptTemplateId: 'lab-result-explanation-v1',
+          patientId: tenantAPatientId,
+          subjectType: 'DiagnosticReport',
+          subjectId: reportId,
+          inputText: 'Explain this result',
+          context: [{ ref: `DiagnosticReport/${reportId}`, data: { displayName: 'Basic Metabolic Panel' } }],
+          linkedDiagnosticReportId: reportId,
+        }),
+      );
+      await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+        aiGenerationService.accept(trx, ctxStaff, proposed.id, 'Your kidney and electrolyte levels are all normal.'),
+      );
+
+      const afterAccept = await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+        chartService.getResultExplanation(trx, ctxPortal, tenantAPatientId, reportId),
+      );
+      expect(afterAccept?.explanation).toBe('Your kidney and electrolyte levels are all normal.');
+    });
+
+    it('a portal account with no grant cannot read a result explanation (404, not 403)', async () => {
+      const { reportId } = await createAppointmentAndReport();
+      const ungrantedAccountId = await createPortalAccount(handle.seed.tenantA.tenantId);
+      const ctxPortal = requestContextFor(handle.seed.tenantA.tenantId, ungrantedAccountId, {
+        actor: { id: ungrantedAccountId, type: 'patient' },
+      });
+      await expect(
+        withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+          chartService.getResultExplanation(trx, ctxPortal, tenantAPatientId, reportId),
+        ),
+      ).rejects.toBeInstanceOf(NotFoundError);
+    });
+
+    it('a patient can set their own pre-visit agenda, and it is visible via the staff appointment read path', async () => {
+      const { appointmentId } = await createAppointmentAndReport();
+      const ctxPortal = requestContextFor(handle.seed.tenantA.tenantId, tenantAPortalAccountId, {
+        actor: { id: tenantAPortalAccountId, type: 'patient' },
+      });
+      const updated = await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+        chartService.updateAppointmentAgenda(trx, ctxPortal, tenantAPatientId, appointmentId, 'I want to discuss my medication dosage.'),
+      );
+      expect(updated.patientAgenda).toBe('I want to discuss my medication dosage.');
+
+      const appointments = await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+        chartService.listAppointments(trx, ctxPortal, tenantAPatientId),
+      );
+      expect(appointments.find((a) => a.id === appointmentId)?.patientAgenda).toBe('I want to discuss my medication dosage.');
+    });
+
+    it('a portal account cannot set an agenda on another patient\'s appointment', async () => {
+      const { appointmentId } = await createAppointmentAndReport();
+      const otherPatientId = await createPatient(handle.seed.tenantA.tenantId);
+      const otherAccountId = await createPortalAccount(handle.seed.tenantA.tenantId);
+      await withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+        consentService.createSelfGrant(trx, handle.seed.tenantA.tenantId, otherPatientId, otherAccountId),
+      );
+      const ctxOther = requestContextFor(handle.seed.tenantA.tenantId, otherAccountId, { actor: { id: otherAccountId, type: 'patient' } });
+      await expect(
+        withTenantContext(handle.db, handle.seed.tenantA.tenantId, (trx) =>
+          chartService.updateAppointmentAgenda(trx, ctxOther, otherPatientId, appointmentId, 'should not work'),
+        ),
+      ).rejects.toBeInstanceOf(NotFoundError);
+    });
   });
 
   describe('patient self-scheduling (Tier 2 UI build-out)', () => {

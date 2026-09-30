@@ -9,7 +9,7 @@ import type { TranscriptionGateway } from '@ehr/transcription-adapter';
 import { NoopTranscriptionGateway } from '@ehr/transcription-adapter';
 import { setupTestDb, requestContextFor, type TestDbHandle } from '@ehr/testing';
 import { AiGenerationService } from '../src/generation/ai-generation.service.js';
-import { toProvenance } from '../src/generation/ai-generation.repository.js';
+import { AiGenerationRepository, toProvenance } from '../src/generation/ai-generation.repository.js';
 import { resolveAmbientAudioInput } from '../src/ambient-note-draft/resolve-ambient-audio.js';
 
 /** EHR_BUILD_SPEC.md §18.2 — run via `pnpm test:tenant-isolation`, requires a live Postgres. */
@@ -94,6 +94,146 @@ describe('tenant isolation — AI generations', () => {
     await expect(
       withTenantContext(handle.db, ctxB.tenantId, (trx) => service.reject(trx, ctxB, tenantAGenerationId)),
     ).rejects.toBeInstanceOf(NotFoundError);
+  });
+});
+
+/** Epic-parity item 3 — a diagnostic report's plain-language explanation must never be visible to
+ * the patient portal until a real human explicitly accepts it. */
+describe('lab_result_explanation (Epic-parity item 3)', () => {
+  let handle: TestDbHandle;
+  const service = new AiGenerationService(new NoopAiGateway());
+  let reportId: string;
+
+  beforeAll(async () => {
+    handle = await setupTestDb();
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+
+    reportId = await withTenantContext(handle.db, ctxA.tenantId, async (trx) => {
+      const patient = await trx
+        .insertInto('patients')
+        .values({ tenant_id: ctxA.tenantId, given_name: 'AiExplain', family_name: `Test-${Date.now()}`, date_of_birth: '1980-01-01', status: 'active' })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const workforceIdentity = await trx
+        .insertInto('workforce_identities')
+        .values({ tenant_id: ctxA.tenantId, user_id: handle.seed.tenantA.adminUserId, organization_id: handle.seed.tenantA.organizationId, status: 'active' })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const practitioner = await trx
+        .insertInto('practitioners')
+        .values({ tenant_id: ctxA.tenantId, workforce_identity_id: workforceIdentity.id, display_name: 'Dr. Explain Test', status: 'active' })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const appointment = await trx
+        .insertInto('appointments')
+        .values({
+          tenant_id: ctxA.tenantId,
+          patient_id: patient.id,
+          location_id: handle.seed.tenantA.locationId,
+          practitioner_id: practitioner.id,
+          appointment_type: 'office_visit',
+          scheduled_start: new Date(),
+          scheduled_end: new Date(),
+          status: 'checked_in',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const encounter = await trx
+        .insertInto('encounters')
+        .values({
+          tenant_id: ctxA.tenantId,
+          patient_id: patient.id,
+          appointment_id: appointment.id,
+          location_id: handle.seed.tenantA.locationId,
+          practitioner_id: practitioner.id,
+          encounter_type: 'office_visit',
+          status: 'signed',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const report = await trx
+        .insertInto('diagnostic_reports')
+        .values({
+          tenant_id: ctxA.tenantId,
+          patient_id: patient.id,
+          encounter_id: encounter.id,
+          display_name: 'Complete Blood Count',
+          review_status: 'reviewed',
+          status: 'final',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      return report.id;
+    });
+  });
+
+  afterAll(() => handle.close());
+
+  it('a proposed explanation is not accepted yet, so it has no accepted explanation to find', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const repo = new AiGenerationRepository();
+
+    await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      service.propose(trx, ctxA, {
+        feature: 'lab_result_explanation',
+        promptTemplateId: 'lab-result-explanation-v1',
+        patientId: null,
+        subjectType: 'DiagnosticReport',
+        subjectId: reportId,
+        inputText: 'Explain this result',
+        context: [{ ref: `DiagnosticReport/${reportId}`, data: { displayName: 'Complete Blood Count' } }],
+        linkedDiagnosticReportId: reportId,
+      }),
+    );
+
+    const found = await withTenantContext(handle.db, ctxA.tenantId, (trx) => repo.findAcceptedByLinkedDiagnosticReport(trx, ctxA.tenantId, reportId));
+    expect(found).toBeNull();
+  });
+
+  it('once accepted (with edits), the portal-facing lookup returns the edited text', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const repo = new AiGenerationRepository();
+
+    const proposed = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      service.propose(trx, ctxA, {
+        feature: 'lab_result_explanation',
+        promptTemplateId: 'lab-result-explanation-v1',
+        patientId: null,
+        subjectType: 'DiagnosticReport',
+        subjectId: reportId,
+        inputText: 'Explain this result',
+        context: [{ ref: `DiagnosticReport/${reportId}`, data: { displayName: 'Complete Blood Count' } }],
+        linkedDiagnosticReportId: reportId,
+      }),
+    );
+    await withTenantContext(handle.db, ctxA.tenantId, (trx) => service.accept(trx, ctxA, proposed.id, 'Your blood counts look normal.'));
+
+    const found = await withTenantContext(handle.db, ctxA.tenantId, (trx) => repo.findAcceptedByLinkedDiagnosticReport(trx, ctxA.tenantId, reportId));
+    expect(found?.editedOutputText).toBe('Your blood counts look normal.');
+  });
+
+  it('a rejected explanation is never returned to the portal-facing lookup', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const repo = new AiGenerationRepository();
+
+    const proposed = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      service.propose(trx, ctxA, {
+        feature: 'lab_result_explanation',
+        promptTemplateId: 'lab-result-explanation-v1',
+        patientId: null,
+        subjectType: 'DiagnosticReport',
+        subjectId: reportId,
+        inputText: 'Explain this result',
+        context: [{ ref: `DiagnosticReport/${reportId}`, data: { displayName: 'Complete Blood Count' } }],
+        linkedDiagnosticReportId: reportId,
+      }),
+    );
+    await withTenantContext(handle.db, ctxA.tenantId, (trx) => service.reject(trx, ctxA, proposed.id));
+
+    // The earlier accepted-with-edits generation (previous test) is still the one found — proving
+    // a freshly-rejected generation for the same report never displaces it or gets returned itself.
+    const found = await withTenantContext(handle.db, ctxA.tenantId, (trx) => repo.findAcceptedByLinkedDiagnosticReport(trx, ctxA.tenantId, reportId));
+    expect(found?.id).not.toBe(proposed.id);
   });
 });
 

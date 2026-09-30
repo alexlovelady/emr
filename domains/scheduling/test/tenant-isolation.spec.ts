@@ -316,4 +316,22 @@ describe('tenant isolation — appointments', () => {
     expect(appointment.videoJoinUrlPatient).toContain(appointment.id);
     expect(appointment.videoJoinUrlPractitioner).not.toBe(appointment.videoJoinUrlPatient);
   });
+
+  it('updatePatientAgenda() sets the agenda text and timestamp (Epic-parity item 3)', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const updated = await withTenantContext(handle.db, ctxA.tenantId, (trx) =>
+      appointmentService.updatePatientAgenda(trx, ctxA, tenantAAppointmentId, 'I want to discuss my recent headaches.'),
+    );
+    expect(updated.patientAgenda).toBe('I want to discuss my recent headaches.');
+    expect(updated.patientAgendaUpdatedAt).not.toBeNull();
+  });
+
+  it('Tenant B cannot set a patient agenda on a Tenant A appointment by known UUID', async () => {
+    const ctxB = requestContextFor(handle.seed.tenantB.tenantId, handle.seed.tenantB.adminUserId);
+    await expect(
+      withTenantContext(handle.db, ctxB.tenantId, (trx) =>
+        appointmentService.updatePatientAgenda(trx, ctxB, tenantAAppointmentId, 'should not work'),
+      ),
+    ).rejects.toBeInstanceOf(NotFoundError);
+  });
 });

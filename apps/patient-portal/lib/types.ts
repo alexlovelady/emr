@@ -48,6 +48,9 @@ export interface Appointment {
   visitType: 'in_person' | 'telehealth';
   videoJoinUrlPatient: string | null;
   status: string;
+  /** Epic-parity item 3 — a patient-authored pre-visit note, distinct from `cancellation_reason`. */
+  patientAgenda: string | null;
+  patientAgendaUpdatedAt: string | null;
 }
 
 export interface BookablePractitioner {
@@ -114,6 +117,11 @@ export interface DiagnosticReport {
   criticalFlag: boolean;
   abnormalFlag: boolean;
   conclusion: string | null;
+}
+
+/** From `GET .../results/:reportId/explanation` — `null` means no staff-accepted explanation exists yet. */
+export interface ResultExplanation {
+  explanation: string;
 }
 
 export interface DocumentItem {

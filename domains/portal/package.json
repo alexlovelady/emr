@@ -13,6 +13,7 @@
     "test:tenant-isolation": "vitest run --config vitest.tenant-isolation.config.ts"
   },
   "dependencies": {
+    "@ehr/ai": "workspace:*",
     "@ehr/api-contracts": "workspace:*",
     "@ehr/audit": "workspace:*",
     "@ehr/auth-adapter": "workspace:*",
@@ -38,6 +39,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@ehr/ai-adapter": "workspace:*",
     "@ehr/testing": "workspace:*",
     "@types/pdfkit": "^0.17.6",
     "@types/pg": "^8.11.10",

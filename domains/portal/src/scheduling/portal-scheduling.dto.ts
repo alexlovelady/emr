@@ -19,3 +19,9 @@ export const PortalCancelAppointmentSchema = z.object({
   reason: z.string().min(1).max(500).nullish(),
 });
 export type PortalCancelAppointmentInput = z.infer<typeof PortalCancelAppointmentSchema>;
+
+/** Epic-parity item 3 — pre-visit agenda capture. */
+export const PortalUpdateAgendaSchema = z.object({
+  agenda: z.string().min(1).max(2000),
+});
+export type PortalUpdateAgendaInput = z.infer<typeof PortalUpdateAgendaSchema>;

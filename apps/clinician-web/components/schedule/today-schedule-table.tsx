@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { CalendarDays, Stethoscope, Video } from 'lucide-react';
+import { CalendarDays, MessageSquareText, Stethoscope, Video } from 'lucide-react';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/chart/empty-state';
@@ -74,6 +74,12 @@ export function TodayScheduleTable({
                   >
                     <Video className="h-3 w-3" /> Join video visit
                   </a>
+                )}
+                {appt.patientAgenda && (
+                  <span className="mt-0.5 flex items-start gap-1.5 text-xs italic" title={appt.patientAgenda}>
+                    <MessageSquareText className="mt-0.5 h-3 w-3 shrink-0" />
+                    <span className="line-clamp-2">{appt.patientAgenda}</span>
+                  </span>
                 )}
               </TableCell>
               <TableCell className="text-muted-foreground">{practitionerNameById.get(appt.practitionerId) ?? 'Unknown practitioner'}</TableCell>

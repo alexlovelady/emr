@@ -84,6 +84,15 @@ export async function proposeCohortDsl(question: string): Promise<ActionResult<A
   return runAction(() => callBackend<AiGeneration>('/api/v1/ai/cohort-dsl', { method: 'POST', body: { question } }));
 }
 
+export async function proposeLabResultExplanation(reportId: string, instructions?: string): Promise<ActionResult<AiGeneration>> {
+  return runAction(() =>
+    callBackend<AiGeneration>(`/api/v1/diagnostic-reports/${reportId}/ai/explanation`, {
+      method: 'POST',
+      body: { instructions: instructions?.trim() || undefined },
+    }),
+  );
+}
+
 export async function acceptAiGeneration(id: string, editedOutputText?: string): Promise<ActionResult<AiGeneration>> {
   return runAction(() =>
     callBackend<AiGeneration>(`/api/v1/ai-generations/${id}/accept`, {

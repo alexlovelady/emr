@@ -1483,6 +1483,9 @@ importers:
 
   domains/portal:
     dependencies:
+      '@ehr/ai':
+        specifier: workspace:*
+        version: link:../ai
       '@ehr/api-contracts':
         specifier: workspace:*
         version: link:../../packages/api-contracts
@@ -1553,6 +1556,9 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
     devDependencies:
+      '@ehr/ai-adapter':
+        specifier: workspace:*
+        version: link:../../packages/ai-adapter
       '@ehr/testing':
         specifier: workspace:*
         version: link:../../packages/testing
