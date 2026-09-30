@@ -109,6 +109,11 @@ export const PERMISSION_KEYS = {
    * (`packages/auth-adapter/src/sso.ts`). Distinct from the platform-wide `SECURITY_KEY_ROTATE` —
    * this is per-tenant, like `TENANT_MANAGE`. */
   SSO_MANAGE: 'sso.manage',
+  /** Epic-parity item 2: view/resolve the population-health care-gap worklist
+   * (`apps/api/src/care-gaps/`) — deliberately separate from the platform-level `ALERT_MANAGE`
+   * (ops alerts like backup/outbox health) since this is a clinical population-health workflow
+   * meant for practicing staff broadly, not just platform admins. */
+  CARE_GAP_MANAGE: 'care_gap.manage',
 } as const;
 
 export interface SeededTenant {

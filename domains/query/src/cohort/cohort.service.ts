@@ -3,8 +3,8 @@ import type { DB } from '@ehr/db';
 import { ConflictError, NotFoundError, type RequestContext } from '@ehr/domain-common';
 import { buildOutboxInsert } from '@ehr/outbox';
 import type { ObjectStorageGateway } from '@ehr/object-storage';
-import { compileAndRun } from './cohort-compiler.js';
-import type { CohortDsl, SaveCohortInput } from './cohort.dto.js';
+import { compileAndRun, compileBreakdown, type CohortBreakdownResult } from './cohort-compiler.js';
+import type { BreakdownDimension, CohortDsl, SaveCohortInput } from './cohort.dto.js';
 import { CohortRepository, type CohortExecutionRow, type CohortRow } from './cohort.repository.js';
 
 type Executor = Kysely<DB> | Transaction<DB>;
@@ -80,6 +80,18 @@ export class CohortService {
       .execute();
 
     return execution;
+  }
+
+  /** Live, unpersisted count preview for a filter set still being edited — no `cohort_executions`
+   * row, no outbox event, just the same compiler's count. Never returns the patient-id list. */
+  async preview(trx: Executor, ctx: RequestContext, dsl: CohortDsl): Promise<{ resultCount: number; estimatedRows: number | null; truncated: boolean }> {
+    const result = await compileAndRun(trx, ctx.tenantId, dsl);
+    return { resultCount: result.resultCount, estimatedRows: result.estimatedRows, truncated: result.truncated };
+  }
+
+  /** Item 1's "slice" capability — aggregate-only breakdown of the same matched population. */
+  async breakdown(trx: Executor, ctx: RequestContext, dsl: CohortDsl, groupBy: BreakdownDimension): Promise<CohortBreakdownResult> {
+    return compileBreakdown(trx, ctx.tenantId, dsl, groupBy);
   }
 
   async getExecutionById(trx: Executor, ctx: RequestContext, id: string): Promise<CohortExecutionRow> {

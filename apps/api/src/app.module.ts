@@ -29,6 +29,7 @@ import { TerminologyModule } from './terminology/terminology.module.js';
 import { AlertsModule } from './alerts/alerts.module.js';
 import { BreakglassModule } from './breakglass/breakglass.module.js';
 import { SmartEhrLaunchModule } from './smart-ehr-launch/smart-ehr-launch.module.js';
+import { CareGapsModule } from './care-gaps/care-gaps.module.js';
 import { HealthController } from './health/health.controller.js';
 import { RequestTransactionInterceptor } from './common/request-transaction.interceptor.js';
 import { IdempotencyInterceptor } from './common/idempotency.interceptor.js';
@@ -70,6 +71,7 @@ import { ProblemDetailsFilter } from './common/problem-details.filter.js';
     AlertsModule,
     BreakglassModule,
     SmartEhrLaunchModule,
+    CareGapsModule,
   ],
   controllers: [HealthController],
   providers: [

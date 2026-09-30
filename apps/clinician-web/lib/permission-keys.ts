@@ -42,4 +42,5 @@ export const PERMISSION_KEYS = {
   COHORT_MANAGE: 'cohort.manage',
   REPORT_QUERY_POPULATION: 'report.query.population',
   EXTERNAL_CANDIDATE_MANAGE: 'external_candidate.manage',
+  CARE_GAP_MANAGE: 'care_gap.manage',
 } as const;

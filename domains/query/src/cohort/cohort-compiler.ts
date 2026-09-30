@@ -1,7 +1,7 @@
 import { sql, type Kysely, type RawBuilder, type Transaction } from 'kysely';
 import type { DB } from '@ehr/db';
 import { ValidationError } from '@ehr/domain-common';
-import type { CohortCondition, CohortDsl } from './cohort.dto.js';
+import type { BreakdownDimension, CohortCondition, CohortDsl } from './cohort.dto.js';
 
 type Executor = Kysely<DB> | Transaction<DB>;
 
@@ -74,15 +74,43 @@ function compileCondition(condition: CohortCondition): RawBuilder<unknown> {
           ${statusClause}
       )`;
     }
-    // concept === 'medication' — matched against rxnorm_code; `system` is accepted but unused
-    // since this schema only ever stores an RxNorm code, no separate coding-system column.
-    const activeClause =
-      condition.op === 'active' ? sql`and m.stopped_at is null` : condition.op === 'resolved' ? sql`and m.stopped_at is not null` : sql``;
+    if (condition.concept === 'medication') {
+      // matched against rxnorm_code; `system` is accepted but unused since this schema only ever
+      // stores an RxNorm code, no separate coding-system column.
+      const activeClause =
+        condition.op === 'active' ? sql`and m.stopped_at is null` : condition.op === 'resolved' ? sql`and m.stopped_at is not null` : sql``;
+      return sql`exists (
+        select 1 from medications m
+        where m.tenant_id = p.tenant_id and m.patient_id = p.id
+          and m.rxnorm_code = ${condition.value}
+          ${activeClause}
+      )`;
+    }
+    if (condition.concept === 'encounter') {
+      return sql`exists (
+        select 1 from encounters e
+        where e.tenant_id = p.tenant_id and e.patient_id = p.id and e.encounter_type = ${condition.value}
+      )`;
+    }
+    if (condition.concept === 'appointment') {
+      return sql`exists (
+        select 1 from appointments a
+        where a.tenant_id = p.tenant_id and a.patient_id = p.id and a.status = ${condition.value}
+      )`;
+    }
+    if (condition.concept === 'coverage') {
+      return sql`exists (
+        select 1 from coverages c
+        where c.tenant_id = p.tenant_id and c.patient_id = p.id and c.status = 'active'
+          and c.payer_name ilike ${'%' + condition.value + '%'}
+      )`;
+    }
+    // concept === 'note' — signed notes of the given type only; an unsigned draft never counts
+    // toward a population definition.
     return sql`exists (
-      select 1 from medications m
-      where m.tenant_id = p.tenant_id and m.patient_id = p.id
-        and m.rxnorm_code = ${condition.value}
-        ${activeClause}
+      select 1 from notes n
+      where n.tenant_id = p.tenant_id and n.patient_id = p.id
+        and n.note_type = ${condition.value} and n.signed_at is not null
     )`;
   }
 
@@ -90,11 +118,15 @@ function compileCondition(condition: CohortCondition): RawBuilder<unknown> {
   const comparator = COMPARATORS[condition.op];
   if (!comparator) throw new ValidationError(`Unsupported operator for measure '${condition.measure}': ${condition.op}`);
 
-  if (condition.measure === 'latest_hba1c') {
+  if (condition.measure === 'latest_hba1c' || condition.measure === 'latest_observation_value') {
+    // `latest_hba1c` is `latest_observation_value` pinned to the HbA1c LOINC code — kept as its
+    // own named measure for backward compatibility with any cohort saved before the generalized
+    // form existed, rather than silently rewriting old DSL payloads on read.
+    const code = condition.measure === 'latest_hba1c' ? HBA1C_LOINC_CODE : condition.code;
     return sql`(
       select o.value_quantity::numeric from observations o
       where o.tenant_id = p.tenant_id and o.patient_id = p.id
-        and o.code = ${HBA1C_LOINC_CODE} and o.category = 'laboratory' and o.value_quantity is not null
+        and o.code = ${code} and o.category = 'laboratory' and o.value_quantity is not null
       order by o.effective_at desc
       limit 1
     ) ${sql.raw(comparator)} ${condition.value}`;
@@ -140,4 +172,58 @@ export async function compileAndRun(trx: Executor, tenantId: string, dsl: Cohort
     asOf: new Date(),
     truncated,
   };
+}
+
+export interface CohortBreakdownBucket {
+  label: string;
+  count: number;
+}
+
+export interface CohortBreakdownResult {
+  buckets: CohortBreakdownBucket[];
+  totalCount: number;
+}
+
+/**
+ * Item 1's "slice" capability: the same matched population as `compileAndRun`, grouped by one
+ * fixed, safe dimension and returned as aggregate counts only — never a patient-id list, matching
+ * `compileAndRun`'s own minimum-necessary posture. `groupBy` is a closed enum validated by
+ * `BreakdownDimensionSchema` before this ever runs, so there is no raw-column-name injection
+ * surface here.
+ */
+export async function compileBreakdown(trx: Executor, tenantId: string, dsl: CohortDsl, groupBy: BreakdownDimension): Promise<CohortBreakdownResult> {
+  const conditions = dsl.where.all.map(compileCondition);
+  const whereClause = sql.join(conditions, sql` and `);
+
+  let rows: { bucket: string; count: string | number }[];
+  if (groupBy === 'sex_at_birth') {
+    const result = await sql<{ bucket: string; count: string }>`
+      select coalesce(p.sex_at_birth, 'unknown') as bucket, count(*) as count
+      from patients p where p.tenant_id = ${tenantId} and ${whereClause}
+      group by bucket order by count desc
+    `.execute(trx);
+    rows = result.rows;
+  } else if (groupBy === 'age_bucket') {
+    const result = await sql<{ bucket: string; count: string }>`
+      select (floor(extract(year from age(current_date, p.date_of_birth)) / 10) * 10)::text || 's' as bucket, count(*) as count
+      from patients p where p.tenant_id = ${tenantId} and ${whereClause}
+      group by bucket order by bucket
+    `.execute(trx);
+    rows = result.rows;
+  } else {
+    // active_condition_code — a patient with multiple active problems under the same code is
+    // still counted once per code (count distinct patient, not distinct problem row).
+    const result = await sql<{ bucket: string; count: string }>`
+      select pr.code_system || ':' || pr.code || ' ' || pr.display_name as bucket, count(distinct p.id) as count
+      from patients p
+      join problems pr on pr.tenant_id = p.tenant_id and pr.patient_id = p.id and pr.clinical_status = 'active'
+      where p.tenant_id = ${tenantId} and ${whereClause}
+      group by bucket order by count(distinct p.id) desc
+      limit 10
+    `.execute(trx);
+    rows = result.rows;
+  }
+
+  const buckets = rows.map((r) => ({ label: r.bucket, count: Number(r.count) }));
+  return { buckets, totalCount: buckets.reduce((sum, b) => sum + b.count, 0) };
 }

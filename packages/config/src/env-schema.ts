@@ -90,6 +90,11 @@ export const envSchema = z.object({
   // age-of-majority/age-of-consent legal determination — see item 20 / minor-consent-transition
   // rule's own doc comment.
   ALERT_MINOR_CONSENT_AGE_THRESHOLD_YEARS: z.coerce.number().int().positive().default(18),
+  // Epic-parity item 2 (population health) — plain engineering lookback windows, not a certified
+  // HEDIS/NCQA measure specification, same "simplified proxy" framing as the quality-measure
+  // governed queries these rules mirror.
+  ALERT_CARE_GAP_HBA1C_LOOKBACK_DAYS: z.coerce.number().int().positive().default(365),
+  ALERT_CARE_GAP_WELLNESS_VISIT_LOOKBACK_DAYS: z.coerce.number().int().positive().default(365),
   // Empty (the default) disables notification dispatch — alerts are still evaluated/persisted and
   // readable via GET /api/v1/alerts either way; see AlertEvaluatorOptions.notifyEmail.
   ALERT_NOTIFY_EMAIL: z.string().optional().or(z.literal('')),

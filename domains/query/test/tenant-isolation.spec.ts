@@ -199,6 +199,34 @@ describe('tenant isolation — query platform', () => {
         .returning('id')
         .executeTakeFirstOrThrow();
       void claim;
+
+      // Item 1 (Epic-parity build-out) fixtures: a coverage and a signed note for the matching
+      // patient, so the new `coverage`/`note` concept conditions have something real to find.
+      await trx
+        .insertInto('coverages')
+        .values({
+          tenant_id: ctxA.tenantId,
+          patient_id: matchingPatientId,
+          payer_name: 'Acme Health Plan',
+          member_id: 'MEMBER-QUERY-TEST',
+          coverage_type: 'primary',
+          effective_start: isoDateYearsAgo(1),
+          status: 'active',
+        })
+        .execute();
+      await trx
+        .insertInto('notes')
+        .values({
+          tenant_id: ctxA.tenantId,
+          encounter_id: encounter.id,
+          patient_id: matchingPatientId,
+          note_type: 'progress_note',
+          content: {},
+          signed_at: daysAgo(200),
+          signed_by: handle.seed.tenantA.adminUserId,
+          status: 'signed',
+        })
+        .execute();
     });
   });
 
@@ -225,6 +253,61 @@ describe('tenant isolation — query platform', () => {
     expect(execution.resultPatientIds).not.toContain(nonMatchingPatientId);
     expect(execution.resultCount).toBe(execution.resultPatientIds.length);
     expect(typeof execution.estimatedRows === 'number' || execution.estimatedRows === null).toBe(true);
+  });
+
+  it('item 1: the four new concept conditions (encounter/appointment/coverage/note) each find the matching patient and exclude the non-matching one', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const cases: { name: string; condition: Record<string, unknown> }[] = [
+      { name: 'encounter', condition: { concept: 'encounter', op: 'has_type', value: 'office_visit' } },
+      { name: 'appointment', condition: { concept: 'appointment', op: 'has_status', value: 'checked_in' } },
+      { name: 'coverage', condition: { concept: 'coverage', op: 'has_payer', value: 'Acme' } },
+      { name: 'note', condition: { concept: 'note', op: 'has_type', value: 'progress_note' } },
+    ];
+    for (const { condition } of cases) {
+      const dsl = { version: 1 as const, entity: 'patient' as const, where: { all: [condition as never] } };
+      const execution = await withTenantContext(handle.db, ctxA.tenantId, (trx) => cohortService.execute(trx, ctxA, null, dsl));
+      expect(execution.resultPatientIds).toContain(matchingPatientId);
+      expect(execution.resultPatientIds).not.toContain(nonMatchingPatientId);
+    }
+  });
+
+  it('item 1: the generalized latest_observation_value measure matches on any LOINC code, not just HbA1c', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const dsl = {
+      version: 1 as const,
+      entity: 'patient' as const,
+      where: { all: [{ measure: 'latest_observation_value' as const, code: '4548-4', op: '>' as const, value: 9 }] },
+    };
+    const execution = await withTenantContext(handle.db, ctxA.tenantId, (trx) => cohortService.execute(trx, ctxA, null, dsl));
+    expect(execution.resultPatientIds).toContain(matchingPatientId);
+    expect(execution.resultPatientIds).not.toContain(nonMatchingPatientId);
+  });
+
+  it('item 1: preview() returns the same count as execute() but persists no cohort_executions row', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const before = await withTenantContext(handle.db, ctxA.tenantId, (trx) => trx.selectFrom('cohort_executions').select(trx.fn.countAll().as('n')).executeTakeFirstOrThrow());
+
+    const preview = await withTenantContext(handle.db, ctxA.tenantId, (trx) => cohortService.preview(trx, ctxA, fullDsl));
+    expect(preview.resultCount).toBeGreaterThanOrEqual(1);
+
+    const after = await withTenantContext(handle.db, ctxA.tenantId, (trx) => trx.selectFrom('cohort_executions').select(trx.fn.countAll().as('n')).executeTakeFirstOrThrow());
+    expect(Number(after.n)).toBe(Number(before.n));
+  });
+
+  it('item 1: breakdown() slices the matched population by sex_at_birth, age_bucket, and active_condition_code without ever returning patient ids', async () => {
+    const ctxA = requestContextFor(handle.seed.tenantA.tenantId, handle.seed.tenantA.adminUserId);
+    const dsl = { version: 1 as const, entity: 'patient' as const, where: { all: [{ field: 'age' as const, op: 'between' as const, value: [45, 75] as [number, number] }] } };
+
+    const bySex = await withTenantContext(handle.db, ctxA.tenantId, (trx) => cohortService.breakdown(trx, ctxA, dsl, 'sex_at_birth'));
+    expect(bySex.totalCount).toBeGreaterThanOrEqual(1);
+    expect(bySex.buckets.every((b) => typeof b.count === 'number' && typeof b.label === 'string')).toBe(true);
+    expect(JSON.stringify(bySex)).not.toContain(matchingPatientId);
+
+    const byAge = await withTenantContext(handle.db, ctxA.tenantId, (trx) => cohortService.breakdown(trx, ctxA, dsl, 'age_bucket'));
+    expect(byAge.buckets.some((b) => b.label === '50s')).toBe(true);
+
+    const byCondition = await withTenantContext(handle.db, ctxA.tenantId, (trx) => cohortService.breakdown(trx, ctxA, dsl, 'active_condition_code'));
+    expect(byCondition.buckets.some((b) => b.label.includes('E11.9'))).toBe(true);
   });
 
   it('rejects a DSL with an unknown field before ever compiling it', () => {

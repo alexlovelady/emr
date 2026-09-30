@@ -10,6 +10,8 @@ import { createOutboxBacklogRule } from './rules/outbox-backlog.rule.js';
 import { createHl7DeadLetterRule } from './rules/hl7-dead-letter.rule.js';
 import { createMinorConsentTransitionRule } from './rules/minor-consent-transition.rule.js';
 import { createBreakglassReviewRule } from './rules/breakglass-review.rule.js';
+import { createCareGapHba1cRule } from './rules/care-gap-hba1c.rule.js';
+import { createCareGapWellnessVisitRule } from './rules/care-gap-wellness-visit.rule.js';
 
 /**
  * Every rule here queries a genuinely cross-tenant or global table (`backup_runs`, `outbox_events`,
@@ -74,6 +76,20 @@ describe('alerting rules + repository (integration)', () => {
       const resolved = await alertRepo.resolveById(handle.ownerDb, alert.id, userId);
       expect(resolved.status).toBe('resolved');
       expect(resolved.resolvedBy).toBe(userId);
+    });
+
+    it('listOpenByTenantAndRuleKeys only returns the given tenant’s open alerts for the given rule keys', async () => {
+      const ruleKeyA = `test-rule-${randomUUID()}`;
+      const ruleKeyB = `test-rule-${randomUUID()}`;
+      const tenantA = handle.seed.tenantA.tenantId;
+      const tenantB = handle.seed.tenantB.tenantId;
+
+      const own = await alertRepo.upsertOpen(handle.ownerDb, { ruleKey: ruleKeyA, dedupeKey: 'own', severity: 'warning', title: 'x', detail: {}, tenantId: tenantA });
+      await alertRepo.upsertOpen(handle.ownerDb, { ruleKey: ruleKeyA, dedupeKey: 'other-tenant', severity: 'warning', title: 'x', detail: {}, tenantId: tenantB });
+      await alertRepo.upsertOpen(handle.ownerDb, { ruleKey: ruleKeyB, dedupeKey: 'wrong-rule', severity: 'warning', title: 'x', detail: {}, tenantId: tenantA });
+
+      const results = await alertRepo.listOpenByTenantAndRuleKeys(handle.ownerDb, tenantA, [ruleKeyA]);
+      expect(results.map((r) => r.id)).toEqual([own.alert.id]);
     });
   });
 
@@ -356,6 +372,203 @@ describe('alerting rules + repository (integration)', () => {
       const rule = createBreakglassReviewRule();
       const findings = await rule.evaluate(handle.ownerDb);
       expect(findings.some((f) => f.dedupeKey === id)).toBe(false);
+    });
+  });
+
+  describe('createCareGapHba1cRule (Epic-parity item 2)', () => {
+    const tenantId = () => handle.seed.tenantA.tenantId;
+
+    async function createDiabeticPatient(): Promise<string> {
+      const patient = await handle.ownerDb
+        .insertInto('patients')
+        .values({ tenant_id: tenantId(), given_name: 'CareGap', family_name: `Hba1c-${randomUUID()}`, date_of_birth: '1970-01-01', status: 'active' })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      await handle.ownerDb
+        .insertInto('problems')
+        .values({
+          tenant_id: tenantId(),
+          patient_id: patient.id,
+          code_system: 'ICD-10',
+          code: 'E11.9',
+          display_name: 'Type 2 diabetes',
+          clinical_status: 'active',
+          status: 'active',
+        })
+        .execute();
+      return patient.id;
+    }
+
+    async function addHba1c(patientId: string, effectiveAt: Date): Promise<void> {
+      const workforceIdentity = await handle.ownerDb
+        .insertInto('workforce_identities')
+        .values({ tenant_id: tenantId(), user_id: handle.seed.tenantA.adminUserId, organization_id: handle.seed.tenantA.organizationId, status: 'active' })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const practitioner = await handle.ownerDb
+        .insertInto('practitioners')
+        .values({ tenant_id: tenantId(), workforce_identity_id: workforceIdentity.id, display_name: 'Dr. Care Gap Hba1c Test', status: 'active' })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const appointment = await handle.ownerDb
+        .insertInto('appointments')
+        .values({
+          tenant_id: tenantId(),
+          patient_id: patientId,
+          location_id: handle.seed.tenantA.locationId,
+          practitioner_id: practitioner.id,
+          appointment_type: 'office_visit',
+          scheduled_start: effectiveAt,
+          scheduled_end: effectiveAt,
+          status: 'checked_in',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const encounter = await handle.ownerDb
+        .insertInto('encounters')
+        .values({
+          tenant_id: tenantId(),
+          patient_id: patientId,
+          appointment_id: appointment.id,
+          location_id: handle.seed.tenantA.locationId,
+          practitioner_id: practitioner.id,
+          encounter_type: 'office_visit',
+          started_at: effectiveAt,
+          ended_at: effectiveAt,
+          status: 'signed',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      await handle.ownerDb
+        .insertInto('observations')
+        .values({
+          tenant_id: tenantId(),
+          patient_id: patientId,
+          encounter_id: encounter.id,
+          category: 'laboratory',
+          code: '4548-4',
+          display_name: 'Hemoglobin A1c',
+          value_quantity: '9.1',
+          effective_at: effectiveAt,
+          status: 'final',
+        })
+        .execute();
+    }
+
+    it('flags a diabetic patient with no HbA1c on record at all', async () => {
+      const patientId = await createDiabeticPatient();
+      const rule = createCareGapHba1cRule({ lookbackDays: 365 });
+      const findings = await rule.evaluate(handle.ownerDb);
+      const found = findings.find((f) => f.dedupeKey === patientId);
+      expect(found).toBeDefined();
+      expect(found?.tenantId).toBe(tenantId());
+      expect((found?.detail as { lastValueAt: unknown }).lastValueAt).toBeNull();
+    });
+
+    it('flags a diabetic patient whose most recent HbA1c is older than the lookback window', async () => {
+      const patientId = await createDiabeticPatient();
+      await addHba1c(patientId, new Date(Date.now() - 400 * 86_400_000));
+      const rule = createCareGapHba1cRule({ lookbackDays: 365 });
+      const findings = await rule.evaluate(handle.ownerDb);
+      expect(findings.some((f) => f.dedupeKey === patientId)).toBe(true);
+    });
+
+    it('does not flag a diabetic patient with a recent HbA1c', async () => {
+      const patientId = await createDiabeticPatient();
+      await addHba1c(patientId, new Date(Date.now() - 30 * 86_400_000));
+      const rule = createCareGapHba1cRule({ lookbackDays: 365 });
+      const findings = await rule.evaluate(handle.ownerDb);
+      expect(findings.some((f) => f.dedupeKey === patientId)).toBe(false);
+    });
+
+    it('never flags a non-diabetic patient, regardless of HbA1c history', async () => {
+      const patient = await handle.ownerDb
+        .insertInto('patients')
+        .values({ tenant_id: tenantId(), given_name: 'CareGap', family_name: `NonDiabetic-${randomUUID()}`, date_of_birth: '1970-01-01', status: 'active' })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const rule = createCareGapHba1cRule({ lookbackDays: 365 });
+      const findings = await rule.evaluate(handle.ownerDb);
+      expect(findings.some((f) => f.dedupeKey === patient.id)).toBe(false);
+    });
+  });
+
+  describe('createCareGapWellnessVisitRule (Epic-parity item 2)', () => {
+    const tenantId = () => handle.seed.tenantA.tenantId;
+
+    async function createActivePatient(): Promise<string> {
+      const patient = await handle.ownerDb
+        .insertInto('patients')
+        .values({ tenant_id: tenantId(), given_name: 'CareGap', family_name: `Wellness-${randomUUID()}`, date_of_birth: '1970-01-01', status: 'active' })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      return patient.id;
+    }
+
+    async function addCompletedEncounter(patientId: string, endedAt: Date): Promise<void> {
+      const workforceIdentity = await handle.ownerDb
+        .insertInto('workforce_identities')
+        .values({ tenant_id: tenantId(), user_id: handle.seed.tenantA.adminUserId, organization_id: handle.seed.tenantA.organizationId, status: 'active' })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const practitioner = await handle.ownerDb
+        .insertInto('practitioners')
+        .values({ tenant_id: tenantId(), workforce_identity_id: workforceIdentity.id, display_name: 'Dr. Care Gap Test', status: 'active' })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const appointment = await handle.ownerDb
+        .insertInto('appointments')
+        .values({
+          tenant_id: tenantId(),
+          patient_id: patientId,
+          location_id: handle.seed.tenantA.locationId,
+          practitioner_id: practitioner.id,
+          appointment_type: 'office_visit',
+          scheduled_start: endedAt,
+          scheduled_end: endedAt,
+          status: 'checked_in',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      await handle.ownerDb
+        .insertInto('encounters')
+        .values({
+          tenant_id: tenantId(),
+          patient_id: patientId,
+          appointment_id: appointment.id,
+          location_id: handle.seed.tenantA.locationId,
+          practitioner_id: practitioner.id,
+          encounter_type: 'office_visit',
+          started_at: endedAt,
+          ended_at: endedAt,
+          status: 'signed',
+        })
+        .execute();
+    }
+
+    it('flags an active patient with no completed encounter at all', async () => {
+      const patientId = await createActivePatient();
+      const rule = createCareGapWellnessVisitRule({ lookbackDays: 365 });
+      const findings = await rule.evaluate(handle.ownerDb);
+      const found = findings.find((f) => f.dedupeKey === patientId);
+      expect(found).toBeDefined();
+      expect(found?.tenantId).toBe(tenantId());
+    });
+
+    it('flags an active patient whose last completed encounter is older than the lookback window', async () => {
+      const patientId = await createActivePatient();
+      await addCompletedEncounter(patientId, new Date(Date.now() - 400 * 86_400_000));
+      const rule = createCareGapWellnessVisitRule({ lookbackDays: 365 });
+      const findings = await rule.evaluate(handle.ownerDb);
+      expect(findings.some((f) => f.dedupeKey === patientId)).toBe(true);
+    });
+
+    it('does not flag an active patient with a recent completed encounter', async () => {
+      const patientId = await createActivePatient();
+      await addCompletedEncounter(patientId, new Date(Date.now() - 30 * 86_400_000));
+      const rule = createCareGapWellnessVisitRule({ lookbackDays: 365 });
+      const findings = await rule.evaluate(handle.ownerDb);
+      expect(findings.some((f) => f.dedupeKey === patientId)).toBe(false);
     });
   });
 

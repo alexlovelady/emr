@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Activity, BarChart3, CalendarDays, ClipboardList, DollarSign, FlaskConical, ListChecks, LogOut, Pill, Settings, Table2, Users } from 'lucide-react';
+import { Activity, BarChart3, CalendarDays, ClipboardList, DollarSign, FlaskConical, HeartPulse, ListChecks, LogOut, Pill, Settings, Table2, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/components/providers/permissions-provider';
 import { PERMISSION_KEYS } from '@/lib/permission-keys';
@@ -14,6 +14,7 @@ const CLINICAL_LINKS = [
   { href: '/results-inbox', label: 'Results inbox', icon: FlaskConical, permission: PERMISSION_KEYS.RESULT_REVIEW },
   { href: '/refill-requests', label: 'Refill requests', icon: Pill, permission: PERMISSION_KEYS.MEDICATION_PRESCRIBE },
   { href: '/tasks', label: 'Tasks', icon: ListChecks, permission: PERMISSION_KEYS.TASK_MANAGE },
+  { href: '/care-gaps', label: 'Care gaps', icon: HeartPulse, permission: PERMISSION_KEYS.CARE_GAP_MANAGE },
 ] as const;
 
 const ADMIN_LINKS = [

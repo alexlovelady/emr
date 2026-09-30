@@ -81,6 +81,25 @@ export class AlertRepository {
     return toRow(row);
   }
 
+  /**
+   * Item 2 (population-health care gaps): unlike `list()`, this always filters by the caller's own
+   * `tenantId` — `alerts` has no RLS to enforce that automatically, and a care-gap finding's
+   * `detail` carries a real `patientId`, so an unfiltered read would leak another tenant's
+   * patient-linked findings. See `apps/api/src/care-gaps/care-gaps.controller.ts`'s doc comment.
+   */
+  async listOpenByTenantAndRuleKeys(trx: Executor, tenantId: string, ruleKeys: string[]): Promise<AlertRow[]> {
+    const rows = await trx
+      .selectFrom('alerts')
+      .selectAll()
+      .where('tenant_id', '=', tenantId)
+      .where('rule_key', 'in', ruleKeys)
+      .where('status', '=', 'open')
+      .orderBy('opened_at', 'desc')
+      .limit(500)
+      .execute();
+    return rows.map(toRow);
+  }
+
   async list(trx: Executor, opts: { status?: 'open' | 'resolved'; limit?: number } = {}): Promise<AlertRow[]> {
     let query = trx
       .selectFrom('alerts')

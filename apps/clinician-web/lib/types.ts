@@ -590,12 +590,28 @@ export interface AiGeneration {
 /** The `where.all` array is an implicit-AND list — no OR/nesting exists in this DSL. */
 export type CohortCondition =
   | { field: 'age'; op: 'eq' | 'gt' | 'gte' | 'lt' | 'lte' | 'between'; value: number | [number, number] }
-  | { concept: 'condition' | 'allergy' | 'medication'; system: string; op: 'active' | 'resolved' | 'has_code'; value: string }
   | {
-      measure: 'latest_hba1c' | 'days_since_completed_encounter';
-      op: '>' | '<' | '>=' | '<=' | '=';
-      value: number;
-    };
+      concept: 'condition' | 'allergy' | 'medication' | 'encounter' | 'appointment' | 'coverage' | 'note';
+      system?: string | null;
+      op: 'active' | 'resolved' | 'has_code' | 'has_type' | 'has_status' | 'has_payer';
+      value: string;
+    }
+  | { measure: 'latest_hba1c'; op: '>' | '<' | '>=' | '<=' | '='; value: number }
+  | { measure: 'days_since_completed_encounter'; op: '>' | '<' | '>=' | '<=' | '='; value: number }
+  | { measure: 'latest_observation_value'; code: string; op: '>' | '<' | '>=' | '<=' | '='; value: number };
+
+export type CohortBreakdownDimension = 'sex_at_birth' | 'age_bucket' | 'active_condition_code';
+
+export interface CohortBreakdownResult {
+  buckets: { label: string; count: number }[];
+  totalCount: number;
+}
+
+export interface CohortPreviewResult {
+  resultCount: number;
+  estimatedRows: number | null;
+  truncated: boolean;
+}
 
 export interface CohortDsl {
   version: 1;
@@ -677,4 +693,17 @@ export interface SearchResult {
   title: string;
   rank: number;
   indexedAt: string;
+}
+
+/** Epic-parity item 2 (population health) — one open care-gap finding, already patient-name-
+ * enriched server-side (see `apps/api/src/care-gaps/care-gaps.controller.ts`). */
+export interface CareGapWorklistItem {
+  id: string;
+  ruleKey: string;
+  severity: string;
+  title: string;
+  detail: Record<string, unknown>;
+  openedAt: string;
+  patientId: string | null;
+  patientName: string | null;
 }

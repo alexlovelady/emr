@@ -15,6 +15,8 @@ import {
   createHl7DeadLetterRule,
   createMinorConsentTransitionRule,
   createBreakglassReviewRule,
+  createCareGapHba1cRule,
+  createCareGapWellnessVisitRule,
 } from '@ehr/alerting';
 import { S3ObjectStorageGateway } from '@ehr/object-storage';
 import { startTracing, createLogger, getMetrics } from '@ehr/observability';
@@ -117,6 +119,8 @@ async function main(): Promise<void> {
       createHl7DeadLetterRule({ countThreshold: env.ALERT_HL7_DEAD_LETTER_THRESHOLD }),
       createMinorConsentTransitionRule({ ageThresholdYears: env.ALERT_MINOR_CONSENT_AGE_THRESHOLD_YEARS }),
       createBreakglassReviewRule(),
+      createCareGapHba1cRule({ lookbackDays: env.ALERT_CARE_GAP_HBA1C_LOOKBACK_DAYS }),
+      createCareGapWellnessVisitRule({ lookbackDays: env.ALERT_CARE_GAP_WELLNESS_VISIT_LOOKBACK_DAYS }),
     ],
     new NoopNotificationGateway(),
     undefined,

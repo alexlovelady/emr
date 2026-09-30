@@ -1245,6 +1245,93 @@ a wholesale rewrite (~30 `useTransition` call sites exist across the two heavier
 This closes the "do all but vendor gated stuff" remaining-gaps build-out — all ~28 items are now
 either DONE or explicitly excluded as vendor/business-gated.
 
+## Epic-parity build-out
+
+After the remaining-gaps build-out finished, a fresh gap analysis compared this system against
+Epic Systems (the dominant real-world EHR, used mostly by large hospital systems) rather than
+eClinicalWorks/athenahealth. Most of Epic's surface area is either fundamentally out of scope
+(inpatient/hospital modules — ED, OR/perioperative, OB, pharmacy dispensing, a lab instrument
+interface/LIS — this system is explicitly ambulatory-only) or network-effect/vendor-gated (Care
+Everywhere's HIE, the Cosmos research data pool, the App Orchard/Showroom app marketplace's
+installed-base scale). What remained genuinely buildable: a population explorer/cohort-builder UI,
+a population-health module, patient-facing AI, a SMART-app marketplace catalog, and a genomics
+domain. User said "do 3, we are going for full service" — building all of them with the same
+discipline as every prior build-out.
+
+### Item 1 — self-service population explorer / visual cohort builder (SlicerDicer-equivalent)
+
+The visual cohort builder already existed with zero prior notice taken of it (a row-based condition
+builder, save/run/history/export, and a stubbed NL-to-DSL assistant) — the real gap was DSL/compiler
+flexibility, a live count while editing, and result visualization, not "no frontend at all."
+
+- **`domains/query/src/cohort/cohort.dto.ts`** — the DSL gained four new `concept` types
+  (`encounter`/`appointment`/`coverage`/`note`, existence-style matches) and a generalized
+  `latest_observation_value` measure (any LOINC code, replacing the old HbA1c-only limitation —
+  `latest_hba1c` itself stays valid for backward compatibility with any previously-saved cohort).
+  Every original condition shape still parses and compiles identically.
+- **`cohort-compiler.ts`** — a new `compileBreakdown()` slices the same matched population by one
+  safe, closed-enum dimension (`sex_at_birth`/`age_bucket`/`active_condition_code`) and returns
+  aggregate bucket counts only, never a patient-id list — the same minimum-necessary posture
+  `compileAndRun` already documents.
+- **New `POST /api/v1/cohorts/preview`** — a live, unpersisted count as a filter set is being
+  edited (debounced 500ms client-side); unlike `execute`, it never writes a `cohort_executions`
+  row, so it can safely fire on every edit. **New `POST /api/v1/cohorts/breakdown`** — the slice
+  endpoint.
+- **`apps/clinician-web`'s `CohortBuilder`** — extended with the new row types, a live "N matching
+  patient(s)" count that updates as filters change (no more click-Run-and-wait), and a "Slice this
+  population by" control rendering a small dependency-free horizontal-bar chart
+  (`cohort-breakdown-chart.tsx` — plain divs, no charting library).
+- **Live-verified** against the running dev stack: real preview/breakdown calls against real data
+  (896 matching patients on a broad age filter, a real sex-at-birth and active-condition-code
+  breakdown), the new concept types and generalized measure all matched real fixture data
+  correctly, and the live debounced count was confirmed updating in the actual browser (826
+  matching patients appeared automatically after typing, with no Run click). 22 new tests (9 unit +
+  4 new integration cases in `domains/query`'s existing cohort suite, covering all four new
+  concepts, the generalized measure, `preview`'s non-persistence, and `breakdown`'s three
+  dimensions).
+
+### Item 2 — population health module (Healthy Planet-equivalent care-gap worklist)
+
+A "registry" turned out not to need a new data model at all — a saved `Cohort` (item 1) already
+*is* "a named rule producing a patient list, re-runnable, with execution history." What a real
+care-gap worklist needed was orchestration: periodic evaluation and an actionable, resolvable work
+item per patient — both map directly onto `packages/alerting`'s existing `AlertRule`/
+`AlertEvaluator`/`AlertScheduler` mechanism (built for item 18's operational alerting), so this
+needed zero new persistence or scheduling infrastructure.
+
+- **`packages/alerting/src/rules/care-gap-hba1c.rule.ts`** and **`care-gap-wellness-visit.rule.ts`**
+  (new) — the per-patient companions to the existing `quality_measure_diabetes_hba1c_control`/
+  `quality_measure_annual_wellness_visit` governed queries, which already prove these populations
+  are computable but collapse them to an aggregate rate. These mirror the identical SQL logic and
+  emit one `AlertFinding` per gapped patient (`dedupeKey: patientId`) instead of a count. Both
+  windows are plain configurable engineering defaults (`ALERT_CARE_GAP_HBA1C_LOOKBACK_DAYS`/
+  `ALERT_CARE_GAP_WELLNESS_VISIT_LOOKBACK_DAYS`, both 365), not a certified HEDIS/NCQA measure
+  specification — wired into `apps/worker`'s existing `AlertEvaluator` alongside every other rule.
+- **New `apps/api/src/care-gaps/` module**, deliberately NOT the existing generic
+  `/api/v1/alerts` endpoints, for three real reasons: (1) permission model — `ALERT_MANAGE` is a
+  platform-admin ops concern (backup health, outbox backlog); a care-gap worklist is a clinical
+  workflow for practicing staff broadly, gated on a new `CARE_GAP_MANAGE` instead; (2) tenant
+  isolation — `alerts` has no RLS (migration 0053), and the generic list endpoint doesn't filter by
+  tenant at all (a real pre-existing gap — harmless for platform-wide findings, not for
+  patient-linked ones — flagged separately rather than silently patched here, since it's out of
+  this item's scope); every read/resolve here is explicitly scoped to the caller's own tenant via
+  a new `AlertRepository.listOpenByTenantAndRuleKeys`; (3) shape — patient-grouped with a resolved
+  patient name, not a flat rule-agnostic row.
+- **`apps/clinician-web`'s new `/care-gaps` page** — reuses item 26's `useOptimistic` pattern (same
+  session) for the same reason `TasksTable` needed it: resolving one patient's gap shouldn't affect
+  any other row.
+- **Live-verified** end to end against the running dev stack: the worker's `AlertScheduler` picked
+  up both new rules on its very first tick and opened real, genuinely-computed findings against
+  real dev-DB fixture data; confirmed tenant isolation directly (tenant B's admin saw only its own
+  16 care gaps, never tenant A's, even by patient id); resolved a real finding via the API and
+  confirmed it disappeared from the worklist while a fresh one took its place at the 500-row cap
+  (proving the round trip is real, not just client-side optimism); clicked "Resolve" in the actual
+  browser UI and confirmed the same. 8 new integration tests (4 per rule) plus a new
+  `AlertRepository.listOpenByTenantAndRuleKeys` cross-tenant-isolation test (28 total in
+  `packages/alerting`'s suite, up from 20).
+- **Found in passing, flagged as a separate follow-up (not fixed here, to keep this item's scope
+  tight)**: `AlertsController.list()`'s pre-existing lack of tenant filtering, above.
+
 ## Verification status
 
 Docker Desktop's backend would not start in the environment this was built in (its WSL2

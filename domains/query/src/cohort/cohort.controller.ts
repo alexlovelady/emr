@@ -10,9 +10,13 @@ import type { ObjectStorageGateway } from '@ehr/object-storage';
 import {
   SaveCohortSchema,
   ExecuteAdHocCohortSchema,
+  PreviewCohortSchema,
+  ExecuteBreakdownSchema,
   CohortDslSchema,
   type SaveCohortInput,
   type ExecuteAdHocCohortInput,
+  type PreviewCohortInput,
+  type ExecuteBreakdownInput,
 } from './cohort.dto.js';
 import { CohortService } from './cohort.service.js';
 
@@ -43,6 +47,23 @@ export class CohortController {
   @Audited('cohort.execute_ad_hoc', 'CohortExecution')
   async executeAdHoc(@Body(new ZodValidationPipe(ExecuteAdHocCohortSchema)) body: ExecuteAdHocCohortInput, @Req() req: FastifyRequest) {
     return this.service.execute(getCurrentTransaction(), requireCtx(req), null, body.dsl);
+  }
+
+  /** Live count preview while a filter set is still being edited — unlike `execute`, this never
+   * writes a `cohort_executions` row (no audit-log-worthy artifact is created), but the call
+   * itself still goes through the normal `@Audited` request log like any other read. */
+  @Post('preview')
+  @RequirePermission(PERMISSION_KEYS.REPORT_QUERY_POPULATION)
+  @Audited('cohort.preview', 'CohortExecution')
+  async preview(@Body(new ZodValidationPipe(PreviewCohortSchema)) body: PreviewCohortInput, @Req() req: FastifyRequest) {
+    return this.service.preview(getCurrentTransaction(), requireCtx(req), body.dsl);
+  }
+
+  @Post('breakdown')
+  @RequirePermission(PERMISSION_KEYS.REPORT_QUERY_POPULATION)
+  @Audited('cohort.breakdown', 'CohortExecution')
+  async breakdown(@Body(new ZodValidationPipe(ExecuteBreakdownSchema)) body: ExecuteBreakdownInput, @Req() req: FastifyRequest) {
+    return this.service.breakdown(getCurrentTransaction(), requireCtx(req), body.dsl, body.groupBy);
   }
 }
 

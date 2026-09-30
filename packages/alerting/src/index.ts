@@ -7,3 +7,5 @@ export { createOutboxBacklogRule, type OutboxBacklogRuleOptions } from './rules/
 export { createHl7DeadLetterRule, type Hl7DeadLetterRuleOptions } from './rules/hl7-dead-letter.rule.js';
 export { createMinorConsentTransitionRule, type MinorConsentTransitionRuleOptions } from './rules/minor-consent-transition.rule.js';
 export { createBreakglassReviewRule } from './rules/breakglass-review.rule.js';
+export { createCareGapHba1cRule, type CareGapHba1cRuleOptions } from './rules/care-gap-hba1c.rule.js';
+export { createCareGapWellnessVisitRule, type CareGapWellnessVisitRuleOptions } from './rules/care-gap-wellness-visit.rule.js';
