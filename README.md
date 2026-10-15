@@ -1,4 +1,50 @@
-# EHR Platform — Phase 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10 (Platform Foundation; Patient/Scheduling/Intake; Clinical Chart; Orders/Results + Interop; eRx; RCM; Query Platform; Patient Portal; AI Features; Pilot Readiness)
+# EHR Platform
+
+A cloud-native ambulatory **EHR, practice-management and revenue-cycle platform**, built as a TypeScript monorepo from a written product spec (`EHR_BUILD_SPEC.md`) and regulatory manual (`EHR_REGULATORY_MANUAL.md`). It is a portfolio project: all data is synthetic, and it has not been audited or certified for real patient data.
+
+## Highlights
+
+- **Multi-tenant by design.** PostgreSQL Row-Level Security enforces tenant isolation, and a dedicated `test:tenant-isolation` suite gates every change.
+- **Clinical workflow.** Patient registry with duplicate merge, scheduling through check-in, encounters, signed and amended notes, problems, allergies, vitals, medication reconciliation.
+- **Orders and results.** Lab adapter framework, HL7 v2 result ingestion, critical-result workflow, and a FHIR R4 / SMART-on-FHIR read API.
+- **Revenue cycle.** Claims, payments and clearinghouse adapters.
+- **Platform plumbing.** Layered authorization, audit trail on every action, transactional outbox with a worker, observability, and architecture rules enforced by `dependency-cruiser`.
+- **Swappable vendors.** E-prescribing, labs, payments, search, transcription and AI sit behind adapter interfaces, with decisions recorded in `docs/adr/`.
+
+## Stack
+
+TypeScript, pnpm workspaces and Turborepo, NestJS on Fastify (API), Next.js and React (clinician web app), PostgreSQL with Kysely, Valkey (Redis-compatible), MinIO, Docker Compose.
+
+## Layout
+
+| Folder | What is in it |
+| --- | --- |
+| `apps/` | `api`, `worker` (outbox relay), `clinician-web`, FHIR and HL7 interop services, plus reserved apps (`admin-web`, `patient-portal`) |
+| `domains/` | Business logic by area: patient, scheduling, clinical, orders, results, medication, billing, claims, consent, portal, AI and more |
+| `packages/` | Shared libraries: db, authz, audit, outbox, hl7, fhir-mapping, adapters, testing |
+| `docs/` | Architecture decision records and the OpenAPI spec |
+
+## Quick start
+
+Requires Node.js 24, pnpm and Docker.
+
+```bash
+pnpm install
+docker compose up -d
+cp .env.example .env
+pnpm --filter @ehr/db migrate:latest
+pnpm --filter @ehr/db seed      # two synthetic tenants
+pnpm dev                        # API on :3000, worker on :3100
+pnpm test                       # unit tests, no services needed
+```
+
+The full walkthrough, every phase's scope decisions, and the verification log follow below.
+
+By Alexander Lovelady, [alexanderlovelady.com/portfolio](https://alexanderlovelady.com/portfolio).
+
+---
+
+## Detailed build notes: Phase 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10 (Platform Foundation; Patient/Scheduling/Intake; Clinical Chart; Orders/Results + Interop; eRx; RCM; Query Platform; Patient Portal; AI Features; Pilot Readiness)
 
 Cloud-native ambulatory EHR + practice-management + revenue-cycle platform. This repository
 currently implements **Phases 1–10** of `EHR_BUILD_SPEC.md`'s build order (§26) — all ten. Phase 1: the
